@@ -14,7 +14,8 @@
 
 import argparse
 import json
-import menues
+from testbench import ConnectionLog
+import util
 
 __version__ = '0.0.1'
 
@@ -42,9 +43,20 @@ def get_configuration(args):
     return configuration
 
 def run_manual_mode():
+    # TODO gracefully exit on keyboard interrupt
     print("Starting manual mode")
-    menues.login_menu()
-    print("Closing program.")
+    connection_log = ConnectionLog()
+    
+    while True:
+        active_connection = util.login()
+        connection_log.add_connection(active_connection)
+        next_action = util.choose_action()
+        while next_action is not None:
+            execution_success = next_action.execute(connection_log)
+            if execution_success: 
+                active_connection.add_action(next_action)
+            active_connection = connection_log.active_connection()
+            next_action = util.choose_action()
 
 def run_automatic_mode():
     print("Run Automatic Mode (not implemented yet)")

@@ -1,102 +1,43 @@
+from __future__ import annotations
 import requests
 import urllib3
-#from functools import wraps
+import time
+import actions
+import json
 
-default_header = {
-  'Content-Type': 'application/vnd.testbench+json; charset=utf-8'
-}
-
-class ActionLog(object):
+class ConnectionLog(object):
     def __init__(
-        self
+        self,
     ):
-        pass
+        self._connections: list[Connection] = []
 
-# save connection data
-# for each connection data, save an arbitrary amount of actions (request type + parameters)
-# possible to export all 
-# after connection cut -> still possible to generate log
-# if connection cut then login with same connection data -> data should be combined
-# data should be held as dictionaries (?), exporting should produce JSON
-"""
-ACTION LOG / CONFIGURATION EXPORT
+    def active_connection(self) -> Connection:
+        return self._connections[-1]
 
-Requirements:
-Must Have:
-- Export current connection + action -> import allows executing given action in automatic mode
-- Export all/selected actions with their respective connections => import allows executing given set of actions in automatic mode
-Optional:
-- Export current connection only => import allows manual mode skipping login
-- Export current action only => import allows executing pre-defined action in manual mode
-- Export all/selected actions only => import allows executing pre-defined set of actions in manual mode
-Probably not useful:
-- Exporting multiple connections without actions
+    def add_connection(self, new_connection: Connection):
+        self._connections.append(new_connection)        
 
+    def export_as_json(self, output_file_path: str):
+        print("Generating JSON export")
+        export_dict = {
+            "configuration": [connection.export() for connection in self._connections]
+        }
 
-Implementation Thoughts:
-- Track all relevant data to be able to export more then just the last action
-- Save data in dictionary, as this makes it easier to add more
-- Add data each time a relevant action is performed (import/export | successful login is only relevant if optional requirements are implemented)
-- Export to JSON on request (Requires selection of: what export, if supporting selected actions a one-by-one selection of connections, and actions per connection)
-- IDEA: log as part of connection => then if connection is cut, either ask one last time if export should be performed, or store it (in login menu?) (is support after changed login important?)
-
-Example structure of how a configuration file could look like:
-
-{
-   "configuration":[
-      {
-         "connection":{
-            "server_url":"test",
-            "username":"test",
-            "password":"123456"
-         },
-         "actions":[
-            {
-               "type":"exportXML",
-               "parameters":{
-                  "param1":"1234",
-                  "param2":"5678"
-               }
-            },
-            {
-               "type":"importXML",
-               "parameters":{
-                  "param1":"abc",
-                  "param2":"def"
-               }
-            }
-         ]
-      },
-      {
-         "connection":{
-            "server_url":"test2",
-            "username":"userB",
-            "password":"123456"
-         },
-         "actions":[
-            {
-               "type":"exportXML",
-               "parameters":{
-                  "param1":"1234",
-                  "param2":"5678"
-               }
-            }
-         ]
-      }
-   ]
-}
-"""
-
+        with open(output_file_path, "w") as output_file:
+            json.dump(export_dict, output_file, indent=4)
 
 class Connection(object):
     def __init__(
         self,
-        server_url,
-        username,
-        password,
+        server_url: str,
+        username: str,
+        password: str,
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.server_url = server_url
+        self.username = username
+        self.password = password
+        self.action_log: list[actions.Action] = []
         self.session = requests.Session()
         self.session.auth = (username, password)
         self.session.headers.update({
@@ -108,21 +49,29 @@ class Connection(object):
         }
         # TODO: timeout handling
         # TODO: use with for reliable session closing?
+        # TODO: add id_ for selecting specific connections to actionlog?
         
-    """    
-    @staticmethod
-    def handle_connection_errors(f: function):
-        @wraps(f)
-        def decorated(*args, **kwargs):
-            try:
-                return f(*args, **kwargs)
-            except SomeException as e:
-                return my_exception_response
-            except OtherException as e:
-                return other_response
+    def export(self) -> dict:
+        return {
+            "connection": {
+                "server_url": self.server_url,
+                "username": self.username,
+                "password": self.password
+            },
+            "actions": [action_export for action_export in (action.export() for action in self.action_log) if action_export is not None],
+        }
+    
+    def add_action(self, action: actions.Action):
+        self.action_log.append(action)
 
-        return decorated
-    """
+    def check_is_identical(self, other: Connection) -> bool:
+        if (    self.server_url == other.server_url
+            and self.username == other.username
+            and self.password == other.password
+        ):
+            return True
+        else:
+            return False
 
     def check_is_working(self) -> bool:
         response = self.session.get(
@@ -140,10 +89,66 @@ class Connection(object):
     def get_all_projects(self) -> dict:
         all_projects = self.session.get(
             self.server_url + 'projects',
-            verify=False,
+            verify=False, # TODO: throws SSL error in test env if True
             params={
-                "includeTOVs": "false",
-                "includeCycles": "false"
+                "includeTOVs": "true",
+                "includeCycles": "true"
             })
 
-        return all_projects
+        return all_projects.json()
+
+    def get_all_filters(self) -> dict:
+        all_filters = self.session.get(
+            self.server_url + 'filters',
+            verify=False, # TODO: throws SSL error in test env if True
+        )
+
+        return all_filters.json()
+
+    def get_xml_report(self, cycle_key: str, reportRootUID: str, filters: list[dict[str, str]] = []):
+        job_id = self.trigger_xml_report_generation(cycle_key, reportRootUID, filters)
+        report_tmp_name = self.wait_for_tmp_xml_report_name(job_id)
+        report = self.get_xml_report_data(report_tmp_name)
+
+        return report
+
+    def trigger_xml_report_generation(self, cycle_key: str, reportRootUID: str, filters: list[dict[str, str]] = []):
+        job_id = self.session.post(
+            self.server_url + 'cycle/' + cycle_key + '/xmlReport',
+            verify = False,
+            json = {
+                "exportAttachments": True,
+                "exportDesignData": True,
+                "characterEncoding": "utf-8",
+                "suppressFilteredData": True,
+                "filters": filters,  # TODO: check if filters work as intended
+                "reportRootUID": reportRootUID,
+                "exportExpandedData": True,
+                "exportDescriptionFields": True,
+                "outputFormattedText": False,
+                "exportExecutionProtocols": False
+            })
+
+        return job_id.json()['jobID']
+
+    def wait_for_tmp_xml_report_name(self, job_id: str):
+        while (True): 
+            report_generation_status = self.session.get(
+                self.server_url + 'job/'+ job_id, 
+                verify=False, 
+            )
+            print(f'Waiting until creation of XML report is complete ...')
+            if (report_generation_status.json()['completion'] != None):
+                break
+            time.sleep(5)
+
+        report_tmp_name = report_generation_status.json()['completion']['result']['Right']
+        return report_tmp_name
+
+    def get_xml_report_data(self, report_tmp_name: str):
+        report = self.session.get(
+            self.server_url + 'xmlReport/'+ report_tmp_name, 
+            verify=False
+        )
+
+        return report

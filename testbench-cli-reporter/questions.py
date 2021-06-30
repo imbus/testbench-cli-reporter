@@ -1,7 +1,9 @@
+from __future__ import annotations
 from questionary import print as qprint
 from questionary import prompt as qprompt
 from questionary import Style
 from questionary import Choice
+import actions
 
 custom_style_fancy = Style(
     [
@@ -63,8 +65,68 @@ def ask_to_select_project(all_projects: dict) -> dict[str]:
             'type': 'select',
             'name': 'project',
             'message': 'Select a project.',
-            'choices': [Choice(project["name"], project["key"]["serial"]) for project in all_projects["projects"]]
+            'choices': [Choice(project["name"], project) for project in all_projects["projects"]]
         },
+    ]
+
+    return prompt(question)
+
+def ask_to_select_tov(project: dict) -> dict[str]:
+    question = [
+        {
+            'type': 'select',
+            'name': 'tov',
+            'message': 'Select a test object version.',
+            'choices': [Choice(tov["name"], tov) for tov in project["testObjectVersions"]]
+        }
+    ]
+
+    return prompt(question)
+
+def ask_to_select_cycle(tov: dict) -> dict[str]:
+    question = [
+        {
+            'type': 'select',
+            'name': 'cycle',
+            'message': 'Select a test cycle.',
+            'choices': [Choice(cycle["name"], cycle) for cycle in tov["testCycles"]]
+        }
+    ]
+
+    return prompt(question)
+
+def ask_to_enter_report_root_uid() -> dict[str]:
+    question = [
+        {
+            'type': 'text',
+            'name': 'uid',
+            'message': 'Provide a report root UID.',
+        }
+    ]
+
+    return prompt(question)
+
+def ask_to_select_filters(all_filters: dict) -> list[str]:
+    all_filters_sorted = sorted(all_filters, key=lambda filter: filter["name"].casefold())
+
+    question = [
+        {
+            'type': 'checkbox',
+            'name': 'filters',
+            'message': 'Provide a set of filters (optional).',
+            'choices': [Choice(filter["name"], {"name": filter["name"], "type": filter["type"]}) for filter in all_filters_sorted],
+        }
+    ]
+
+    return prompt(question)
+
+def ask_for_output_path() -> list[str]:
+    question = [
+        {
+            'type': 'path',
+            'name': 'output_path',
+            'message': 'Provide the output path.',
+        }
     ]
 
     return prompt(question)
@@ -98,6 +160,27 @@ def ask_for_action_after_failed_server_connection() -> dict[str]:
                 Choice('Quit.', 'quit'),
             ]
         },
+    ]
+
+    return prompt(question)
+
+def ask_for_next_action() -> dict[actions.Action]:
+    choices = [
+        Choice('Export an XML Report', 'export')
+    ]
+
+    question = [
+        {
+            'type': 'select',
+            'name': 'action',
+            'message': 'What do you want to do?',
+            'choices': [
+                Choice('Export XML Report', actions.ExportXMLReport()),
+                Choice('Export actions', actions.ExportActionLog()),
+                Choice('Change connection', actions.ChangeConnection()),
+                Choice('Quit', actions.Quit()),
+            ]
+        }
     ]
 
     return prompt(question)

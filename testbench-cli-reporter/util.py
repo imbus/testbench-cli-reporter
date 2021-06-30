@@ -1,18 +1,18 @@
+from __future__ import annotations
+import sys
+import requests
 import questions
 import testbench
-import requests
-import sys
+import actions
 
-def login_menu():    
+def login() -> testbench.Connection:
     credentials = questions.ask_for_test_bench_credentials()
-    quit = False
     
-    while quit is False:
-        tb_connection = testbench.Connection(**credentials)
+    while True:
+        connection = testbench.Connection(**credentials)
         try:
-            if tb_connection.check_is_working():
-                project_selection_menu(tb_connection)
-                return
+            if connection.check_is_working():
+                return connection
 
         except requests.HTTPError as e: 
             print("Invalid login credentials.")
@@ -25,7 +25,7 @@ def login_menu():
             elif action == "change_server":
                 credentials = questions.ask_for_test_bench_credentials()
             else:
-                quit = True
+                close_program()
 
         except (requests.ConnectionError, requests.exceptions.MissingSchema) as e:
             print("Invalid server url.")            
@@ -35,9 +35,11 @@ def login_menu():
             elif action == "change_server":
                 credentials = questions.ask_for_test_bench_credentials()
             else:
-                quit = True
+                close_program()
 
-def project_selection_menu(tb_connection: testbench.Connection):
-    all_projects = tb_connection.get_all_projects().json()
-    selected_project = questions.ask_to_select_project(all_projects)
-    print(f"selected project with uid {selected_project}")
+def choose_action() -> actions.Action:
+    return questions.ask_for_next_action()['action']
+
+def close_program():
+    print("Closing program.")
+    sys.exit(0)
