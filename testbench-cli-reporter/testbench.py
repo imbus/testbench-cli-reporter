@@ -53,12 +53,10 @@ class Connection(object):
         
     def export(self) -> dict:
         return {
-            "connection": {
                 "server_url": self.server_url,
                 "username": self.username,
-                "password": self.password
-            },
-            "actions": [action_export for action_export in (action.export() for action in self.action_log) if action_export is not None],
+                "password": self.password,
+                "actions": [action_export for action_export in (action.export() for action in self.action_log) if action_export is not None],
         }
     
     def add_action(self, action: actions.Action):

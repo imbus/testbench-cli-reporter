@@ -4,6 +4,7 @@ import requests
 import questions
 import testbench
 import actions
+import json
 
 def login() -> testbench.Connection:
     credentials = questions.ask_for_test_bench_credentials()
@@ -14,7 +15,7 @@ def login() -> testbench.Connection:
             if connection.check_is_working():
                 return connection
 
-        except requests.HTTPError as e: 
+        except requests.HTTPError: 
             print("Invalid login credentials.")
             action = questions.ask_for_action_after_failed_login()['action']
             if action == "retry_password":
@@ -27,7 +28,7 @@ def login() -> testbench.Connection:
             else:
                 close_program()
 
-        except (requests.ConnectionError, requests.exceptions.MissingSchema) as e:
+        except (requests.ConnectionError, requests.exceptions.MissingSchema):
             print("Invalid server url.")            
             action = questions.ask_for_action_after_failed_server_connection()['action']
             if action == "retry_server":
@@ -43,3 +44,17 @@ def choose_action() -> actions.Action:
 def close_program():
     print("Closing program.")
     sys.exit(0)
+
+def get_configuration(config_file_path: str):
+    print("Trying to read config file")
+    try:
+        with open(config_file_path, 'r') as config_file:
+            configuration = json.load(config_file)
+    except IOError:
+        print("Could not open file")
+        close_program()
+    except json.JSONDecodeError:
+        print("Could not parse config file as JSON.")
+        close_program()
+
+    return configuration

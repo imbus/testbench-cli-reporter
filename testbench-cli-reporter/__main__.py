@@ -13,34 +13,21 @@
 # limitations under the License.
 
 import argparse
-import json
-from testbench import ConnectionLog
+from testbench import ConnectionLog, Connection
 import util
+from importlib import import_module
+import actions
 
 __version__ = '0.0.1'
 
 def main(args):
-    if has_config_file(args):
-        run_automatic_mode(args)
+    if args.configFile is not None:
+        configuration = util.get_configuration(args.configFile)
+        print("Config file found")
+        run_automatic_mode(configuration)
     else:
         print("No config file given")
         run_manual_mode()  
-
-def has_config_file(args):    
-    if args.configFile is None:
-        return False
-    else:
-        return True
-
-def get_configuration(args):
-    print("Trying to read config file")
-    with open(args.configFile, 'r') as configFile:
-        configuration = json.load(configFile)
-        # handle various file opening errors
-        # handle json parse errors
-        # try to execute orders as configured (what if this leads to an error, e.g. insufficient data or project not found?)
-
-    return configuration
 
 def run_manual_mode():
     # TODO gracefully exit on keyboard interrupt
@@ -52,14 +39,31 @@ def run_manual_mode():
         connection_log.add_connection(active_connection)
         next_action = util.choose_action()
         while next_action is not None:
-            execution_success = next_action.execute(connection_log)
-            if execution_success: 
-                active_connection.add_action(next_action)
+            preparation_success = next_action.prepare(connection_log)
+            if preparation_success:
+                execution_success = next_action.execute(connection_log)
+                if execution_success: 
+                    active_connection.add_action(next_action)
             active_connection = connection_log.active_connection()
             next_action = util.choose_action()
 
-def run_automatic_mode():
-    print("Run Automatic Mode (not implemented yet)")
+def run_automatic_mode(configuration: dict):
+    print("Run Automatic Mode")
+    connection_log = ConnectionLog()
+    try:
+        for connection_data in configuration['configuration']:
+            active_connection = Connection(connection_data["server_url"], connection_data["username"], connection_data["password"])
+            connection_log.add_connection(active_connection)
+            for action_data in connection_data['actions']:
+                next_action = actions.Action.create_instance_of_action(action_data['type'], action_data['parameters'])
+                execution_success = next_action.execute(connection_log)
+                if execution_success: 
+                    active_connection.add_action(next_action)
+                active_connection = connection_log.active_connection()
+
+    except KeyError as e:
+        # TODO proper error handling
+        print(f"key {str(e)} not found")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
