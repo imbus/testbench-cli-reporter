@@ -32,6 +32,7 @@ def ask_for_test_bench_server_url() -> dict[str]:
             'type': 'text',
             'name': 'server_url',
             'message': 'Enter the URL of the TestBench server you want to connect to.',
+            'validate': lambda val: val != "",
         },
     ]
 
@@ -43,6 +44,7 @@ def ask_for_test_bench_username() -> dict[str]:
             'type': 'text',
             'name': 'username',
             'message': 'Enter your user name.',
+            'validate': lambda val: val != "",
         },
     ]
 
@@ -54,6 +56,7 @@ def ask_for_test_bench_password() -> dict[str]:
             'type': 'password',
             'name': 'password',
             'message': 'Enter your password.',
+            'validate': lambda val: val != "",
         }
     ]
 
@@ -101,6 +104,7 @@ def ask_to_enter_report_root_uid() -> dict[str]:
             'type': 'text',
             'name': 'uid',
             'message': 'Provide a report root UID.',
+            'validate': lambda val: val != "",
         }
     ]
 
@@ -126,6 +130,7 @@ def ask_for_output_path() -> list[str]:
             'type': 'path',
             'name': 'output_path',
             'message': 'Provide the output path.',
+            'validate': lambda val: val != "",
         }
     ]
 
