@@ -43,10 +43,10 @@ class Connection(object):
         self.session.headers.update({
             'Content-Type': 'application/vnd.testbench+json; charset=utf-8'
         })
-        self.session.hooks = {
-            'response': lambda r, *args, **kwargs: 
-                r.raise_for_status()
-        }
+        #self.session.hooks = {
+        #    'response': lambda r, *args, **kwargs: 
+        #        r.raise_for_status()
+        #}
         # TODO: timeout handling
         # TODO: use with for reliable session closing?
         # TODO: add id_ for selecting specific connections to actionlog?
@@ -111,6 +111,7 @@ class Connection(object):
         return report
 
     def trigger_xml_report_generation(self, cycle_key: str, reportRootUID: str, filters: list[dict[str, str]] = []):
+        # TODO add max duration
         job_id = self.session.post(
             self.server_url + 'cycle/' + cycle_key + '/xmlReport',
             verify = False,
@@ -150,3 +151,67 @@ class Connection(object):
         )
 
         return report
+
+    def get_all_testers_of_project(self, project_key: str):
+        return [member for member in self.get_all_members_of_project(project_key) if "Tester" in member['value']['membership']['roles']]
+
+    def get_all_members_of_project(self, project_key: str):
+        all_project_members = self.session.get(
+            self.server_url + 'project/' + project_key + '/members',
+            verify=False, # TODO: throws SSL error in test env if True
+        )
+
+        return all_project_members.json()
+
+    def import_execution_results(self, results_file_base64: str, cycle_key: str, report_root_uid: str, default_tester: str, filters: list[dict[str, str]]):
+        serverside_file_name = self.upload_execution_results(results_file_base64)
+        job_id = self.trigger_execution_results_import(cycle_key, report_root_uid, serverside_file_name, default_tester, filters)
+        success = self.wait_for_execution_results_import_to_finish(job_id)
+
+        return success
+
+    def upload_execution_results(self, results_file_base64: str):
+        serverside_file_name = self.session.post(
+            self.server_url + 'executionResultsUpload',
+            verify=False, # TODO: throws SSL error in test env if True
+            json={
+                "data": results_file_base64,
+            }
+        )
+
+        return serverside_file_name.json()["fileName"]
+
+    def trigger_execution_results_import(self, cycle_key: str, report_root_uid: str, serverside_file_name: str, default_tester: str, filters: list[dict[str, str]]):
+        job_id = self.session.post(
+            self.server_url + 'cycle/' + cycle_key + '/executionResultsImport',
+            verify=False, # TODO: throws SSL error in test env if True,
+            headers={
+                "Accept": "application/zip",
+            },
+            json={
+                "reportRootUID": report_root_uid,
+                "fileName": serverside_file_name,
+                "ignoreNonExecutedTestCases": True,   
+                "defaultTester": default_tester,
+                "checkPaths": True,
+                "filters": filters,
+                "discardTesterInformation": True,
+                "useExistingDefect": True
+            }
+        )
+
+        return job_id.json()['jobID']
+
+    def wait_for_execution_results_import_to_finish(self, job_id: str) -> bool:
+        # TODO add max duration?
+        while (True): 
+            import_status = self.session.get(
+                self.server_url + 'executionResultsImporterJob/'+ job_id, 
+                verify=False, 
+            )
+            print(f'Waiting until import of execution results is done ...')
+            if (import_status.json()['completion'] != None):
+                break
+            time.sleep(5)
+
+        return True

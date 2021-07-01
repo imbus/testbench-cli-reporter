@@ -136,6 +136,18 @@ def ask_for_output_path() -> list[str]:
 
     return prompt(question)
 
+def ask_for_input_path() -> list[str]:
+    question = [
+        {
+            'type': 'path',
+            'name': 'input_path',
+            'message': 'Provide the input path.',
+            'validate': lambda val: val != "",
+        }
+    ]
+
+    return prompt(question)
+
 def ask_for_action_after_failed_login() -> dict[str]:
     question = [        
         {
@@ -181,10 +193,25 @@ def ask_for_next_action() -> dict[actions.Action]:
             'message': 'What do you want to do?',
             'choices': [
                 Choice('Export XML Report', actions.ExportXMLReport()),
+                Choice('Import execution results', actions.ImportExecutionResults()),
                 Choice('Export actions', actions.ExportActionLog()),
                 Choice('Change connection', actions.ChangeConnection()),
                 Choice('Quit', actions.Quit()),
             ]
+        }
+    ]
+
+    return prompt(question)
+
+def ask_to_select_default_tester(all_testers: dict) -> dict[str]:
+    all_testers_sorted = sorted(all_testers, key=lambda tester: tester["value"]["user-name"].casefold())
+
+    question = [
+        {
+            'type': 'select',
+            'name': 'defaultTester',
+            'message': 'Select the default tester.',
+            'choices': [Choice(tester["value"]["user-name"], tester["value"]["user-login"]) for tester in all_testers_sorted],
         }
     ]
 

@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import sys
 import questions
 import util
+import base64
 
 class Action(ABC):
     def __init__(
@@ -64,6 +65,37 @@ class ExportXMLReport(Action):
             return True
         except KeyError as e:
             print(f"{str(e)}")
+            return False
+            # TODO handle missing parameters
+
+
+class ImportExecutionResults(Action):
+    def prepare(self, connection_log: testbench.ConnectionLog) -> bool:    
+        all_projects = connection_log.active_connection().get_all_projects()
+        selected_project = questions.ask_to_select_project(all_projects)['project']
+        selected_tov = questions.ask_to_select_tov(selected_project)['tov']
+        self.parameters['cycleKey'] = questions.ask_to_select_cycle(selected_tov)['cycle']['key']['serial']
+        self.parameters["inputPath"] = questions.ask_for_input_path()["input_path"]  
+        self.parameters["reportRootUID"] = questions.ask_to_enter_report_root_uid()["uid"]
+        available_testers = connection_log.active_connection().get_all_testers_of_project(selected_project['key']['serial'])
+        self.parameters["defaultTester"] = questions.ask_to_select_default_tester(available_testers)["defaultTester"]
+        all_filters = connection_log.active_connection().get_all_filters()            
+        self.parameters['filters'] = questions.ask_to_select_filters(all_filters)['filters']
+
+        return True
+
+    def execute(self, connection_log: testbench.ConnectionLog) -> bool:
+        try:
+            with open(self.parameters['inputPath'], 'rb') as execution_report:
+                execution_report_base64 = base64.b64encode(execution_report.read()).decode()
+
+            success = connection_log.active_connection().import_execution_results(execution_report_base64, self.parameters["cycleKey"], self.parameters["reportRootUID"], self.parameters["defaultTester"], self.parameters["filters"])
+            return success
+        except IOError as e:
+            print("Reading execution report failed.")
+            return False
+        except KeyError as e:
+            print(f"Missing key {str(e)}")
             return False
             # TODO handle missing parameters
 
