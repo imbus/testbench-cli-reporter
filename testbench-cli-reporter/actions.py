@@ -2,9 +2,10 @@ from __future__ import annotations
 import testbench
 from abc import ABC, abstractmethod
 import sys
+import base64
+import requests
 import questions
 import util
-import base64
 
 class Action(ABC):
     def __init__(
@@ -49,7 +50,8 @@ class ExportXMLReport(Action):
         selected_project = questions.ask_to_select_project(all_projects)['project']
         selected_tov = questions.ask_to_select_tov(selected_project)['tov']
         self.parameters['cycleKey'] = questions.ask_to_select_cycle(selected_tov)['cycle']['key']['serial']
-        self.parameters['reportRootUID'] = questions.ask_to_enter_report_root_uid()['uid']
+        cycle_structure = connection_log.active_connection().get_test_cycle_structure(self.parameters['cycleKey'])
+        self.parameters['reportRootUID'] = questions.ask_to_select_report_root_uid(cycle_structure)['uid']
         all_filters = connection_log.active_connection().get_all_filters()            
         self.parameters['filters'] = questions.ask_to_select_filters(all_filters)['filters']
         self.parameters['outputPath'] = questions.ask_for_output_path()['output_path']
@@ -76,7 +78,8 @@ class ImportExecutionResults(Action):
         selected_tov = questions.ask_to_select_tov(selected_project)['tov']
         self.parameters['cycleKey'] = questions.ask_to_select_cycle(selected_tov)['cycle']['key']['serial']
         self.parameters["inputPath"] = questions.ask_for_input_path()["input_path"]  
-        self.parameters["reportRootUID"] = questions.ask_to_enter_report_root_uid()["uid"]
+        cycle_structure = connection_log.active_connection().get_test_cycle_structure(self.parameters['cycleKey'])
+        self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(cycle_structure)["uid"]
         available_testers = connection_log.active_connection().get_all_testers_of_project(selected_project['key']['serial'])
         self.parameters["defaultTester"] = questions.ask_to_select_default_tester(available_testers)["defaultTester"]
         all_filters = connection_log.active_connection().get_all_filters()            
@@ -91,6 +94,9 @@ class ImportExecutionResults(Action):
 
             success = connection_log.active_connection().import_execution_results(execution_report_base64, self.parameters["cycleKey"], self.parameters["reportRootUID"], self.parameters["defaultTester"], self.parameters["filters"])
             return success
+        except requests.RequestException as e:
+            print("There was a problem with a request.")
+            return False
         except IOError as e:
             print("Reading execution report failed.")
             return False

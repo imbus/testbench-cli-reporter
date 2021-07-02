@@ -5,6 +5,7 @@ import questions
 import testbench
 import actions
 import json
+from collections import Counter
 
 def login() -> testbench.Connection:
     credentials = questions.ask_for_test_bench_credentials()
@@ -58,3 +59,43 @@ def get_configuration(config_file_path: str):
         close_program()
 
     return configuration
+
+def create_ordered_cycle_structure(cycle_structure: list[dict[dict]]):
+    simplified_cycle_structure = [element.get("TestTheme_structure", element.get("TestCaseSet_structure", element.get("Root_structure"))) for element in cycle_structure]
+    sorted_cycle_structure = sorted(simplified_cycle_structure, key=lambda element: int(element['orderPos']))
+
+    all_element_keys = set(element["key"]["serial"] for element in sorted_cycle_structure)
+    elements_in_higher_hierarchy_levels = []
+    elements_in_current_hierarchy_level = []
+    elements_in_lower_hierarchy_levels = []
+    element_position_counter = Counter()
+
+    # top level element
+    for element in sorted_cycle_structure:
+        if element["parentPK"]["serial"] not in all_element_keys:
+            elements_in_current_hierarchy_level.append(element)
+            element_position_counter[element["parentPK"]["serial"]] += 1
+            element["index"] = ()  #str(element_position_counter[element["parentPK"]["serial"]])
+        else:
+            elements_in_lower_hierarchy_levels.append(element)
+
+    # other elements
+    while elements_in_lower_hierarchy_levels:
+        elements_in_higher_hierarchy_levels.extend(elements_in_current_hierarchy_level)
+        elements_in_previous_hierarchy_level = elements_in_current_hierarchy_level
+        element_pks_in_previous_hierarchy_level = [element["key"]["serial"] for element in elements_in_previous_hierarchy_level]
+        elements_in_current_hierarchy_level = []
+        remaining_elements_in_lower_hierarchy_levels = []
+        element_position_counter = Counter()
+        for element in elements_in_lower_hierarchy_levels:
+            if element["parentPK"]["serial"] in element_pks_in_previous_hierarchy_level:
+                elements_in_current_hierarchy_level.append(element)
+                element_position_counter[element["parentPK"]["serial"]] += 1
+                element["index"] = next(parent for parent in elements_in_previous_hierarchy_level if parent["key"]["serial"] == element["parentPK"]["serial"])['index'] + (element_position_counter[element["parentPK"]["serial"]], )
+            else:
+                remaining_elements_in_lower_hierarchy_levels.append(element)
+        elements_in_lower_hierarchy_levels = remaining_elements_in_lower_hierarchy_levels
+    
+    elements_in_higher_hierarchy_levels.extend(elements_in_current_hierarchy_level)
+    
+    return sorted(elements_in_higher_hierarchy_levels, key=lambda element: [subindex for subindex in element["index"]])

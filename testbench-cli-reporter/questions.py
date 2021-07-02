@@ -4,6 +4,7 @@ from questionary import prompt as qprompt
 from questionary import Style
 from questionary import Choice
 import actions
+import util
 
 custom_style_fancy = Style(
     [
@@ -212,6 +213,20 @@ def ask_to_select_default_tester(all_testers: dict) -> dict[str]:
             'name': 'defaultTester',
             'message': 'Select the default tester.',
             'choices': [Choice(tester["value"]["user-name"], tester["value"]["user-login"]) for tester in all_testers_sorted],
+        }
+    ]
+
+    return prompt(question)
+
+def ask_to_select_report_root_uid(cycle_structure: dict):
+    ordered_cycle_structure = util.create_ordered_cycle_structure(cycle_structure)
+
+    question = [
+        {
+            'type': 'select',
+            'name': 'uid',
+            'message': 'Please select an element to be used as the root of the report.',
+            'choices': [Choice(".".join([str(subindex) for subindex in element['index']]) + ' ' + element['name'], element['uniqueID']) for element in ordered_cycle_structure]
         }
     ]
 

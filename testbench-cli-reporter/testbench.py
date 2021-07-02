@@ -5,7 +5,7 @@ import time
 import actions
 import json
 
-class ConnectionLog(object):
+class ConnectionLog:
     def __init__(
         self,
     ):
@@ -26,7 +26,7 @@ class ConnectionLog(object):
         with open(output_file_path, "w") as output_file:
             json.dump(export_dict, output_file, indent=4)
 
-class Connection(object):
+class Connection:
     def __init__(
         self,
         server_url: str,
@@ -215,3 +215,11 @@ class Connection(object):
             time.sleep(5)
 
         return True
+
+    def get_test_cycle_structure(self, cycle_key: str):
+        test_cycle_structure = self.session.get(
+            self.server_url + 'cycle/' + cycle_key + '/structure',
+            verify=False, # TODO: throws SSL error in test env if True,
+        )
+
+        return test_cycle_structure.json()
