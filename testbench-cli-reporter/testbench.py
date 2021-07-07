@@ -43,10 +43,10 @@ class Connection:
         self.session.headers.update({
             'Content-Type': 'application/vnd.testbench+json; charset=utf-8'
         })
-        #self.session.hooks = {
-        #    'response': lambda r, *args, **kwargs: 
-        #        r.raise_for_status()
-        #}
+        self.session.hooks = {
+            'response': lambda r, *args, **kwargs: 
+                r.raise_for_status()
+        }
         # TODO: timeout handling
         # TODO: use with for reliable session closing?
         # TODO: add id_ for selecting specific connections to actionlog?
