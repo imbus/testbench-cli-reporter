@@ -1,7 +1,6 @@
 from __future__ import annotations
 from questionary import print as qprint
-from questionary import prompt as qprompt
-from questionary import select, checkbox
+from questionary import select, checkbox, unsafe_prompt
 from questionary import Style
 from questionary import Choice
 import actions
@@ -40,7 +39,7 @@ def checkbox_prompt(message: str, choices: list[Choice], no_valid_option_message
             message=message,
             choices=choices,
             style=style,
-        )
+        ).unsafe_ask()
     else:
         print(no_valid_option_message)
         return []
@@ -56,10 +55,7 @@ def text_prompt(message, type = 'text', validation = lambda val: val != "", styl
         }
     ]
     
-    return qprompt(question)['sole_question']
-
-def prompt(questions):
-    return qprompt(questions, style=custom_style_fancy)
+    return unsafe_prompt(question)['sole_question']
 
 def ask_for_test_bench_credentials() -> dict[str, str, str]:
     return {

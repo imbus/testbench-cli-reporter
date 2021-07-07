@@ -21,13 +21,16 @@ import actions
 __version__ = '0.0.1'
 
 def main(args):
-    if args.configFile is not None:
-        configuration = util.get_configuration(args.configFile)
-        print("Config file found")
-        run_automatic_mode(configuration)
-    else:
-        print("No config file given")
-        run_manual_mode()  
+    try:
+        if args.configFile is not None:
+            configuration = util.get_configuration(args.configFile)
+            print("Config file found")
+            run_automatic_mode(configuration)
+        else:
+            print("No config file given")
+            run_manual_mode()  
+    except KeyboardInterrupt:
+        util.close_program()
 
 def run_manual_mode():
     # TODO gracefully exit on keyboard interrupt
@@ -39,11 +42,23 @@ def run_manual_mode():
         connection_log.add_connection(active_connection)
         next_action = util.choose_action()
         while next_action is not None:
-            preparation_success = next_action.prepare(connection_log)
-            if preparation_success:
-                execution_success = next_action.execute(connection_log)
-                if execution_success: 
-                    active_connection.add_action(next_action)
+            try:                
+                preparation_success = next_action.prepare(connection_log)
+                if preparation_success:
+                    execution_success = next_action.execute(connection_log)
+                    if execution_success: 
+                        active_connection.add_action(next_action)
+            except KeyError as e:
+                print(f"key {str(e)} not found")
+                print(f"Aborted action")
+                
+            except ValueError as e:
+                print(str(e))
+                print("Aborted action")
+
+            except KeyboardInterrupt:
+                print("Action aborted by user interrupt.")
+
             active_connection = connection_log.active_connection()
             next_action = util.choose_action()
 
