@@ -47,14 +47,14 @@ class UnloggedAction(Action):
 class ExportXMLReport(Action):
     def prepare(self, connection_log: testbench.ConnectionLog) -> bool:        
         all_projects = connection_log.active_connection().get_all_projects()
-        selected_project = questions.ask_to_select_project(all_projects)['project']
-        selected_tov = questions.ask_to_select_tov(selected_project)['tov']
-        self.parameters['cycleKey'] = questions.ask_to_select_cycle(selected_tov)['cycle']['key']['serial']
+        selected_project = questions.ask_to_select_project(all_projects)
+        selected_tov = questions.ask_to_select_tov(selected_project)
+        self.parameters['cycleKey'] = questions.ask_to_select_cycle(selected_tov)['key']['serial']
         cycle_structure = connection_log.active_connection().get_test_cycle_structure(self.parameters['cycleKey'])
-        self.parameters['reportRootUID'] = questions.ask_to_select_report_root_uid(cycle_structure)['uid']
+        self.parameters['reportRootUID'] = questions.ask_to_select_report_root_uid(cycle_structure)
         all_filters = connection_log.active_connection().get_all_filters()            
-        self.parameters['filters'] = questions.ask_to_select_filters(all_filters)['filters']
-        self.parameters['outputPath'] = questions.ask_for_output_path()['output_path']
+        self.parameters['filters'] = questions.ask_to_select_filters(all_filters)
+        self.parameters['outputPath'] = questions.ask_for_output_path()
 
         return True
 
@@ -70,20 +70,19 @@ class ExportXMLReport(Action):
             return False
             # TODO handle missing parameters
 
-
 class ImportExecutionResults(Action):
     def prepare(self, connection_log: testbench.ConnectionLog) -> bool:    
         all_projects = connection_log.active_connection().get_all_projects()
-        selected_project = questions.ask_to_select_project(all_projects)['project']
-        selected_tov = questions.ask_to_select_tov(selected_project)['tov']
-        self.parameters['cycleKey'] = questions.ask_to_select_cycle(selected_tov)['cycle']['key']['serial']
-        self.parameters["inputPath"] = questions.ask_for_input_path()["input_path"]  
+        selected_project = questions.ask_to_select_project(all_projects)
+        selected_tov = questions.ask_to_select_tov(selected_project)
+        self.parameters['cycleKey'] = questions.ask_to_select_cycle(selected_tov)['key']['serial']
+        self.parameters["inputPath"] = questions.ask_for_input_path()
         cycle_structure = connection_log.active_connection().get_test_cycle_structure(self.parameters['cycleKey'])
-        self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(cycle_structure)["uid"]
+        self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(cycle_structure)
         available_testers = connection_log.active_connection().get_all_testers_of_project(selected_project['key']['serial'])
-        self.parameters["defaultTester"] = questions.ask_to_select_default_tester(available_testers)["defaultTester"]
+        self.parameters["defaultTester"] = questions.ask_to_select_default_tester(available_testers)
         all_filters = connection_log.active_connection().get_all_filters()            
-        self.parameters['filters'] = questions.ask_to_select_filters(all_filters)['filters']
+        self.parameters['filters'] = questions.ask_to_select_filters(all_filters)
 
         return True
 
@@ -107,7 +106,7 @@ class ImportExecutionResults(Action):
 
 class ExportActionLog(UnloggedAction):
     def prepare(self, connection_log: testbench.ConnectionLog):
-        self.parameters['outputPath'] = questions.ask_for_output_path()['output_path']
+        self.parameters['outputPath'] = questions.ask_for_output_path()
         return True
 
     def execute(self, connection_log: testbench.ConnectionLog) -> bool:

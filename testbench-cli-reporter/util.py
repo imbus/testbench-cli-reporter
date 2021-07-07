@@ -18,12 +18,12 @@ def login() -> testbench.Connection:
 
         except requests.HTTPError: 
             print("Invalid login credentials.")
-            action = questions.ask_for_action_after_failed_login()['action']
+            action = questions.ask_for_action_after_failed_login()
             if action == "retry_password":
-                credentials['password'] = questions.ask_for_test_bench_password()['password']
+                credentials['password'] = questions.ask_for_test_bench_password()
             elif action == "change_user":
-                credentials['username'] = questions.ask_for_test_bench_username()['username']
-                credentials['password'] = questions.ask_for_test_bench_password()['password']
+                credentials['username'] = questions.ask_for_test_bench_username()
+                credentials['password'] = questions.ask_for_test_bench_password()
             elif action == "change_server":
                 credentials = questions.ask_for_test_bench_credentials()
             else:
@@ -31,16 +31,16 @@ def login() -> testbench.Connection:
 
         except (requests.ConnectionError, requests.exceptions.MissingSchema):
             print("Invalid server url.")            
-            action = questions.ask_for_action_after_failed_server_connection()['action']
+            action = questions.ask_for_action_after_failed_server_connection()
             if action == "retry_server":
-                credentials['server_url'] = questions.ask_for_test_bench_server_url()['server_url']
+                credentials['server_url'] = questions.ask_for_test_bench_server_url()
             elif action == "change_server":
                 credentials = questions.ask_for_test_bench_credentials()
             else:
                 close_program()
 
 def choose_action() -> actions.Action:
-    return questions.ask_for_next_action()['action']
+    return questions.ask_for_next_action()
 
 def close_program():
     print("Closing program.")
@@ -75,7 +75,7 @@ def create_ordered_cycle_structure(cycle_structure: list[dict[dict]]):
         if element["parentPK"]["serial"] not in all_element_keys:
             elements_in_current_hierarchy_level.append(element)
             element_position_counter[element["parentPK"]["serial"]] += 1
-            element["index"] = ()  #str(element_position_counter[element["parentPK"]["serial"]])
+            element["index"] = ()
         else:
             elements_in_lower_hierarchy_levels.append(element)
 
