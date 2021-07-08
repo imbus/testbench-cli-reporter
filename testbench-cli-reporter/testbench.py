@@ -32,11 +32,14 @@ class Connection:
         server_url: str,
         username: str,
         password: str,
+        job_timeout_sec: int = 60 * 60,
+        connection_timeout_sec: int = None,
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.server_url = server_url
         self.username = username
         self.password = password
+        self.job_timeout_sec = job_timeout_sec
         self.action_log: list[actions.Action] = []
         self.session = requests.Session()
         self.session.auth = (username, password)
@@ -47,9 +50,12 @@ class Connection:
             'response': lambda r, *args, **kwargs: 
                 r.raise_for_status()
         }
-        # TODO: timeout handling
-        # TODO: use with for reliable session closing?
+        self.session.mount("http://", TimeoutHTTPAdapter(connection_timeout_sec))
+        self.session.mount("https://", TimeoutHTTPAdapter(connection_timeout_sec))
         # TODO: add id_ for selecting specific connections to actionlog?
+
+    def close(self):
+        self.session.close()
         
     def export(self) -> dict:
         return {
@@ -111,7 +117,6 @@ class Connection:
         return report
 
     def trigger_xml_report_generation(self, cycle_key: str, reportRootUID: str, filters: list[dict[str, str]] = []):
-        # TODO add max duration
         job_id = self.session.post(
             self.server_url + 'cycle/' + cycle_key + '/xmlReport',
             verify = False,
@@ -131,6 +136,7 @@ class Connection:
         return job_id.json()['jobID']
 
     def wait_for_tmp_xml_report_name(self, job_id: str):
+        end_time = time.time() + self.job_timeout_sec
         while (True): 
             report_generation_status = self.session.get(
                 self.server_url + 'job/'+ job_id, 
@@ -139,6 +145,8 @@ class Connection:
             print(f'Waiting until creation of XML report is complete ...')
             if (report_generation_status.json()['completion'] != None):
                 break
+            elif time.time() > end_time:
+                raise JobTimeout(f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds.")
             time.sleep(5)
 
         report_tmp_name = report_generation_status.json()['completion']['result']['Right']
@@ -203,7 +211,7 @@ class Connection:
         return job_id.json()['jobID']
 
     def wait_for_execution_results_import_to_finish(self, job_id: str) -> bool:
-        # TODO add max duration?
+        end_time = time.time() + self.job_timeout_sec
         while (True): 
             import_status = self.session.get(
                 self.server_url + 'executionResultsImporterJob/'+ job_id, 
@@ -212,6 +220,8 @@ class Connection:
             print(f'Waiting until import of execution results is done ...')
             if (import_status.json()['completion'] != None):
                 break
+            elif time.time() > end_time:
+                raise JobTimeout(f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds.")
             time.sleep(5)
 
         return True
@@ -223,3 +233,15 @@ class Connection:
         )
 
         return test_cycle_structure.json()
+
+class TimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
+    def __init__(self, timeout: int = 60, *args, **kwargs):
+        self.timeout = timeout
+        super().__init__(*args, **kwargs)
+
+    def send(self, *args, **kwargs):
+        kwargs['timeout'] = self.timeout
+        return super().send(*args, **kwargs)
+
+class JobTimeout(requests.exceptions.Timeout):
+    pass

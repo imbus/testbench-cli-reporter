@@ -39,6 +39,18 @@ def login() -> testbench.Connection:
             else:
                 close_program()
 
+        except requests.exceptions.Timeout:
+            print("No connection could be established due to timeout.")
+            action = questions.ask_for_action_after_login_timeout()
+            if action == "retry":
+                pass
+            elif action == "retry_server":
+                credentials['server_url'] = questions.ask_for_test_bench_server_url()
+            elif action == "change_server":
+                credentials = questions.ask_for_test_bench_credentials()
+            else:
+                close_program()
+
 def choose_action() -> actions.Action:
     return questions.ask_for_next_action()
 

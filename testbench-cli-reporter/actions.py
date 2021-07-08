@@ -118,6 +118,7 @@ class ChangeConnection(UnloggedAction):
         return True
 
     def execute(self, connection_log: testbench.ConnectionLog) -> bool:
+        connection_log.active_connection().close()
         connection_log.add_connection(self.parameters["newConnection"])
         return True
 

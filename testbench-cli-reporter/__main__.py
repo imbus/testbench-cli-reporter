@@ -15,8 +15,8 @@
 import argparse
 from testbench import ConnectionLog, Connection
 import util
-from importlib import import_module
 import actions
+from requests.exceptions import Timeout
 
 __version__ = '0.0.1'
 
@@ -57,6 +57,9 @@ def run_manual_mode():
 
             except KeyboardInterrupt:
                 print("Action aborted by user interrupt.")
+
+            except Timeout:
+                print("Action aborted due to timeout.")
 
             active_connection = connection_log.active_connection()
             next_action = util.choose_action()

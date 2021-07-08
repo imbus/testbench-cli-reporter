@@ -144,6 +144,17 @@ def ask_for_action_after_failed_server_connection() -> dict[str]:
         ],
     )
 
+def ask_for_action_after_login_timeout() -> dict[str]:    
+    return selection_prompt(
+        message = 'What do you want to do?',
+        choices = [
+                Choice('Try again.', 'retry'),
+                Choice('Try same credentials using different server URL.', 'retry_server'),
+                Choice('Re-enter server URL and credentials.', 'change_server'),
+                Choice('Quit.', 'quit'),
+        ],
+    )
+
 def ask_for_next_action() -> dict[actions.Action]:
     return selection_prompt(
         message = 'What do you want to do?',
