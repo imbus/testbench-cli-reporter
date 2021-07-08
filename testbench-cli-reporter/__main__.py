@@ -33,7 +33,6 @@ def main(args):
         util.close_program()
 
 def run_manual_mode():
-    # TODO gracefully exit on keyboard interrupt
     print("Starting manual mode")
     connection_log = ConnectionLog()
     

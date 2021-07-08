@@ -70,7 +70,7 @@ def create_ordered_cycle_structure(cycle_structure: list[dict[dict]]):
     elements_in_lower_hierarchy_levels = []
     element_position_counter = Counter()
 
-    # top level element
+    # root element
     for element in sorted_cycle_structure:
         if element["parentPK"]["serial"] not in all_element_keys:
             elements_in_current_hierarchy_level.append(element)
@@ -97,5 +97,6 @@ def create_ordered_cycle_structure(cycle_structure: list[dict[dict]]):
         elements_in_lower_hierarchy_levels = remaining_elements_in_lower_hierarchy_levels
     
     elements_in_higher_hierarchy_levels.extend(elements_in_current_hierarchy_level)
+    elements_in_higher_hierarchy_levels.pop(0)  # remove root element as it cannot be used as basis for report creation
     
     return sorted(elements_in_higher_hierarchy_levels, key=lambda element: [subindex for subindex in element["index"]])
