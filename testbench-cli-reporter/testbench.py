@@ -54,7 +54,6 @@ class Connection:
         }
         self.session.mount("http://", TimeoutHTTPAdapter(connection_timeout_sec))
         self.session.mount("https://", TimeoutHTTPAdapter(connection_timeout_sec))
-        breakpoint()
         self.session.verify = verify
         # TODO: add id_ for selecting specific connections to actionlog?
 
@@ -64,6 +63,7 @@ class Connection:
     def export(self) -> dict:
         return {
             "server_url": self.server_url,
+            "verify": self.session.verify,
             "username": self.username,
             "password": self.password,
             "actions": [

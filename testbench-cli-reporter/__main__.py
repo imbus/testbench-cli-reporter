@@ -74,6 +74,7 @@ def run_automatic_mode(configuration: dict):
         for connection_data in configuration["configuration"]:
             active_connection = Connection(
                 connection_data["server_url"],
+                connection_data["verify"],
                 connection_data["username"],
                 connection_data["password"],
             )
