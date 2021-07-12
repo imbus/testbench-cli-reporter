@@ -18,7 +18,8 @@ import util
 import actions
 from requests.exceptions import Timeout
 
-__version__ = '0.0.1'
+__version__ = "0.0.1"
+
 
 def main(args):
     try:
@@ -28,29 +29,30 @@ def main(args):
             run_automatic_mode(configuration)
         else:
             print("No config file given")
-            run_manual_mode()  
+            run_manual_mode()
     except KeyboardInterrupt:
         util.close_program()
+
 
 def run_manual_mode():
     print("Starting manual mode")
     connection_log = ConnectionLog()
-    
+
     while True:
         active_connection = util.login()
         connection_log.add_connection(active_connection)
         next_action = util.choose_action()
         while next_action is not None:
-            try:                
+            try:
                 preparation_success = next_action.prepare(connection_log)
                 if preparation_success:
                     execution_success = next_action.execute(connection_log)
-                    if execution_success: 
+                    if execution_success:
                         active_connection.add_action(next_action)
             except KeyError as e:
                 print(f"key {str(e)} not found")
                 print(f"Aborted action")
-                
+
             except ValueError as e:
                 print(str(e))
                 print("Aborted action")
@@ -64,17 +66,24 @@ def run_manual_mode():
             active_connection = connection_log.active_connection()
             next_action = util.choose_action()
 
+
 def run_automatic_mode(configuration: dict):
     print("Run Automatic Mode")
     connection_log = ConnectionLog()
     try:
-        for connection_data in configuration['configuration']:
-            active_connection = Connection(connection_data["server_url"], connection_data["username"], connection_data["password"])
+        for connection_data in configuration["configuration"]:
+            active_connection = Connection(
+                connection_data["server_url"],
+                connection_data["username"],
+                connection_data["password"],
+            )
             connection_log.add_connection(active_connection)
-            for action_data in connection_data['actions']:
-                next_action = actions.Action.create_instance_of_action(action_data['type'], action_data['parameters'])
+            for action_data in connection_data["actions"]:
+                next_action = actions.Action.create_instance_of_action(
+                    action_data["type"], action_data["parameters"]
+                )
                 execution_success = next_action.execute(connection_log)
-                if execution_success: 
+                if execution_success:
                     active_connection.add_action(next_action)
                 active_connection = connection_log.active_connection()
 
@@ -82,8 +91,14 @@ def run_automatic_mode(configuration: dict):
         # TODO proper error handling
         print(f"key {str(e)} not found")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--configFile", help="Path to a config file to execute pre-set actions based on the given configuration.", type=str)
+    parser.add_argument(
+        "-c",
+        "--configFile",
+        help="Path to a config file to execute pre-set actions based on the given configuration.",
+        type=str,
+    )
     args = parser.parse_args()
     main(args)
