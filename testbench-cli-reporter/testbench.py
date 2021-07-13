@@ -133,7 +133,7 @@ class Connection:
                 "exportDesignData": True,
                 "characterEncoding": "utf-8",
                 "suppressFilteredData": True,
-                "filters": filters,  # TODO: check if filters work as intended
+                "filters": filters,
                 "reportRootUID": reportRootUID,
                 "exportExpandedData": True,
                 "exportDescriptionFields": True,
