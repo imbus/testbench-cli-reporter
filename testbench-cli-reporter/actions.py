@@ -16,7 +16,7 @@ class Action(ABC):
             self.parameters = parameters
 
     @staticmethod
-    def create_instance_of_action(class_name: str, parameters: dict[str]):
+    def create_instance_of_action(class_name: str, parameters: dict[str, str]):
         try:
             class_ = globals()[class_name]
             class_instance = class_(parameters)
@@ -69,7 +69,7 @@ class ExportXMLReport(Action):
                 self.parameters["filters"],
             )
             with open(self.parameters["outputPath"], "wb") as output_file:
-                output_file.write(report.content)
+                output_file.write(report)
             print(f'Report {self.parameters["outputPath"]} was generated')
             return True
         except KeyError as e:
@@ -140,6 +140,7 @@ class ExportActionLog(UnloggedAction):
 
     def execute(self, connection_log: testbench.ConnectionLog) -> bool:
         connection_log.export_as_json(self.parameters["outputPath"])
+        return True
 
 
 class ChangeConnection(UnloggedAction):

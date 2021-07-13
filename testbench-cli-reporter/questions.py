@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional, Callable
 from questionary import print as qprint
 from questionary import select, checkbox, unsafe_prompt
 from questionary import Style
@@ -26,7 +27,7 @@ def selection_prompt(
     message: str,
     choices: list[Choice],
     no_valid_option_message: str = None,
-    style: dict = custom_style_fancy,
+    style: Style = custom_style_fancy,
 ):
     valid_choices = [choice for choice in choices if not choice.disabled]
     if valid_choices:
@@ -43,7 +44,7 @@ def checkbox_prompt(
     message: str,
     choices: list[Choice],
     no_valid_option_message: str = None,
-    style: dict = custom_style_fancy,
+    style: Style = custom_style_fancy,
 ):
     valid_choices = [choice for choice in choices if not choice.disabled]
     if valid_choices:
@@ -60,7 +61,7 @@ def checkbox_prompt(
 def text_prompt(
     message: str,
     type: str = "text",
-    validation: function = lambda val: val != "",
+    validation: Optional[Callable[[str], bool]] = lambda val: val != "",
     style: Style = custom_style_fancy,
 ):
     question = [
@@ -76,7 +77,7 @@ def text_prompt(
     return unsafe_prompt(question)["sole_question"]
 
 
-def ask_for_test_bench_credentials() -> dict[str, str | bool, str, str]:
+def ask_for_test_bench_credentials() -> dict:
     return {
         "server_url": ask_for_test_bench_server_url(),
         "verify": ask_for_ssl_verification_option(),
@@ -85,7 +86,7 @@ def ask_for_test_bench_credentials() -> dict[str, str | bool, str, str]:
     }
 
 
-def ask_for_test_bench_server_url() -> dict[str]:
+def ask_for_test_bench_server_url() -> str:
     return text_prompt(
         message="Enter the URL of the TestBench server you want to connect to.",
     )
@@ -116,13 +117,13 @@ def ask_for_certificate_path() -> str:
     )
 
 
-def ask_for_test_bench_username() -> dict[str]:
+def ask_for_test_bench_username() -> str:
     return text_prompt(
         message="Enter your user name.",
     )
 
 
-def ask_for_test_bench_password() -> dict[str]:
+def ask_for_test_bench_password() -> str:
     return text_prompt(
         message="Enter your password.",
         type="password",
@@ -130,7 +131,7 @@ def ask_for_test_bench_password() -> dict[str]:
     )
 
 
-def ask_to_select_project(all_projects: dict) -> dict[str]:
+def ask_to_select_project(all_projects: dict) -> dict:
     return selection_prompt(
         message="Select a project.",
         choices=[
@@ -140,7 +141,7 @@ def ask_to_select_project(all_projects: dict) -> dict[str]:
     )
 
 
-def ask_to_select_tov(project: dict) -> dict[str]:
+def ask_to_select_tov(project: dict) -> dict:
     return selection_prompt(
         message="Select a test object version.",
         choices=[Choice(tov["name"], tov) for tov in project["testObjectVersions"]],
@@ -148,7 +149,7 @@ def ask_to_select_tov(project: dict) -> dict[str]:
     )
 
 
-def ask_to_select_cycle(tov: dict) -> dict[str]:
+def ask_to_select_cycle(tov: dict) -> dict:
     return selection_prompt(
         message="Select a test cycle.",
         choices=[Choice(cycle["name"], cycle) for cycle in tov["testCycles"]],
@@ -156,7 +157,7 @@ def ask_to_select_cycle(tov: dict) -> dict[str]:
     )
 
 
-def ask_to_select_filters(all_filters: dict) -> list[str]:
+def ask_to_select_filters(all_filters: list[dict]) -> dict:
     all_filters_sorted = sorted(
         all_filters, key=lambda filter: filter["name"].casefold()
     )
@@ -171,21 +172,21 @@ def ask_to_select_filters(all_filters: dict) -> list[str]:
     )
 
 
-def ask_for_output_path() -> list[str]:
+def ask_for_output_path() -> str:
     return text_prompt(
         message="Provide the output path.",
         type="path",
     )
 
 
-def ask_for_input_path() -> list[str]:
+def ask_for_input_path() -> str:
     return text_prompt(
         message="Provide the input path.",
         type="path",
     )
 
 
-def ask_for_action_after_failed_login() -> dict[str]:
+def ask_for_action_after_failed_login() -> str:
     return selection_prompt(
         message="What do you want to do?",
         choices=[
@@ -197,7 +198,7 @@ def ask_for_action_after_failed_login() -> dict[str]:
     )
 
 
-def ask_for_action_after_failed_server_connection() -> dict[str]:
+def ask_for_action_after_failed_server_connection() -> str:
     return selection_prompt(
         message="What do you want to do?",
         choices=[
@@ -208,7 +209,7 @@ def ask_for_action_after_failed_server_connection() -> dict[str]:
     )
 
 
-def ask_for_action_after_login_timeout() -> dict[str]:
+def ask_for_action_after_login_timeout() -> str:
     return selection_prompt(
         message="What do you want to do?",
         choices=[
@@ -220,7 +221,7 @@ def ask_for_action_after_login_timeout() -> dict[str]:
     )
 
 
-def ask_for_next_action() -> dict[actions.Action]:
+def ask_for_next_action() -> actions.Action:
     return selection_prompt(
         message="What do you want to do?",
         choices=[
@@ -233,7 +234,7 @@ def ask_for_next_action() -> dict[actions.Action]:
     )
 
 
-def ask_to_select_default_tester(all_testers: dict) -> dict[str]:
+def ask_to_select_default_tester(all_testers: list[dict]) -> dict[str, str]:
     all_testers_sorted = sorted(
         all_testers, key=lambda tester: tester["value"]["user-name"].casefold()
     )
@@ -248,7 +249,7 @@ def ask_to_select_default_tester(all_testers: dict) -> dict[str]:
     )
 
 
-def ask_to_select_report_root_uid(cycle_structure: dict):
+def ask_to_select_report_root_uid(cycle_structure: list[dict]):
     ordered_cycle_structure = util.create_ordered_cycle_structure(cycle_structure)
 
     return selection_prompt(

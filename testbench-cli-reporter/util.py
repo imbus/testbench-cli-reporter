@@ -77,7 +77,7 @@ def get_configuration(config_file_path: str):
     return configuration
 
 
-def create_ordered_cycle_structure(cycle_structure: list[dict[dict]]):
+def create_ordered_cycle_structure(cycle_structure: list[dict]):
     simplified_cycle_structure = [
         element.get(
             "TestTheme_structure",
@@ -95,7 +95,7 @@ def create_ordered_cycle_structure(cycle_structure: list[dict[dict]]):
     elements_in_higher_hierarchy_levels = []
     elements_in_current_hierarchy_level = []
     elements_in_lower_hierarchy_levels = []
-    element_position_counter = Counter()
+    element_position_counter: Counter = Counter()
 
     # root element
     for element in sorted_cycle_structure:
