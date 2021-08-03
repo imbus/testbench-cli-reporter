@@ -38,7 +38,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Topic :: Software Development :: Testing",
         "Topic :: Software Development :: Testing :: Acceptance",
-        "Framework :: TestBench",
     ],
     install_requires=["questionary>=1.9.0", "requests", "urllib3"],
     python_requires=">=3.6",
