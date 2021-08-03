@@ -24,7 +24,7 @@ testbench-cli-reporter --configfile /path/to/config/file.json
     "configuration": [
         {
             "server_url": "https://testbench:1234/api/1/",
-            "username": "User A",
+            "loginname": "User A",
             "password": "passwordA",
             "actions": [
                 {
@@ -49,7 +49,7 @@ testbench-cli-reporter --configfile /path/to/config/file.json
         },
         {
             "server_url": "https://testbench:9999/api/1/",
-            "username": "User B",
+            "loginname": "User B",
             "password": "passwordB",
             "actions": [
                 {

@@ -1,11 +1,12 @@
 from __future__ import annotations
 import sys
+
 import requests
 import questions
 import testbench
 import actions
 import json
-from collections import Counter
+from collections import OrderedDict
 
 
 def login() -> testbench.Connection:
@@ -21,10 +22,10 @@ def login() -> testbench.Connection:
             print("Invalid login credentials.")
             action = questions.ask_for_action_after_failed_login()
             if action == "retry_password":
-                credentials["password"] = questions.ask_for_test_bench_password()
+                credentials["password"] = questions.ask_for_testbench_password()
             elif action == "change_user":
-                credentials["username"] = questions.ask_for_test_bench_username()
-                credentials["password"] = questions.ask_for_test_bench_password()
+                credentials["loginname"] = questions.ask_for_testbench_loginname()
+                credentials["password"] = questions.ask_for_testbench_password()
             elif action == "change_server":
                 credentials = questions.ask_for_test_bench_credentials()
             else:
@@ -77,66 +78,60 @@ def get_configuration(config_file_path: str):
     return configuration
 
 
-def create_ordered_cycle_structure(cycle_structure: list[dict]):
-    simplified_cycle_structure = [
-        element.get(
-            "TestTheme_structure",
-            element.get("TestCaseSet_structure", element.get("Root_structure")),
-        )
-        for element in cycle_structure
-    ]
-    sorted_cycle_structure = sorted(
-        simplified_cycle_structure, key=lambda element: int(element["orderPos"])
-    )
-
-    all_element_keys = set(
-        element["key"]["serial"] for element in sorted_cycle_structure
-    )
-    elements_in_higher_hierarchy_levels = []
-    elements_in_current_hierarchy_level = []
-    elements_in_lower_hierarchy_levels = []
-    element_position_counter: Counter = Counter()
-
-    # root element
-    for element in sorted_cycle_structure:
-        if element["parentPK"]["serial"] not in all_element_keys:
-            elements_in_current_hierarchy_level.append(element)
-            element_position_counter[element["parentPK"]["serial"]] += 1
-            element["index"] = ()
+def add_numbering_to_cycle(cycle_structure):
+    root_key = 0
+    tse_dict = dict()
+    for test_structure_element in cycle_structure:
+        if "TestTheme_structure" in test_structure_element:
+            key = "TestTheme_structure"
+        elif "TestCaseSet_structure" in test_structure_element:
+            key = "TestCaseSet_structure"
+        elif "Root_structure" in test_structure_element:
+            key = "Root_structure"
+            root_key = test_structure_element[key]["key"]["serial"]
+            test_structure_element[key]["numbering"] = "-1"
         else:
-            elements_in_lower_hierarchy_levels.append(element)
+            raise KeyError(
+                f"Unexpected Test Structure Element! : {test_structure_element}"
+            )
 
-    # other elements
-    while elements_in_lower_hierarchy_levels:
-        elements_in_higher_hierarchy_levels.extend(elements_in_current_hierarchy_level)
-        elements_in_previous_hierarchy_level = elements_in_current_hierarchy_level
-        element_pks_in_previous_hierarchy_level = [
-            element["key"]["serial"] for element in elements_in_previous_hierarchy_level
-        ]
-        elements_in_current_hierarchy_level = []
-        remaining_elements_in_lower_hierarchy_levels = []
-        element_position_counter = Counter()
-        for element in elements_in_lower_hierarchy_levels:
-            if element["parentPK"]["serial"] in element_pks_in_previous_hierarchy_level:
-                elements_in_current_hierarchy_level.append(element)
-                element_position_counter[element["parentPK"]["serial"]] += 1
-                element["index"] = next(
-                    parent
-                    for parent in elements_in_previous_hierarchy_level
-                    if parent["key"]["serial"] == element["parentPK"]["serial"]
-                )["index"] + (element_position_counter[element["parentPK"]["serial"]],)
-            else:
-                remaining_elements_in_lower_hierarchy_levels.append(element)
-        elements_in_lower_hierarchy_levels = (
-            remaining_elements_in_lower_hierarchy_levels
+        tse_serial = test_structure_element[key]["key"]["serial"]
+        tse_parent_serial = test_structure_element[key]["parentPK"]["serial"]
+
+        if tse_serial not in tse_dict:
+            tse_dict[tse_serial] = {"tse": test_structure_element, "childs": dict()}
+        else:
+            tse_dict[tse_serial]["tse"] = test_structure_element
+
+        if tse_parent_serial not in tse_dict:
+            tse_dict[tse_parent_serial] = {
+                "tse": None,
+                "childs": {
+                    int(test_structure_element[key]["orderPos"]): tse_dict[tse_serial]
+                },
+            }
+        else:
+            tse_dict[tse_parent_serial]["childs"][
+                int(test_structure_element[key]["orderPos"])
+            ] = tse_dict[tse_serial]
+
+        tse_dict[tse_parent_serial]["childs"] = OrderedDict(
+            sorted(tse_dict[tse_parent_serial]["childs"].items())
         )
+    root = tse_dict[root_key]
+    add_numbering_to_childs(root["childs"].values(), None)
+    return root
 
-    elements_in_higher_hierarchy_levels.extend(elements_in_current_hierarchy_level)
-    if elements_in_higher_hierarchy_levels:
-        # remove root element as it cannot be used as basis for report creation
-        elements_in_higher_hierarchy_levels.pop(0)  
 
-    return sorted(
-        elements_in_higher_hierarchy_levels,
-        key=lambda element: [subindex for subindex in element["index"]],
-    )
+def add_numbering_to_childs(child_list, parent_numbering):
+    parent_numbering = f"{parent_numbering}." if parent_numbering else ""
+    for index, child in enumerate(child_list):
+        test_structure_element = child["tse"]
+        if "TestTheme_structure" in test_structure_element:
+            key = "TestTheme_structure"
+        else:
+            key = "TestCaseSet_structure"
+        current_numbering = f"{parent_numbering}{index+1}"
+        test_structure_element[key]["numbering"] = current_numbering
+        if len(child["childs"]) > 0:
+            add_numbering_to_childs(child["childs"].values(), current_numbering)

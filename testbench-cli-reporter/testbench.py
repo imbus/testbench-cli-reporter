@@ -1,10 +1,69 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, Union
 import requests
 import urllib3
 import time
 import actions
 import json
+
+spinner = [
+    "⢀⠀",
+    "⡀⠀",
+    "⠄⠀",
+    "⢂⠀",
+    "⡂⠀",
+    "⠅⠀",
+    "⢃⠀",
+    "⡃⠀",
+    "⠍⠀",
+    "⢋⠀",
+    "⡋⠀",
+    "⠍⠁",
+    "⢋⠁",
+    "⡋⠁",
+    "⠍⠉",
+    "⠋⠉",
+    "⠋⠉",
+    "⠉⠙",
+    "⠉⠙",
+    "⠉⠩",
+    "⠈⢙",
+    "⠈⡙",
+    "⢈⠩",
+    "⡀⢙",
+    "⠄⡙",
+    "⢂⠩",
+    "⡂⢘",
+    "⠅⡘",
+    "⢃⠨",
+    "⡃⢐",
+    "⠍⡐",
+    "⢋⠠",
+    "⡋⢀",
+    "⠍⡁",
+    "⢋⠁",
+    "⡋⠁",
+    "⠍⠉",
+    "⠋⠉",
+    "⠋⠉",
+    "⠉⠙",
+    "⠉⠙",
+    "⠉⠩",
+    "⠈⢙",
+    "⠈⡙",
+    "⠈⠩",
+    "⠀⢙",
+    "⠀⡙",
+    "⠀⠩",
+    "⠀⢘",
+    "⠀⡘",
+    "⠀⠨",
+    "⠀⢐",
+    "⠀⡐",
+    "⠀⠠",
+    "⠀⢀",
+    "⠀⡀",
+]
 
 
 class ConnectionLog:
@@ -33,20 +92,21 @@ class Connection:
     def __init__(
         self,
         server_url: str,
-        verify: bool | str,
-        username: str,
+        verify: Union[bool, str],
+        loginname: str,
         password: str,
-        job_timeout_sec: int = 60 * 60,
+        job_timeout_sec: int = 4 * 60 * 60,
         connection_timeout_sec: int = None,
+        **kwargs,
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.server_url = server_url
-        self.username = username
+        self.loginname = loginname
         self.password = password
         self.job_timeout_sec = job_timeout_sec
         self.action_log: list[actions.Action] = []
         self.session = requests.Session()
-        self.session.auth = (username, password)
+        self.session.auth = (loginname, password)
         self.session.headers.update(
             {"Content-Type": "application/vnd.testbench+json; charset=utf-8"}
         )
@@ -65,7 +125,7 @@ class Connection:
         return {
             "server_url": self.server_url,
             "verify": self.session.verify,
-            "username": self.username,
+            "loginname": self.loginname,
             "password": self.password,
             "actions": [
                 action_export
@@ -80,7 +140,7 @@ class Connection:
     def check_is_identical(self, other: Connection) -> bool:
         if (
             self.server_url == other.server_url
-            and self.username == other.username
+            and self.loginname == other.loginname
             and self.password == other.password
         ):
             return True
@@ -105,7 +165,7 @@ class Connection:
             self.server_url + "projects",
             params={"includeTOVs": "true", "includeCycles": "true"},
         ).json()
-        all_projects['projects'].sort(key=lambda proj: proj['name'])
+        all_projects["projects"].sort(key=lambda proj: proj["name"].casefold())
         return all_projects
 
     def get_all_filters(self) -> list[dict]:
@@ -116,32 +176,58 @@ class Connection:
         return all_filters.json()
 
     def get_xml_report(
-        self, cycle_key: str, reportRootUID: str, filters: list[dict[str, str]] = []
+        self, tov_key: str, cycle_key: str, reportRootUID: str, filters=None
     ) -> bytes:
-        job_id = self.trigger_xml_report_generation(cycle_key, reportRootUID, filters)
+        if filters is None:
+            filters = []
+        job_id = self.trigger_xml_report_generation(
+            tov_key, cycle_key, reportRootUID, filters
+        )
         report_tmp_name = self.wait_for_tmp_xml_report_name(job_id)
         report = self.get_xml_report_data(report_tmp_name)
 
         return report
 
     def trigger_xml_report_generation(
-        self, cycle_key: str, reportRootUID: str, filters: list[dict[str, str]] = []
+        self, tov_key: str, cycle_key: str, reportRootUID: str, filters=None
     ) -> str:
-        job_id = self.session.post(
-            self.server_url + "cycle/" + cycle_key + "/xmlReport",
-            json={
-                "exportAttachments": True,
-                "exportDesignData": True,
-                "characterEncoding": "utf-8",
-                "suppressFilteredData": True,
-                "filters": filters,
-                "reportRootUID": reportRootUID,
-                "exportExpandedData": True,
-                "exportDescriptionFields": True,
-                "outputFormattedText": False,
-                "exportExecutionProtocols": False,
-            },
-        )
+        if filters is None:
+            filters = []
+        itep_options = {
+            "exportAttachments": True,
+            "exportDesignData": True,
+            "characterEncoding": "utf-16",
+            "suppressFilteredData": True,
+            "exportExpandedData": True,
+            "exportDescriptionFields": True,
+            "outputFormattedText": False,
+            "exportExecutionProtocols": False,
+        }
+        itorx_options = {
+            "exportAttachments": True,
+            "exportDesignData": True,
+            "characterEncoding": "utf-8",
+            "suppressFilteredData": True,
+            "exportExpandedData": True,
+            "exportDescriptionFields": True,
+            "outputFormattedText": True,
+            "exportExecutionProtocols": True,
+        }
+        xml_report_options = itorx_options  # TODO hier noch gut machen und Fragen
+        if reportRootUID != "ROOT":
+            xml_report_options["reportRootUID"] = reportRootUID
+        xml_report_options["filters"]: filters
+
+        if cycle_key:
+            job_id = self.session.post(
+                self.server_url + "cycle/" + cycle_key + "/xmlReport",
+                json=xml_report_options,
+            )
+        else:
+            job_id = self.session.post(
+                self.server_url + "tovs/" + tov_key + "/xmlReport",
+                json=xml_report_options,
+            )
 
         return job_id.json()["jobID"]
 
@@ -151,14 +237,18 @@ class Connection:
             report_generation_status = self.session.get(
                 self.server_url + "job/" + job_id,
             )
-            print(f"Waiting until creation of XML report is complete ...")
-            if report_generation_status.json()["completion"] != None:
+            if report_generation_status.json()["completion"] is not None:
                 break
             elif time.time() > end_time:
                 raise JobTimeout(
                     f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds."
                 )
-            time.sleep(5)
+            for cursor in spinner:
+                print(
+                    f"Waiting until creation of XML report is complete {cursor}",
+                    end="\r",
+                )
+                time.sleep(0.04)
 
         report_tmp_name = report_generation_status.json()["completion"]["result"][
             "Right"
@@ -220,21 +310,23 @@ class Connection:
         default_tester: str,
         filters: list[dict[str, str]],
     ) -> str:
+        import_config = {
+            "fileName": serverside_file_name,
+            "ignoreNonExecutedTestCases": True,
+            "defaultTester": default_tester,
+            "checkPaths": True,
+            "filters": filters,
+            "discardTesterInformation": True,
+            "useExistingDefect": True,
+        }
+        if report_root_uid != "ROOT":
+            import_config["reportRootUID"] = report_root_uid
         job_id = self.session.post(
             self.server_url + "cycle/" + cycle_key + "/executionResultsImport",
             headers={
                 "Accept": "application/zip",
             },
-            json={
-                "reportRootUID": report_root_uid,
-                "fileName": serverside_file_name,
-                "ignoreNonExecutedTestCases": True,
-                "defaultTester": default_tester,
-                "checkPaths": True,
-                "filters": filters,
-                "discardTesterInformation": True,
-                "useExistingDefect": True,
-            },
+            json=import_config,
         )
 
         return job_id.json()["jobID"]
@@ -245,14 +337,18 @@ class Connection:
             import_status = self.session.get(
                 self.server_url + "executionResultsImporterJob/" + job_id,
             )
-            print(f"Waiting until import of execution results is done ...")
-            if import_status.json()["completion"] != None:
+            if import_status.json()["completion"] is not None:
                 break
             elif time.time() > end_time:
                 raise JobTimeout(
                     f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds."
                 )
-            time.sleep(5)
+            for cursor in spinner:
+                print(
+                    f"Waiting until import of execution results is done {cursor}",
+                    end="\r",
+                )
+                time.sleep(0.04)
 
         return True
 
@@ -260,8 +356,13 @@ class Connection:
         test_cycle_structure = self.session.get(
             self.server_url + "cycle/" + cycle_key + "/structure",
         )
-
         return test_cycle_structure.json()
+
+    def get_tov_structure(self, tovKey: str) -> list[dict]:
+        tov_structure = self.session.get(
+            self.server_url + "tov/" + tovKey + "/structure",
+        )
+        return tov_structure.json()
 
 
 class TimeoutHTTPAdapter(requests.adapters.HTTPAdapter):

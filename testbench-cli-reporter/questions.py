@@ -1,9 +1,12 @@
 from __future__ import annotations
-from typing import Optional, Callable
-from questionary import print as qprint
+
+from os.path import isdir, isfile, abspath, dirname
+import os
+from typing import Optional, Callable, Union
 from questionary import select, checkbox, unsafe_prompt
 from questionary import Style
 from questionary import Choice
+from re import fullmatch, sub
 import actions
 import util
 
@@ -28,6 +31,7 @@ def selection_prompt(
     choices: list[Choice],
     no_valid_option_message: str = None,
     style: Style = custom_style_fancy,
+    default: Optional[str] = None,
 ):
     valid_choices = [choice for choice in choices if not choice.disabled]
     if valid_choices:
@@ -35,6 +39,7 @@ def selection_prompt(
             message=message,
             choices=choices,
             style=style,
+            default=default,
         ).unsafe_ask()
     else:
         raise ValueError(no_valid_option_message)
@@ -63,6 +68,8 @@ def text_prompt(
     type: str = "text",
     validation: Optional[Callable[[str], bool]] = lambda val: val != "",
     style: Style = custom_style_fancy,
+    default: str = "",
+    filter: Optional[Callable[[str], str]] = lambda val: val,
 ):
     question = [
         {
@@ -71,6 +78,8 @@ def text_prompt(
             "message": message,
             "validate": validation,
             "style": style,
+            "default": default,
+            "filter": filter,
         }
     ]
 
@@ -80,27 +89,37 @@ def text_prompt(
 def ask_for_test_bench_credentials() -> dict:
     return {
         "server_url": ask_for_test_bench_server_url(),
-        "verify": ask_for_ssl_verification_option(),
-        "username": ask_for_test_bench_username(),
-        "password": ask_for_test_bench_password(),
+        "verify": False,  # ask_for_ssl_verification_option(), #ToDo Hier könnten optional Certificate geprüft werden
+        "loginname": ask_for_testbench_loginname(),
+        "password": ask_for_testbench_password(),
     }
 
 
 def ask_for_test_bench_server_url() -> str:
-    return text_prompt(
-        message="Enter the URL of the TestBench server you want to connect to.",
+    server_url = text_prompt(
+        message="Enter the TestBench server address and port <host:port>:",
+        validation=lambda text: True
+        if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/)?", text)
+        else f"Server '{text}' is not valid! ",
+        filter=lambda raw: sub(
+            r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/?)?$",
+            r"https://\2\3/api/1/",
+            sub(r"^([\w\-.\d]+)$", r"\1:9443", raw),
+        ),
     )
+    print(server_url)
+    return server_url
 
 
-def ask_for_ssl_verification_option() -> bool | str:
+def ask_for_ssl_verification_option() -> Union[bool, str]:
     verification_option = selection_prompt(
         message="Select how the certificate of the TestBench server should be verified.",
         choices=[
+            Choice("Do not verify the certificate at all.", False),
             Choice("Automatically verify the certificate.", True),
             Choice(
                 "Provide a path to a local certificate file for verification.", "path"
             ),
-            Choice("Do not verify the certificate at all.", False),
         ],
     )
 
@@ -114,46 +133,54 @@ def ask_for_certificate_path() -> str:
     return text_prompt(
         message="Provide the path to the certificate.",
         type="path",
+        validation=lambda path: True
+        if isfile(path) and os.access(path, os.R_OK)
+        else f"Path '{path}' is not a file or not readable.",
     )
 
 
-def ask_for_test_bench_username() -> str:
+def ask_for_testbench_loginname() -> str:
     return text_prompt(
-        message="Enter your user name.",
+        message="Enter your login name:",
     )
 
 
-def ask_for_test_bench_password() -> str:
+def ask_for_testbench_password() -> str:
     return text_prompt(
-        message="Enter your password.",
+        message="Enter your password:",
         type="password",
         validation=None,
     )
 
 
-def ask_to_select_project(all_projects: dict) -> dict:
+def ask_to_select_project(all_projects: dict, default=None) -> dict:
+    choices = [Choice(project["name"], project) for project in all_projects["projects"]]
     return selection_prompt(
         message="Select a project.",
-        choices=[
-            Choice(project["name"], project) for project in all_projects["projects"]
-        ],
+        choices=choices,
         no_valid_option_message="No project available.",
+        default=next((x for x in choices if x.title == default), None),
     )
 
 
-def ask_to_select_tov(project: dict) -> dict:
+def ask_to_select_tov(project: dict, default=None) -> dict:
+    choices = [Choice(tov["name"], tov) for tov in project["testObjectVersions"]]
     return selection_prompt(
         message="Select a test object version.",
-        choices=[Choice(tov["name"], tov) for tov in project["testObjectVersions"]],
+        choices=choices,
         no_valid_option_message="No test object version available.",
+        default=next((x for x in choices if x.title == default), None),
     )
 
 
-def ask_to_select_cycle(tov: dict) -> dict:
+def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
+    choices = [Choice("<NO TEST CYCLE>", "NO_EXEC")] if export else []
+    choices.extend([Choice(cycle["name"], cycle) for cycle in tov["testCycles"]])
     return selection_prompt(
         message="Select a test cycle.",
-        choices=[Choice(cycle["name"], cycle) for cycle in tov["testCycles"]],
+        choices=choices,
         no_valid_option_message="No test cycle available.",
+        default=next((x for x in choices if x.title == default), None),
     )
 
 
@@ -173,16 +200,30 @@ def ask_to_select_filters(all_filters: list[dict]) -> dict:
 
 
 def ask_for_output_path() -> str:
-    return text_prompt(
-        message="Provide the output path.",
+    output_path = text_prompt(
+        message="Provide the output path [report.zip]:",
         type="path",
+        validation=lambda path: True
+        if ((isdir(path) or isfile(path)) and os.access(path, os.W_OK))
+        or os.access(dirname(abspath(path)), os.W_OK)
+        else f"Path '{path}' does not exist or is not writeable.",
+        filter=lambda path: os.path.join(path, "report.zip")
+        if isdir(path or ".")
+        else path,
     )
+    print(f"Report Path: {output_path}")
+    return abspath(output_path)
 
 
 def ask_for_input_path() -> str:
     return text_prompt(
-        message="Provide the input path.",
+        message="Provide the input path [report.zip]:",
         type="path",
+        validation=lambda path: True
+        if (isfile(path) and os.access(path, os.R_OK))
+        or (isfile("report.zip") and os.access("report.zip", os.R_OK))
+        else f"'{path}' is not a file or not readable.",
+        filter=lambda path: "report.zip" if not path else path,
     )
 
 
@@ -227,7 +268,7 @@ def ask_for_next_action() -> actions.Action:
         choices=[
             Choice("Export XML Report", actions.ExportXMLReport()),
             Choice("Import execution results", actions.ImportExecutionResults()),
-            Choice("Export actions", actions.ExportActionLog()),
+            Choice("Write history to config file", actions.ExportActionLog()),
             Choice("Change connection", actions.ChangeConnection()),
             Choice("Quit", actions.Quit()),
         ],
@@ -250,18 +291,46 @@ def ask_to_select_default_tester(all_testers: list[dict]) -> dict[str, str]:
 
 
 def ask_to_select_report_root_uid(cycle_structure: list[dict]):
-    ordered_cycle_structure = util.create_ordered_cycle_structure(cycle_structure)
+    cycle_structure_tree = util.add_numbering_to_cycle(cycle_structure)
+    selected_uid = navigate_in_cycle_stucture(cycle_structure_tree)
+    return selected_uid
 
-    return selection_prompt(
-        message="Please select an element to be used as the root of the report.",
-        choices=[
+
+def navigate_in_cycle_stucture(theme_structure):
+    if "Root_structure" in theme_structure["tse"]:
+        choices = [Choice("<SELECT ALL>", "ROOT")]
+    else:
+        te = theme_structure["tse"][
+            "TestTheme_structure"
+            if "TestTheme_structure" in theme_structure["tse"]
+            else "TestCaseSet_structure"
+        ]
+        choices = [
             Choice(
-                ".".join([str(subindex) for subindex in element["index"]])
-                + " "
-                + element["name"],
-                element["uniqueID"],
+                f"<SELECT> {te['numbering']} {te['name']} [{te['uniqueID']}]",
+                te["uniqueID"],
             )
-            for element in ordered_cycle_structure
-        ],
-        no_valid_option_message="No element available to be used as the root of the report.",
-    )
+        ]
+
+    for element in theme_structure["childs"].values():
+        if "TestTheme_structure" in element["tse"]:
+            te = element["tse"]["TestTheme_structure"]
+            prefix = "TT"
+        else:
+            te = element["tse"]["TestCaseSet_structure"]
+            prefix = "TCS"
+        choices.append(Choice(f"{prefix}: {te['numbering']} {te['name']}", element))
+    if "Root_structure" not in theme_structure["tse"]:
+        choices.append(Choice("<BACK>", "BACK"))
+
+    selection = None
+    while not isinstance(selection, str):
+        selection = selection_prompt(
+            message="Please select an element to be used as the root of the report.",
+            choices=choices,
+            no_valid_option_message="No element available to be used as the root of the report.",
+        )
+        if not isinstance(selection, str):
+            selection = navigate_in_cycle_stucture(selection)
+        if isinstance(selection, str) and selection != "BACK":
+            return selection

@@ -18,13 +18,13 @@ import util
 import actions
 from requests.exceptions import Timeout
 
-__version__ = "0.0.1"
+__version__ = "1.0.rc1"
 
 
-def main(args):
+def main(arguments):
     try:
-        if args.configFile is not None:
-            configuration = util.get_configuration(args.configFile)
+        if arguments.configFile is not None:
+            configuration = util.get_configuration(arguments.configFile)
             print("Config file found")
             run_automatic_mode(configuration)
         else:
@@ -72,12 +72,7 @@ def run_automatic_mode(configuration: dict):
     connection_log = ConnectionLog()
     try:
         for connection_data in configuration["configuration"]:
-            active_connection = Connection(
-                connection_data["server_url"],
-                connection_data["verify"],
-                connection_data["username"],
-                connection_data["password"],
-            )
+            active_connection = Connection(**connection_data)
             connection_log.add_connection(active_connection)
             for action_data in connection_data["actions"]:
                 next_action = actions.Action.create_instance_of_action(

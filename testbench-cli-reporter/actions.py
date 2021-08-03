@@ -1,11 +1,15 @@
 from __future__ import annotations
-import testbench
+
+from zipfile import ZipFile
 from abc import ABC, abstractmethod
+from os import path
+from xml.etree import ElementTree as ET
 import sys
 import base64
 import requests
 import questions
 import util
+import testbench
 
 
 class Action(ABC):
@@ -46,14 +50,22 @@ class ExportXMLReport(Action):
         all_projects = connection_log.active_connection().get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects)
         selected_tov = questions.ask_to_select_tov(selected_project)
-        self.parameters["cycleKey"] = questions.ask_to_select_cycle(selected_tov)[
-            "key"
-        ]["serial"]
-        cycle_structure = connection_log.active_connection().get_test_cycle_structure(
-            self.parameters["cycleKey"]
-        )
+        self.parameters["tovKey"] = selected_tov["key"]["serial"]
+        selected_cycle = questions.ask_to_select_cycle(selected_tov, export=True)
+        if selected_cycle == "NO_EXEC":
+            self.parameters["cycleKey"] = None
+            tttree_structure = connection_log.active_connection().get_tov_structure(
+                self.parameters["tovKey"]
+            )
+        else:
+            self.parameters["cycleKey"] = selected_cycle["key"]["serial"]
+            tttree_structure = (
+                connection_log.active_connection().get_test_cycle_structure(
+                    self.parameters["cycleKey"]
+                )
+            )
         self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(
-            cycle_structure
+            tttree_structure
         )
         all_filters = connection_log.active_connection().get_all_filters()
         self.parameters["filters"] = questions.ask_to_select_filters(all_filters)
@@ -64,13 +76,14 @@ class ExportXMLReport(Action):
     def execute(self, connection_log: testbench.ConnectionLog) -> bool:
         try:
             report = connection_log.active_connection().get_xml_report(
+                self.parameters["tovKey"],
                 self.parameters["cycleKey"],
                 self.parameters["reportRootUID"],
                 self.parameters["filters"],
             )
             with open(self.parameters["outputPath"], "wb") as output_file:
                 output_file.write(report)
-            print(f'Report {self.parameters["outputPath"]} was generated')
+            print(f'Report {path.abspath(self.parameters["outputPath"])} was generated')
             return True
         except KeyError as e:
             print(f"{str(e)}")
@@ -80,13 +93,25 @@ class ExportXMLReport(Action):
 
 class ImportExecutionResults(Action):
     def prepare(self, connection_log: testbench.ConnectionLog) -> bool:
-        all_projects = connection_log.active_connection().get_all_projects()
-        selected_project = questions.ask_to_select_project(all_projects)
-        selected_tov = questions.ask_to_select_tov(selected_project)
-        self.parameters["cycleKey"] = questions.ask_to_select_cycle(selected_tov)[
-            "key"
-        ]["serial"]
         self.parameters["inputPath"] = questions.ask_for_input_path()
+        try:
+            zip_file = ZipFile(self.parameters["inputPath"])
+            xml = ET.fromstring(zip_file.read("report.xml"))
+            project = xml.find("./header/project").get("name")
+            version = xml.find("./header/version").get("name")
+            cycle = xml.find("./header/cycle").get("name")
+        except:
+            pass
+        all_projects = connection_log.active_connection().get_all_projects()
+        selected_project = questions.ask_to_select_project(
+            all_projects, default=project or None
+        )
+        selected_tov = questions.ask_to_select_tov(
+            selected_project, default=version or None
+        )
+        self.parameters["cycleKey"] = questions.ask_to_select_cycle(
+            selected_tov, default=cycle or None
+        )["key"]["serial"]
         cycle_structure = connection_log.active_connection().get_test_cycle_structure(
             self.parameters["cycleKey"]
         )
