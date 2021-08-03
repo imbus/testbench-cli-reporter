@@ -132,9 +132,9 @@ def create_ordered_cycle_structure(cycle_structure: list[dict]):
         )
 
     elements_in_higher_hierarchy_levels.extend(elements_in_current_hierarchy_level)
-    elements_in_higher_hierarchy_levels.pop(
-        0
-    )  # remove root element as it cannot be used as basis for report creation
+    if elements_in_higher_hierarchy_levels:
+        # remove root element as it cannot be used as basis for report creation
+        elements_in_higher_hierarchy_levels.pop(0)  
 
     return sorted(
         elements_in_higher_hierarchy_levels,
