@@ -104,9 +104,9 @@ class Connection:
         all_projects = self.session.get(
             self.server_url + "projects",
             params={"includeTOVs": "true", "includeCycles": "true"},
-        )
-
-        return all_projects.json()
+        ).json()
+        all_projects['projects'].sort(key=lambda proj: proj['name'])
+        return all_projects
 
     def get_all_filters(self) -> list[dict]:
         all_filters = self.session.get(
