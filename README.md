@@ -5,11 +5,15 @@
 - __Export actions__: Create a JSON file which can be used in automatic mode to repeat your previous actions automatically
 - __Change connection__: Change TestBench server and/or user
 
+## Installation
+
+Python 3.6 is required!
+
+`pip install --pre testbench-cli-reporter`
+
 ## Manual mode
-Run in manual mode:
-`
-testbench-cli-reporter
-`
+Just execute in Command Line 
+`testbench-cli-reporter` or `TestBenchCliReporter`
 
 ## Automatic mode
 Run in automatic mode:
