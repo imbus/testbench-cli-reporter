@@ -24,6 +24,7 @@ import requests
 from TestBenchCliReporter import questions
 from TestBenchCliReporter import util
 from TestBenchCliReporter import testbench
+from questionary import print
 
 
 class Action(ABC):
@@ -66,12 +67,38 @@ class ExportXMLReport(Action):
         selected_tov = questions.ask_to_select_tov(selected_project)
         self.parameters["tovKey"] = selected_tov["key"]["serial"]
         selected_cycle = questions.ask_to_select_cycle(selected_tov, export=True)
+        print("  Selection:")
+
+        print(
+            f"{' '*4 + selected_project['name']: <50}",
+            style="#06c8ff bold italic",
+            end=None,
+        )
+        print(f"  projectKey: ", end=None)
+        print(f"{selected_project['key']['serial']: >15}", style="#06c8ff bold italic")
+
+        print(
+            f"{' '*6 + selected_tov['name']: <50}",
+            style="#06c8ff bold italic",
+            end=None,
+        )
+        print(f"  tovKey:     ", end=None)
+        print(f"{selected_tov['key']['serial']: >15}", style="#06c8ff bold italic")
         if selected_cycle == "NO_EXEC":
             self.parameters["cycleKey"] = None
             tttree_structure = connection_log.active_connection().get_tov_structure(
                 self.parameters["tovKey"]
             )
         else:
+            print(
+                f"{' '*8 + selected_cycle['name']: <50}",
+                style="#06c8ff bold italic",
+                end=None,
+            )
+            print(f"  cycleKey:   ", end=None)
+            print(
+                f"{selected_cycle['key']['serial']: >15}", style="#06c8ff bold italic"
+            )
             self.parameters["cycleKey"] = selected_cycle["key"]["serial"]
             tttree_structure = (
                 connection_log.active_connection().get_test_cycle_structure(
@@ -97,7 +124,13 @@ class ExportXMLReport(Action):
             )
             with open(self.parameters["outputPath"], "wb") as output_file:
                 output_file.write(report)
-            print(f'Report {path.abspath(self.parameters["outputPath"])} was generated')
+            print(f"Report ", end=None)
+            print(
+                f'{path.abspath(self.parameters["outputPath"])}',
+                style="#06c8ff bold italic",
+                end=None,
+            )
+            print(f" was generated")
             return True
         except KeyError as e:
             print(f"{str(e)}")
@@ -174,12 +207,23 @@ class ImportExecutionResults(Action):
 
 class ExportActionLog(UnloggedAction):
     def prepare(self, connection_log: testbench.ConnectionLog):
-        self.parameters["outputPath"] = questions.ask_for_output_path()
+        self.parameters["outputPath"] = questions.ask_for_output_path("config.json")
         return True
 
     def execute(self, connection_log: testbench.ConnectionLog) -> bool:
-        connection_log.export_as_json(self.parameters["outputPath"])
-        return True
+        try:
+            connection_log.export_as_json(self.parameters["outputPath"])
+            print(f"Config ", end=None)
+            print(
+                f'{path.abspath(self.parameters["outputPath"])}',
+                style="#06c8ff bold italic",
+                end=None,
+            )
+            print(f" was generated")
+            return True
+        except KeyError as e:
+            print(f"{str(e)}")
+            return False
 
 
 class ChangeConnection(UnloggedAction):

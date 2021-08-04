@@ -23,6 +23,7 @@ from questionary import Choice
 from re import fullmatch, sub
 from TestBenchCliReporter import actions
 from TestBenchCliReporter import util
+from questionary import print
 
 custom_style_fancy = Style(
     [
@@ -213,19 +214,17 @@ def ask_to_select_filters(all_filters: list[dict]) -> dict:
     )
 
 
-def ask_for_output_path() -> str:
+def ask_for_output_path(default: str = "report.zip") -> str:
     output_path = text_prompt(
-        message="Provide the output path [report.zip]:",
+        message=f"Provide the output path [{default}]:",
         type="path",
         validation=lambda path: True
         if ((isdir(path) or isfile(path)) and os.access(path, os.W_OK))
         or os.access(dirname(abspath(path)), os.W_OK)
         else f"Path '{path}' does not exist or is not writeable.",
-        filter=lambda path: os.path.join(path, "report.zip")
-        if isdir(path or ".")
-        else path,
+        filter=lambda path: os.path.join(path, default) if isdir(path or ".") else path,
     )
-    print(f"Report Path: {output_path}")
+    print(f"Output Path: {output_path}", style="#06c8ff bold italic")
     return abspath(output_path)
 
 

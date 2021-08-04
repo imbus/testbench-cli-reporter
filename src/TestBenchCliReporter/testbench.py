@@ -19,65 +19,78 @@ import urllib3
 import time
 from TestBenchCliReporter import actions
 import json
+import os
 
-spinner = [
-    "⢀⠀",
-    "⡀⠀",
-    "⠄⠀",
-    "⢂⠀",
-    "⡂⠀",
-    "⠅⠀",
-    "⢃⠀",
-    "⡃⠀",
-    "⠍⠀",
-    "⢋⠀",
-    "⡋⠀",
-    "⠍⠁",
-    "⢋⠁",
-    "⡋⠁",
-    "⠍⠉",
-    "⠋⠉",
-    "⠋⠉",
-    "⠉⠙",
-    "⠉⠙",
-    "⠉⠩",
-    "⠈⢙",
-    "⠈⡙",
-    "⢈⠩",
-    "⡀⢙",
-    "⠄⡙",
-    "⢂⠩",
-    "⡂⢘",
-    "⠅⡘",
-    "⢃⠨",
-    "⡃⢐",
-    "⠍⡐",
-    "⢋⠠",
-    "⡋⢀",
-    "⠍⡁",
-    "⢋⠁",
-    "⡋⠁",
-    "⠍⠉",
-    "⠋⠉",
-    "⠋⠉",
-    "⠉⠙",
-    "⠉⠙",
-    "⠉⠩",
-    "⠈⢙",
-    "⠈⡙",
-    "⠈⠩",
-    "⠀⢙",
-    "⠀⡙",
-    "⠀⠩",
-    "⠀⢘",
-    "⠀⡘",
-    "⠀⠨",
-    "⠀⢐",
-    "⠀⡐",
-    "⠀⠠",
-    "⠀⢀",
-    "⠀⡀",
-]
+
+def spinner():
+    if os.name == "nt":
+        return ["_", "_", "_", "-", "`", "`", "'", "´", "-", "_", "_", "_"]
+    else:
+        return [
+            "⢀⠀",
+            "⡀⠀",
+            "⠄⠀",
+            "⢂⠀",
+            "⡂⠀",
+            "⠅⠀",
+            "⢃⠀",
+            "⡃⠀",
+            "⠍⠀",
+            "⢋⠀",
+            "⡋⠀",
+            "⠍⠁",
+            "⢋⠁",
+            "⡋⠁",
+            "⠍⠉",
+            "⠋⠉",
+            "⠋⠉",
+            "⠉⠙",
+            "⠉⠙",
+            "⠉⠩",
+            "⠈⢙",
+            "⠈⡙",
+            "⢈⠩",
+            "⡀⢙",
+            "⠄⡙",
+            "⢂⠩",
+            "⡂⢘",
+            "⠅⡘",
+            "⢃⠨",
+            "⡃⢐",
+            "⠍⡐",
+            "⢋⠠",
+            "⡋⢀",
+            "⠍⡁",
+            "⢋⠁",
+            "⡋⠁",
+            "⠍⠉",
+            "⠋⠉",
+            "⠋⠉",
+            "⠉⠙",
+            "⠉⠙",
+            "⠉⠩",
+            "⠈⢙",
+            "⠈⡙",
+            "⠈⠩",
+            "⠀⢙",
+            "⠀⡙",
+            "⠀⠩",
+            "⠀⢘",
+            "⠀⡘",
+            "⠀⠨",
+            "⠀⢐",
+            "⠀⡐",
+            "⠀⠠",
+            "⠀⢀",
+            "⠀⡀",
+        ]
+
+
+def delay():
+    if os.name == "nt":
+        return 0.1
+    else:
+        return 0.04
 
 
 class ConnectionLog:
@@ -257,12 +270,12 @@ class Connection:
                 raise JobTimeout(
                     f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds."
                 )
-            for cursor in spinner:
+            for cursor in spinner():
                 print(
                     f"Waiting until creation of XML report is complete {cursor}",
                     end="\r",
                 )
-                time.sleep(0.04)
+                time.sleep(delay())
 
         report_tmp_name = report_generation_status.json()["completion"]["result"][
             "Right"
@@ -357,12 +370,12 @@ class Connection:
                 raise JobTimeout(
                     f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds."
                 )
-            for cursor in spinner:
+            for cursor in spinner():
                 print(
                     f"Waiting until import of execution results is done {cursor}",
                     end="\r",
                 )
-                time.sleep(0.04)
+                time.sleep(delay())
 
         return True
 
