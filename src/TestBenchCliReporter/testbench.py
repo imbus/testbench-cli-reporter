@@ -13,6 +13,8 @@
 #  limitations under the License.
 
 from __future__ import annotations
+
+import base64
 from typing import Optional, Union
 import requests
 import urllib3
@@ -112,7 +114,7 @@ class ConnectionLog:
         }
 
         with open(output_file_path, "w") as output_file:
-            json.dump(export_dict, output_file, indent=4)
+            json.dump(export_dict, output_file, indent=2)
 
 
 class Connection:
@@ -120,40 +122,53 @@ class Connection:
         self,
         server_url: str,
         verify: Union[bool, str],
-        loginname: str,
-        password: str,
+        basicAuth: Optional[str] = None,
+        loginname: Optional[str] = None,
+        password: Optional[str] = None,
         job_timeout_sec: int = 4 * 60 * 60,
         connection_timeout_sec: int = None,
         **kwargs,
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.server_url = server_url
-        self.loginname = loginname
-        self.password = password
+        if basicAuth:
+            credentials = base64.b64decode(basicAuth.encode()).decode("utf-8")
+            self.loginname, self.password = credentials.split(":", 1)
+        else:
+            self.loginname = loginname
+            self.password = password
         self.job_timeout_sec = job_timeout_sec
         self.action_log: list[actions.Action] = []
-        self.session = requests.Session()
-        self.session.auth = (loginname, password)
-        self.session.headers.update(
+        self.connection_timeout = connection_timeout_sec
+        self.verify_ssl = verify
+        self._session = None
+
+    @property
+    def session(self):
+        self._session = requests.Session()
+        self._session.auth = (self.loginname, self.password)
+        self._session.headers.update(
             {"Content-Type": "application/vnd.testbench+json; charset=utf-8"}
         )
-        self.session.hooks = {
+        self._session.hooks = {
             "response": lambda r, *args, **kwargs: r.raise_for_status()
         }
-        self.session.mount("http://", TimeoutHTTPAdapter(connection_timeout_sec))
-        self.session.mount("https://", TimeoutHTTPAdapter(connection_timeout_sec))
-        self.session.verify = verify
-        # TODO: add id_ for selecting specific connections to actionlog?
+        self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))
+        self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))
+        self._session.verify = self.verify_ssl
+        return self._session
 
     def close(self):
         self.session.close()
 
     def export(self) -> dict:
+        basic_auth = base64.b64encode(
+            f"{self.loginname}:{self.password}".encode("utf-8")
+        ).decode()
         return {
             "server_url": self.server_url,
             "verify": self.session.verify,
-            "loginname": self.loginname,
-            "password": self.password,
+            "basicAuth": basic_auth,
             "actions": [
                 action_export
                 for action_export in (action.export() for action in self.action_log)
@@ -261,26 +276,38 @@ class Connection:
     def wait_for_tmp_xml_report_name(self, job_id: str) -> str:
         end_time = time.time() + self.job_timeout_sec
         while True:
-            report_generation_status = self.session.get(
-                self.server_url + "job/" + job_id,
-            )
-            if report_generation_status.json()["completion"] is not None:
-                break
+            report_generation_result = self.get_exp_job_result(job_id)
+            if report_generation_result is not None:
+                return report_generation_result
             elif time.time() > end_time:
                 raise JobTimeout(
                     f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds."
                 )
-            for cursor in spinner():
-                print(
-                    f"Waiting until creation of XML report is complete {cursor}",
-                    end="\r",
-                )
-                time.sleep(delay())
+            self.spin_spinner("Waiting until creation of XML report is complete")
 
-        report_tmp_name = report_generation_status.json()["completion"]["result"][
-            "Right"
-        ]
-        return report_tmp_name
+    def get_exp_job_result(self, job_id):
+        report_generation_status = self.get_job_result("job/", job_id)
+        if report_generation_status is None:
+            return None
+        result = report_generation_status["result"]
+        if "Right" in result:
+            return result["Right"]
+        else:
+            raise AssertionError(result)
+
+    def spin_spinner(self, message: str):
+        for cursor in spinner():
+            print(
+                f"{message} {cursor}",
+                end="\r",
+            )
+            time.sleep(delay())
+
+    def get_job_result(self, path: str, job_id: str):
+        report_generation_status = self.session.get(
+            f"{self.server_url}{path}{job_id}",
+        )
+        return report_generation_status.json()["completion"]
 
     def get_xml_report_data(self, report_tmp_name: str) -> bytes:
         report = self.session.get(
@@ -361,23 +388,20 @@ class Connection:
     def wait_for_execution_results_import_to_finish(self, job_id: str) -> bool:
         end_time = time.time() + self.job_timeout_sec
         while True:
-            import_status = self.session.get(
-                self.server_url + "executionResultsImporterJob/" + job_id,
-            )
-            if import_status.json()["completion"] is not None:
+            import_status = self.get_job_result("executionResultsImporterJob/", job_id)
+            if import_status is not None:
                 break
             elif time.time() > end_time:
                 raise JobTimeout(
                     f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds."
                 )
-            for cursor in spinner():
-                print(
-                    f"Waiting until import of execution results is done {cursor}",
-                    end="\r",
-                )
-                time.sleep(delay())
+            self.spin_spinner("Waiting until import of execution results is done")
 
-        return True
+        result = import_status["result"]
+        if "Right" in result:
+            return result["Right"]
+        else:
+            raise AssertionError(result)
 
     def get_test_cycle_structure(self, cycle_key: str) -> list[dict]:
         test_cycle_structure = self.session.get(

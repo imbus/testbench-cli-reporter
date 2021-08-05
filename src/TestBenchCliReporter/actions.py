@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from typing import Dict, Optional
 from zipfile import ZipFile
 from abc import ABC, abstractmethod
 from os import path
@@ -35,7 +36,9 @@ class Action(ABC):
             self.parameters = parameters
 
     @staticmethod
-    def create_instance_of_action(class_name: str, parameters: dict[str, str]):
+    def create_instance_of_action(
+        class_name: str, parameters: dict[str, str]
+    ) -> Action:
         try:
             class_ = globals()[class_name]
             class_instance = class_(parameters)
@@ -48,11 +51,60 @@ class Action(ABC):
         return True
 
     @abstractmethod
-    def execute(self, connection_log: testbench.ConnectionLog) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         raise NotImplementedError
+
+    def poll(self, connection_log: testbench.ConnectionLog) -> bool:
+        return True
+
+    def finish(self, connection_log: testbench.ConnectionLog) -> bool:
+        return True
 
     def export(self):
         return {"type": type(self).__name__, "parameters": self.parameters}
+
+    def get_project_keys(
+        self,
+        projects: Dict,
+        project_name: str,
+        tov_name: str,
+        cycle_name: Optional[str] = None,
+    ):
+        project_key = None
+        tov_key = None
+        cycle_key = None
+        for project in projects["projects"]:
+            if project["name"] == project_name:
+                project_key = project["key"]["serial"]
+                for tov in project["testObjectVersions"]:
+                    if tov["name"] == tov_name:
+                        project["testObjectVersions"] = [tov]
+                        tov_key = tov["key"]["serial"]
+                        if cycle_name:
+                            for cycle in tov["testCycles"]:
+                                if cycle["name"] == cycle_name:
+                                    project["testObjectVersions"][0][
+                                        "testCycles"
+                                    ] = cycle
+                                    cycle_key = cycle["key"]["serial"]
+                                    break
+                            break
+                break
+        if not project_key:
+            raise ValueError(f"Project '{project_name}' not found.")
+        if not tov_key:
+            raise ValueError(f"TOV '{tov_name}' not found in project '{project_name}'.")
+        if not cycle_key and cycle_name:
+            raise ValueError(
+                f"Cycle '{cycle_name}' not found in TOV '{tov_name}' in project '{project_name}'."
+            )
+        print(f"PROJECT_KEY: ", end=None)
+        print(f"{project_key}", style="#06c8ff bold italic", end=None)
+        print(f", TOV_Key: ", end=None)
+        print(f"{tov_key}", style="#06c8ff bold italic", end=None)
+        print(f", CYCLE_KEY: ", end=None)
+        print(f"{cycle_key}", style="#06c8ff bold italic")
+        return project_key, tov_key, cycle_key
 
 
 class UnloggedAction(Action):
@@ -66,6 +118,10 @@ class ExportXMLReport(Action):
         selected_project = questions.ask_to_select_project(all_projects)
         selected_tov = questions.ask_to_select_tov(selected_project)
         self.parameters["tovKey"] = selected_tov["key"]["serial"]
+        self.parameters["projectPath"] = [
+            selected_project["name"],
+            selected_tov["name"],
+        ]
         selected_cycle = questions.ask_to_select_cycle(selected_tov, export=True)
         print("  Selection:")
 
@@ -100,6 +156,7 @@ class ExportXMLReport(Action):
                 f"{selected_cycle['key']['serial']: >15}", style="#06c8ff bold italic"
             )
             self.parameters["cycleKey"] = selected_cycle["key"]["serial"]
+            self.parameters["projectPath"].append(selected_cycle["name"])
             tttree_structure = (
                 connection_log.active_connection().get_test_cycle_structure(
                     self.parameters["cycleKey"]
@@ -114,13 +171,49 @@ class ExportXMLReport(Action):
 
         return True
 
-    def execute(self, connection_log: testbench.ConnectionLog) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
+        if not self.parameters.get("cycleKey"):
+            if (
+                not self.parameters.get("tovKey")
+                and len(self.parameters["projectPath"]) >= 2
+            ):
+                all_projects = connection_log.active_connection().get_all_projects()
+                (
+                    project_key,
+                    self.parameters["tovKey"],
+                    self.parameters["cycleKey"],
+                ) = self.get_project_keys(all_projects, *self.parameters["projectPath"])
+
         try:
-            report = connection_log.active_connection().get_xml_report(
-                self.parameters["tovKey"],
-                self.parameters["cycleKey"],
-                self.parameters["reportRootUID"],
-                self.parameters["filters"],
+            self.job_id = (
+                connection_log.active_connection().trigger_xml_report_generation(
+                    self.parameters.get("tovKey"),
+                    self.parameters.get("cycleKey"),
+                    self.parameters["reportRootUID"],
+                    self.parameters["filters"],
+                )
+            )
+        except KeyError as e:
+            print(f"{str(e)}")
+            return False
+            # TODO handle missing parameters
+
+    def poll(self, connection_log: testbench.ConnectionLog) -> bool:
+        try:
+            self.report_tmp_name = (
+                connection_log.active_connection().wait_for_tmp_xml_report_name(
+                    self.job_id
+                )
+            )
+        except KeyError as e:
+            print(f"{str(e)}")
+            return False
+            # TODO handle missing parameters
+
+    def finish(self, connection_log: testbench.ConnectionLog) -> bool:
+        try:
+            report = connection_log.active_connection().get_xml_report_data(
+                self.report_tmp_name
             )
             with open(self.parameters["outputPath"], "wb") as output_file:
                 output_file.write(report)
@@ -178,7 +271,7 @@ class ImportExecutionResults(Action):
 
         return True
 
-    def execute(self, connection_log: testbench.ConnectionLog) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         try:
             with open(self.parameters["inputPath"], "rb") as execution_report:
                 execution_report_base64 = base64.b64encode(
@@ -210,7 +303,7 @@ class ExportActionLog(UnloggedAction):
         self.parameters["outputPath"] = questions.ask_for_output_path("config.json")
         return True
 
-    def execute(self, connection_log: testbench.ConnectionLog) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         try:
             connection_log.export_as_json(self.parameters["outputPath"])
             print(f"Config ", end=None)
@@ -231,13 +324,13 @@ class ChangeConnection(UnloggedAction):
         self.parameters["newConnection"] = util.login()
         return True
 
-    def execute(self, connection_log: testbench.ConnectionLog) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         connection_log.active_connection().close()
         connection_log.add_connection(self.parameters["newConnection"])
         return True
 
 
 class Quit(UnloggedAction):
-    def execute(self, connection_log: testbench.ConnectionLog = None):
+    def trigger(self, connection_log: testbench.ConnectionLog = None):
         print("Closing program.")
         sys.exit(0)

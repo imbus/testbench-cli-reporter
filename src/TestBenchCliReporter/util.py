@@ -81,15 +81,13 @@ def get_configuration(config_file_path: str):
     print("Trying to read config file")
     try:
         with open(config_file_path, "r") as config_file:
-            configuration = json.load(config_file)
+            return json.load(config_file)
     except IOError:
         print("Could not open file")
         close_program()
     except json.JSONDecodeError:
         print("Could not parse config file as JSON.")
         close_program()
-
-    return configuration
 
 
 def add_numbering_to_cycle(cycle_structure):
