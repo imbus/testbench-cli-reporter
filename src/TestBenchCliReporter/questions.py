@@ -275,7 +275,7 @@ def ask_for_action_after_login_timeout() -> str:
     )
 
 
-def ask_for_next_action() -> actions.Action:
+def ask_for_next_action() -> actions.AbstractAction:
     return selection_prompt(
         message="What do you want to do?",
         choices=[

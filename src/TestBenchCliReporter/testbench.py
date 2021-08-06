@@ -15,11 +15,12 @@
 from __future__ import annotations
 
 import base64
-from typing import Optional, Union
+from typing import Optional, Union, List, Dict
 import requests
 import urllib3
 import time
-from TestBenchCliReporter import actions
+from TestBenchCliReporter.actions import AbstractAction
+from questionary import print as pprint
 import json
 import os
 
@@ -85,32 +86,51 @@ def spinner():
             "⠀⠠",
             "⠀⢀",
             "⠀⡀",
+            "⠀⠀",
         ]
 
 
 def delay():
     if os.name == "nt":
-        return 0.1
+        return 0.5
     else:
-        return 0.04
+        return 0.02
+
+
+def spin_spinner(message: str):
+    for cursor in spinner():
+        print(
+            f"{message} {cursor}",
+            end="\r",
+        )
+        time.sleep(delay())
 
 
 class ConnectionLog:
-    def __init__(
-        self,
-    ):
-        self._connections: list[Connection] = []
+    def __init__(self):
+        self.connections: list[Connection] = []
 
+    @property
+    def len(self) -> int:
+        return len(self.connections)
+
+    @property
     def active_connection(self) -> Connection:
-        return self._connections[-1]
+        return self.connections[-1]
+
+    def next(self):
+        self.connections = self.connections[1:] + self.connections[:1]
+
+    def remove(self, connection):
+        self.connections.remove(connection)
 
     def add_connection(self, new_connection: Connection):
-        self._connections.append(new_connection)
+        self.connections.append(new_connection)
 
     def export_as_json(self, output_file_path: str):
         print("Generating JSON export")
         export_dict = {
-            "configuration": [connection.export() for connection in self._connections]
+            "configuration": [connection.export() for connection in self.connections]
         }
 
         with open(output_file_path, "w") as output_file:
@@ -127,6 +147,7 @@ class Connection:
         password: Optional[str] = None,
         job_timeout_sec: int = 4 * 60 * 60,
         connection_timeout_sec: int = None,
+        actions: Optional[List] = None,
         **kwargs,
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -138,7 +159,10 @@ class Connection:
             self.loginname = loginname
             self.password = password
         self.job_timeout_sec = job_timeout_sec
-        self.action_log: list[actions.Action] = []
+        self.action_log: List[AbstractAction] = []
+        self.actions_to_trigger: List[Dict] = actions or []
+        self.actions_to_wait_for: List[AbstractAction] = []
+        self.actions_to_finish: List[AbstractAction] = []
         self.connection_timeout = connection_timeout_sec
         self.verify_ssl = verify
         self._session = None
@@ -176,7 +200,7 @@ class Connection:
             ],
         }
 
-    def add_action(self, action: actions.Action):
+    def add_action(self, action: AbstractAction):
         self.action_log.append(action)
 
     def check_is_identical(self, other: Connection) -> bool:
@@ -253,7 +277,7 @@ class Connection:
             "exportExpandedData": True,
             "exportDescriptionFields": True,
             "outputFormattedText": True,
-            "exportExecutionProtocols": True,
+            "exportExecutionProtocols": False,
         }
         xml_report_options = itorx_options  # TODO hier noch gut machen und Fragen
         if reportRootUID != "ROOT":
@@ -261,29 +285,25 @@ class Connection:
         xml_report_options["filters"]: filters
 
         if cycle_key:
-            job_id = self.session.post(
+            response = self.session.post(
                 self.server_url + "cycle/" + cycle_key + "/xmlReport",
                 json=xml_report_options,
             )
         else:
-            job_id = self.session.post(
+            response = self.session.post(
                 self.server_url + "tovs/" + tov_key + "/xmlReport",
                 json=xml_report_options,
             )
-
-        return job_id.json()["jobID"]
+        if response.status_code != requests.codes.accepted:
+            raise AssertionError(f"{response.status_code} {response.text}")
+        return response.json()["jobID"]
 
     def wait_for_tmp_xml_report_name(self, job_id: str) -> str:
-        end_time = time.time() + self.job_timeout_sec
         while True:
             report_generation_result = self.get_exp_job_result(job_id)
             if report_generation_result is not None:
                 return report_generation_result
-            elif time.time() > end_time:
-                raise JobTimeout(
-                    f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds."
-                )
-            self.spin_spinner("Waiting until creation of XML report is complete")
+            spin_spinner("Waiting until creation of XML report is complete")
 
     def get_exp_job_result(self, job_id):
         report_generation_status = self.get_job_result("job/", job_id)
@@ -294,14 +314,6 @@ class Connection:
             return result["Right"]
         else:
             raise AssertionError(result)
-
-    def spin_spinner(self, message: str):
-        for cursor in spinner():
-            print(
-                f"{message} {cursor}",
-                end="\r",
-            )
-            time.sleep(delay())
 
     def get_job_result(self, path: str, job_id: str):
         report_generation_status = self.session.get(
@@ -330,31 +342,21 @@ class Connection:
 
         return all_project_members.json()
 
-    def import_execution_results(
-        self,
-        results_file_base64: str,
-        cycle_key: str,
-        report_root_uid: str,
-        default_tester: str,
-        filters: list[dict[str, str]],
-    ) -> bool:
-        serverside_file_name = self.upload_execution_results(results_file_base64)
-        job_id = self.trigger_execution_results_import(
-            cycle_key, report_root_uid, serverside_file_name, default_tester, filters
-        )
-        success = self.wait_for_execution_results_import_to_finish(job_id)
-
-        return success
-
     def upload_execution_results(self, results_file_base64: str) -> str:
-        serverside_file_name = self.session.post(
-            self.server_url + "executionResultsUpload",
-            json={
-                "data": results_file_base64,
-            },
-        )
-
-        return serverside_file_name.json()["fileName"]
+        try:
+            serverside_file_name = self.session.post(
+                self.server_url + "executionResultsUpload",
+                json={
+                    "data": results_file_base64,
+                },
+            )
+            return serverside_file_name.json()["fileName"]
+        except requests.exceptions.RequestException as e:
+            pprint("!!!ERROR DURING IMPORT!!!", style="#ff0e0e italic")
+            pprint(f"Report was NOT imported")
+            pprint(f"Error Code {e.response.status_code}")
+            pprint(f"Error Message {e.response.text}")
+            pprint(f"URL: {e.response.url}")
 
     def trigger_execution_results_import(
         self,
@@ -386,18 +388,25 @@ class Connection:
         return job_id.json()["jobID"]
 
     def wait_for_execution_results_import_to_finish(self, job_id: str) -> bool:
-        end_time = time.time() + self.job_timeout_sec
         while True:
             import_status = self.get_job_result("executionResultsImporterJob/", job_id)
             if import_status is not None:
                 break
-            elif time.time() > end_time:
-                raise JobTimeout(
-                    f"Generation of XML report exceeded time limit of {self.job_timeout_sec} seconds."
-                )
-            self.spin_spinner("Waiting until import of execution results is done")
+            spin_spinner("Waiting until import of execution results is done")
 
         result = import_status["result"]
+        if "Right" in result:
+            return result["Right"]
+        else:
+            raise AssertionError(result)
+
+    def get_imp_job_result(self, job_id):
+        report_import_status = self.get_job_result(
+            "executionResultsImporterJob/", job_id
+        )
+        if report_import_status is None:
+            return None
+        result = report_import_status["result"]
         if "Right" in result:
             return result["Right"]
         else:

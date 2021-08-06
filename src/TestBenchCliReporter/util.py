@@ -14,8 +14,10 @@
 
 from __future__ import annotations
 import sys
+from typing import Dict, Optional
 
 import requests
+from questionary import print
 from TestBenchCliReporter import questions
 from TestBenchCliReporter import testbench
 from TestBenchCliReporter import actions
@@ -68,7 +70,7 @@ def login() -> testbench.Connection:
                 close_program()
 
 
-def choose_action() -> actions.Action:
+def choose_action() -> actions.AbstractAction:
     return questions.ask_for_next_action()
 
 
@@ -147,3 +149,51 @@ def add_numbering_to_childs(child_list, parent_numbering):
         test_structure_element[key]["numbering"] = current_numbering
         if len(child["childs"]) > 0:
             add_numbering_to_childs(child["childs"].values(), current_numbering)
+
+
+def rotate(li):
+    if len(li) > 1:
+        return li[1:] + li[:1]
+    else:
+        return li
+
+
+def get_project_keys(
+    projects: Dict,
+    project_name: str,
+    tov_name: str,
+    cycle_name: Optional[str] = None,
+):
+    project_key = None
+    tov_key = None
+    cycle_key = None
+    for project in projects["projects"]:
+        if project["name"] == project_name:
+            project_key = project["key"]["serial"]
+            for tov in project["testObjectVersions"]:
+                if tov["name"] == tov_name:
+                    project["testObjectVersions"] = [tov]
+                    tov_key = tov["key"]["serial"]
+                    if cycle_name:
+                        for cycle in tov["testCycles"]:
+                            if cycle["name"] == cycle_name:
+                                project["testObjectVersions"][0]["testCycles"] = cycle
+                                cycle_key = cycle["key"]["serial"]
+                                break
+                        break
+            break
+    if not project_key:
+        raise ValueError(f"Project '{project_name}' not found.")
+    if not tov_key:
+        raise ValueError(f"TOV '{tov_name}' not found in project '{project_name}'.")
+    if not cycle_key and cycle_name:
+        raise ValueError(
+            f"Cycle '{cycle_name}' not found in TOV '{tov_name}' in project '{project_name}'."
+        )
+    print(f"PROJECT_KEY: ", end=None)
+    print(f"{project_key}", style="#06c8ff bold italic", end=None)
+    print(f", TOV_Key: ", end=None)
+    print(f"{tov_key}", style="#06c8ff bold italic", end=None)
+    print(f", CYCLE_KEY: ", end=None)
+    print(f"{cycle_key}", style="#06c8ff bold italic")
+    return project_key, tov_key, cycle_key
