@@ -126,7 +126,7 @@ class ExportXMLReport(AbstractAction):
 
         return True
 
-    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> Union[bool, str]:
         if not self.parameters.get("cycleKey"):
             if (
                 not self.parameters.get("tovKey")
@@ -139,21 +139,16 @@ class ExportXMLReport(AbstractAction):
                     self.parameters["cycleKey"],
                 ) = util.get_project_keys(all_projects, *self.parameters["projectPath"])
 
-        try:
-            self.job_id = (
-                connection_log.active_connection.trigger_xml_report_generation(
-                    self.parameters.get("tovKey"),
-                    self.parameters.get("cycleKey"),
-                    self.parameters["reportRootUID"],
-                    self.parameters["filters"],
-                    self.parameters["report_config"],
-                )
+        self.job_id = (
+            connection_log.active_connection.trigger_xml_report_generation(
+                self.parameters.get("tovKey"),
+                self.parameters.get("cycleKey"),
+                self.parameters.get("reportRootUID", "ROOT"),
+                self.parameters.get("filters", []),
+                self.parameters.get("report_config", util.XmlExportConfig["Itep Export"]),
             )
-            return True
-        except KeyError as e:
-            print(f"{str(e)}")
-            return False
-            # TODO handle missing parameters
+        )
+        return self.job_id
 
     def wait(self, connection_log: testbench.ConnectionLog) -> Union[bool, str]:
         try:
@@ -174,24 +169,19 @@ class ExportXMLReport(AbstractAction):
         return result
 
     def finish(self, connection_log: testbench.ConnectionLog) -> bool:
-        try:
-            report = connection_log.active_connection.get_xml_report_data(
-                self.report_tmp_name
-            )
-            with open(self.parameters["outputPath"], "wb") as output_file:
-                output_file.write(report)
-            print(f"Report ", end=None)
-            print(
-                f'{path.abspath(self.parameters["outputPath"])}',
-                style="#06c8ff bold italic",
-                end=None,
-            )
-            print(f" was generated")
-            return True
-        except KeyError as e:
-            print(f"{str(e)}")
-            return False
-            # TODO handle missing parameters
+        report = connection_log.active_connection.get_xml_report_data(
+            self.report_tmp_name
+        )
+        with open(self.parameters["outputPath"], "wb") as output_file:
+            output_file.write(report)
+        print(f"Report ", end=None)
+        print(
+            f'{path.abspath(self.parameters["outputPath"])}',
+            style="#06c8ff bold italic",
+            end=None,
+        )
+        print(f" was generated")
+        return True
 
 
 class ImportExecutionResults(AbstractAction):
@@ -232,6 +222,17 @@ class ImportExecutionResults(AbstractAction):
         return True
 
     def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
+        if not self.parameters.get("cycleKey"):
+            if len(self.parameters.get("projectPath")) == 3:
+                all_projects = connection_log.active_connection.get_all_projects()
+                (
+                    project_key,
+                    tov_key,
+                    self.parameters["cycleKey"],
+                ) = util.get_project_keys(all_projects, *self.parameters["projectPath"])
+            else:
+                raise ValueError("Invalid Config! 'cycleKey' missing.")
+
         with open(self.parameters["inputPath"], "rb") as execution_report:
             execution_report_base64 = base64.b64encode(execution_report.read()).decode()
 
