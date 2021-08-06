@@ -20,6 +20,7 @@ import requests
 import urllib3
 import time
 from TestBenchCliReporter.actions import AbstractAction
+from TestBenchCliReporter.util import XmlExportConfig, ImportConfig
 from questionary import print as pprint
 import json
 import os
@@ -255,44 +256,31 @@ class Connection:
         return report
 
     def trigger_xml_report_generation(
-        self, tov_key: str, cycle_key: str, reportRootUID: str, filters=None
+        self,
+        tov_key: str,
+        cycle_key: str,
+        reportRootUID: str,
+        filters=None,
+        report_config=None,
     ) -> str:
+        if report_config is None:
+            report_config = XmlExportConfig["Itep Export"]
         if filters is None:
             filters = []
-        itep_options = {
-            "exportAttachments": True,
-            "exportDesignData": True,
-            "characterEncoding": "utf-16",
-            "suppressFilteredData": True,
-            "exportExpandedData": True,
-            "exportDescriptionFields": True,
-            "outputFormattedText": False,
-            "exportExecutionProtocols": False,
-        }
-        itorx_options = {
-            "exportAttachments": True,
-            "exportDesignData": True,
-            "characterEncoding": "utf-8",
-            "suppressFilteredData": True,
-            "exportExpandedData": True,
-            "exportDescriptionFields": True,
-            "outputFormattedText": True,
-            "exportExecutionProtocols": False,
-        }
-        xml_report_options = itorx_options  # TODO hier noch gut machen und Fragen
-        if reportRootUID != "ROOT":
-            xml_report_options["reportRootUID"] = reportRootUID
-        xml_report_options["filters"]: filters
+
+        if reportRootUID and reportRootUID != "ROOT":
+            report_config["reportRootUID"] = reportRootUID
+        report_config["filters"]: filters
 
         if cycle_key:
             response = self.session.post(
                 self.server_url + "cycle/" + cycle_key + "/xmlReport",
-                json=xml_report_options,
+                json=report_config,
             )
         else:
             response = self.session.post(
                 self.server_url + "tovs/" + tov_key + "/xmlReport",
-                json=xml_report_options,
+                json=report_config,
             )
         if response.status_code != requests.codes.accepted:
             raise AssertionError(f"{response.status_code} {response.text}")
@@ -352,11 +340,7 @@ class Connection:
             )
             return serverside_file_name.json()["fileName"]
         except requests.exceptions.RequestException as e:
-            pprint("!!!ERROR DURING IMPORT!!!", style="#ff0e0e italic")
-            pprint(f"Report was NOT imported")
-            pprint(f"Error Code {e.response.status_code}")
-            pprint(f"Error Message {e.response.text}")
-            pprint(f"URL: {e.response.url}")
+            self.render_import_error(e)
 
     def trigger_execution_results_import(
         self,
@@ -365,40 +349,53 @@ class Connection:
         serverside_file_name: str,
         default_tester: str,
         filters: list[dict[str, str]],
+        import_config: Dict = ImportConfig["Typical"],
     ) -> str:
-        import_config = {
-            "fileName": serverside_file_name,
-            "ignoreNonExecutedTestCases": True,
-            "defaultTester": default_tester,
-            "checkPaths": True,
-            "filters": filters,
-            "discardTesterInformation": True,
-            "useExistingDefect": True,
-        }
-        if report_root_uid != "ROOT":
-            import_config["reportRootUID"] = report_root_uid
-        job_id = self.session.post(
-            self.server_url + "cycle/" + cycle_key + "/executionResultsImport",
-            headers={
-                "Accept": "application/zip",
-            },
-            json=import_config,
-        )
 
-        return job_id.json()["jobID"]
+        import_config["fileName"] = serverside_file_name
+        import_config["filters"] = filters
+        if default_tester:
+            import_config["defaultTester"] = default_tester
+        if report_root_uid and report_root_uid != "ROOT":
+            import_config["reportRootUID"] = report_root_uid
+
+        try:
+            job_id = self.session.post(
+                self.server_url + "cycle/" + cycle_key + "/executionResultsImport",
+                headers={
+                    "Accept": "application/zip",
+                },
+                json=import_config,
+            )
+            return job_id.json()["jobID"]
+        except requests.exceptions.RequestException as e:
+            self.render_import_error(e)
 
     def wait_for_execution_results_import_to_finish(self, job_id: str) -> bool:
-        while True:
-            import_status = self.get_job_result("executionResultsImporterJob/", job_id)
-            if import_status is not None:
-                break
-            spin_spinner("Waiting until import of execution results is done")
+        try:
+            while True:
+                import_status = self.get_job_result(
+                    "executionResultsImporterJob/", job_id
+                )
+                if import_status is not None:
+                    break
+                spin_spinner("Waiting until import of execution results is done")
 
-        result = import_status["result"]
-        if "Right" in result:
-            return result["Right"]
-        else:
-            raise AssertionError(result)
+            result = import_status["result"]
+
+            if "Right" in result:
+                return result["Right"]
+            else:
+                raise AssertionError(result)
+        except requests.exceptions.RequestException as e:
+            self.render_import_error(e)
+
+    def render_import_error(self, e):
+        pprint("!!!ERROR DURING IMPORT!!!", style="#ff0e0e italic")
+        pprint(f"Report was NOT imported")
+        pprint(f"Error Code {e.response.status_code}")
+        pprint(f"Error Message {e.response.text}")
+        pprint(f"URL: {e.response.url}")
 
     def get_imp_job_result(self, job_id):
         report_import_status = self.get_job_result(

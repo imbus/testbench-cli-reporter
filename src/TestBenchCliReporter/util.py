@@ -24,6 +24,51 @@ from TestBenchCliReporter import actions
 import json
 from collections import OrderedDict
 
+ImportConfig = {
+    "Typical": {
+        "ignoreNonExecutedTestCases": True,
+        "checkPaths": True,
+        "discardTesterInformation": True,
+        "useExistingDefect": True,
+    },
+    "<CUSTOM>": False,
+}
+
+
+XmlExportConfig = {
+    "Itep Export": {
+        "exportAttachments": True,
+        "exportDesignData": True,
+        "characterEncoding": "utf-16",
+        "suppressFilteredData": True,
+        "exportExpandedData": True,
+        "exportDescriptionFields": True,
+        "outputFormattedText": False,
+        "exportExecutionProtocols": False,
+    },
+    "iTorx Export (execution)": {
+        "exportAttachments": True,
+        "exportDesignData": True,
+        "characterEncoding": "utf-8",
+        "suppressFilteredData": True,
+        "exportExpandedData": True,
+        "exportDescriptionFields": True,
+        "outputFormattedText": True,
+        "exportExecutionProtocols": False,
+    },
+    "iTorx Export (continue|view)": {
+        "exportAttachments": True,
+        "exportDesignData": True,
+        "characterEncoding": "utf-8",
+        "suppressFilteredData": True,
+        "exportExpandedData": True,
+        "exportDescriptionFields": True,
+        "outputFormattedText": True,
+        "exportExecutionProtocols": True,
+    },
+    "<CUSTOM>": False,
+}
+
 
 def login() -> testbench.Connection:
     credentials = questions.ask_for_test_bench_credentials()

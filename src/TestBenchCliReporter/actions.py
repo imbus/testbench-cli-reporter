@@ -121,6 +121,7 @@ class ExportXMLReport(AbstractAction):
         )
         all_filters = connection_log.active_connection.get_all_filters()
         self.parameters["filters"] = questions.ask_to_select_filters(all_filters)
+        self.parameters["report_config"] = questions.ask_to_config_report()
         self.parameters["outputPath"] = questions.ask_for_output_path()
 
         return True
@@ -145,6 +146,7 @@ class ExportXMLReport(AbstractAction):
                     self.parameters.get("cycleKey"),
                     self.parameters["reportRootUID"],
                     self.parameters["filters"],
+                    self.parameters["report_config"],
                 )
             )
             return True
@@ -226,7 +228,7 @@ class ImportExecutionResults(AbstractAction):
         )
         all_filters = connection_log.active_connection.get_all_filters()
         self.parameters["filters"] = questions.ask_to_select_filters(all_filters)
-
+        self.parameters["importConfig"] = questions.ask_to_config_import()
         return True
 
     def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
@@ -246,14 +248,16 @@ class ImportExecutionResults(AbstractAction):
                     serverside_file_name,
                     self.parameters["defaultTester"],
                     self.parameters["filters"],
+                    self.parameters["importConfig"],
                 )
             )
             return True
 
     def wait(self, connection_log: testbench.ConnectionLog) -> bool:
-        return connection_log.active_connection.wait_for_execution_results_import_to_finish(
+        self.report_tmp_name = connection_log.active_connection.wait_for_execution_results_import_to_finish(
             self.job_id
         )
+        return self.report_tmp_name
 
     def poll(self, connection_log: testbench.ConnectionLog) -> bool:
         result = connection_log.active_connection.get_imp_job_result(self.job_id)

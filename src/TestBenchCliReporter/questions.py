@@ -16,14 +16,16 @@ from __future__ import annotations
 
 from os.path import isdir, isfile, abspath, dirname
 import os
-from typing import Optional, Callable, Union
-from questionary import select, checkbox, unsafe_prompt
+from typing import Optional, Callable, Union, List
+from questionary import select, checkbox, unsafe_prompt, confirm
 from questionary import Style
 from questionary import Choice
+from questionary import print as pprint
 from re import fullmatch, sub
 from TestBenchCliReporter import actions
 from TestBenchCliReporter import util
-from questionary import print
+from TestBenchCliReporter.util import XmlExportConfig, ImportConfig
+
 
 custom_style_fancy = Style(
     [
@@ -58,6 +60,18 @@ def selection_prompt(
         ).unsafe_ask()
     else:
         raise ValueError(no_valid_option_message)
+
+
+def confirm_prompt(
+    message: str,
+    style: Style = custom_style_fancy,
+    default: Optional[bool] = False,
+):
+    return confirm(
+        message=message,
+        style=style,
+        default=default,
+    ).unsafe_ask()
 
 
 def checkbox_prompt(
@@ -199,19 +213,73 @@ def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
     )
 
 
-def ask_to_select_filters(all_filters: list[dict]) -> dict:
-    all_filters_sorted = sorted(
-        all_filters, key=lambda filter: filter["name"].casefold()
-    )
+def ask_to_select_filters(all_filters: list[dict]) -> List:
+    if selection_prompt(
+        "Activate Filters:", choices=[Choice("No", False), Choice("Yes", True)]
+    ):
+        all_filters_sorted = sorted(
+            all_filters, key=lambda filter: filter["name"].casefold()
+        )
 
-    return checkbox_prompt(
-        message="Provide a set of filters (optional).",
+        return checkbox_prompt(
+            message="Provide a set of filters.",
+            choices=[
+                Choice(filter["name"], {"name": filter["name"], "type": filter["type"]})
+                for filter in all_filters_sorted
+            ],
+            no_valid_option_message="No filters available.",
+        )
+    return []
+
+
+def ask_to_config_report():
+    selection = selection_prompt(
+        "Select Report Configuration:",
         choices=[
-            Choice(filter["name"], {"name": filter["name"], "type": filter["type"]})
-            for filter in all_filters_sorted
+            Choice(config_name, config)
+            for config_name, config in XmlExportConfig.items()
         ],
-        no_valid_option_message="No filters available.",
     )
+    if not selection:
+        selection = {
+            "exportAttachments": [Choice("True", True), Choice("False", False)],
+            "exportDesignData": [Choice("True", True), Choice("False", False)],
+            "characterEncoding": [Choice("UTF-16", "utf-16"), Choice("UTF-8", "utf-8")],
+            "suppressFilteredData": [Choice("True", True), Choice("False", False)],
+            "exportExpandedData": [Choice("True", True), Choice("False", False)],
+            "exportDescriptionFields": [Choice("True", True), Choice("False", False)],
+            "outputFormattedText": [Choice("False", False), Choice("True", True)],
+            "exportExecutionProtocols": [Choice("False", False), Choice("True", True)],
+        }
+        pprint("  {", style="bold")
+        for key, value in selection.items():
+            selection[key] = selection_prompt(f'   "{key}": ', value)
+        pprint("  }", style="bold")
+    return selection
+
+
+def ask_to_config_import():
+    selection = selection_prompt(
+        "Select Import Configuration:",
+        choices=[
+            Choice(config_name, config) for config_name, config in ImportConfig.items()
+        ],
+    )
+    if not selection:
+        selection = {
+            "ignoreNonExecutedTestCases": [
+                Choice("True", True),
+                Choice("False", False),
+            ],
+            "checkPaths": [Choice("True", True), Choice("False", False)],
+            "discardTesterInformation": [Choice("True", True), Choice("False", False)],
+            "useExistingDefect": [Choice("True", True), Choice("False", False)],
+        }
+        pprint("  {", style="bold")
+        for key, value in selection.items():
+            selection[key] = selection_prompt(f'   "{key}": ', value)
+        pprint("  }", style="bold")
+    return selection
 
 
 def ask_for_output_path(default: str = "report.zip") -> str:
@@ -224,7 +292,7 @@ def ask_for_output_path(default: str = "report.zip") -> str:
         else f"Path '{path}' does not exist or is not writeable.",
         filter=lambda path: os.path.join(path, default) if isdir(path or ".") else path,
     )
-    print(f"Output Path: {output_path}", style="#06c8ff bold italic")
+    pprint(f"Output Path: {output_path}", style="#06c8ff bold italic")
     return abspath(output_path)
 
 
@@ -295,7 +363,8 @@ def ask_to_select_default_tester(all_testers: list[dict]) -> dict[str, str]:
 
     return selection_prompt(
         message="What do you want to do?",
-        choices=[
+        choices=[Choice("<No Tester>", False)]
+        + [
             Choice(tester["value"]["user-name"], tester["value"]["user-login"])
             for tester in all_testers_sorted
         ],

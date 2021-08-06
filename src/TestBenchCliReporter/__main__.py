@@ -22,7 +22,7 @@ from TestBenchCliReporter import util
 from TestBenchCliReporter.actions import Action
 from requests.exceptions import Timeout
 
-__version__ = "1.0.rc3"
+__version__ = "1.0.rc4"
 
 
 def main():
@@ -40,7 +40,7 @@ def main():
         type=str,
     )
     parser.add_argument(
-        "--loginname",
+        "--login",
         help="Users Login (only if config file is given)",
         type=str,
     )
