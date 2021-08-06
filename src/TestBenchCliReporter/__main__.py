@@ -22,7 +22,7 @@ from TestBenchCliReporter import util
 from TestBenchCliReporter.actions import Action
 from requests.exceptions import Timeout
 
-__version__ = "1.0.rc2"
+__version__ = "1.0.rc3"
 
 
 def main():
