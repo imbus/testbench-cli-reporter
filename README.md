@@ -25,48 +25,57 @@ testbench-cli-reporter --configfile /path/to/config/file.json
 
 ```json
 {
-    "configuration": [
+  "configuration": [
+    {
+      "server_url": "https://remus:9443/api/1/",
+      "verify": false,
+      "basicAuth": "dHQtYWRtaW46YWRtaW4=",
+      "actions": [
         {
-            "server_url": "https://testbench:1234/api/1/",
-            "loginname": "User A",
-            "password": "passwordA",
-            "actions": [
-                {
-                    "type": "ExportXMLReport",
-                    "parameters": {
-                        "cycleKey": "12345678",
-                        "reportRootUID": "ITBEXP-TT-1234",
-                        "filters": [],
-                        "outputPath": "C:\\Users\\testuser\\Dokumente\\test_report1.zip"
-                    }
-                },
-                {
-                    "type": "ExportXMLReport",
-                    "parameters": {
-                        "cycleKey": "98765432",
-                        "reportRootUID": "ITBEXP-TT-4321",
-                        "filters": [],
-                        "outputPath": "C:\\Users\\testuser\\Dokumente\\test_report2.zip"
-                    }
-                }
-            ]
+          "type": "ExportXMLReport",
+          "parameters": {
+            "tovKey": "8689447",
+            "projectPath": [
+              "TestBench Demo Agil",
+              "Version 3.0",
+              "3.0.1"
+            ],
+            "cycleKey": "8689450",
+            "reportRootUID": "itb-TT-8161",
+            "filters": [],
+            "report_config": {
+              "exportAttachments": true,
+              "exportDesignData": true,
+              "characterEncoding": "utf-16",
+              "suppressFilteredData": true,
+              "exportExpandedData": true,
+              "exportDescriptionFields": true,
+              "outputFormattedText": false,
+              "exportExecutionProtocols": false,
+              "reportRootUID": "itb-TT-8161"
+            },
+            "outputPath": "report.zip"
+          }
         },
         {
-            "server_url": "https://testbench:9999/api/1/",
-            "loginname": "User B",
-            "password": "passwordB",
-            "actions": [
-                {
-                    "type": "ExportXMLReport",
-                    "parameters": {
-                        "cycleKey": "12344321",
-                        "reportRootUID": "ITBEXP-TT-1221",
-                        "filters": [],
-                        "outputPath": "C:\\Users\\testuser\\Dokumente\\test_report3.zip"
-                    }
-                }
-            ]
+          "type": "ImportExecutionResults",
+          "parameters": {
+            "inputPath": "report.zip",
+            "cycleKey": "8689450",
+            "reportRootUID": "ROOT",
+            "defaultTester": false,
+            "filters": [],
+            "importConfig": {
+              "ignoreNonExecutedTestCases": true,
+              "checkPaths": true,
+              "discardTesterInformation": true,
+              "useExistingDefect": true,
+              "filters": []
+            }
+          }
         }
-    ]
+      ]
+    }
+  ]
 }
 ```
