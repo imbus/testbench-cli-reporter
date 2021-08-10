@@ -18,11 +18,17 @@ from time import sleep
 from typing import Optional
 
 from TestBenchCliReporter.testbench import ConnectionLog, Connection, spin_spinner
-from TestBenchCliReporter import util
+from TestBenchCliReporter.util import (
+    rotate,
+    close_program,
+    login,
+    get_configuration,
+    choose_action,
+)
 from TestBenchCliReporter.actions import Action
 from requests.exceptions import Timeout
 
-__version__ = "1.0.rc5"
+__version__ = "1.0.rc6"
 
 
 def main():
@@ -91,16 +97,10 @@ def main():
     arg = parser.parse_args()
     try:
         if arg.config:
-            configuration = util.get_configuration(arg.config)
+            configuration = get_configuration(arg.config)
             print("Config file found")
             run_automatic_mode(configuration)
-        elif (
-            arg.server
-            and arg.loginname
-            and arg.password
-            and arg.project
-            and arg.version
-        ):
+        elif arg.server and arg.login and arg.password and arg.project and arg.version:
             if fullmatch(r"([\w\-.\d]+)(:\d{1,5})", arg.server):
                 server = f"https://{arg.server}/api/1/"
             elif fullmatch(r"([\w\-.\d]+)", arg.server):
@@ -115,7 +115,7 @@ def main():
                     {
                         "server_url": server,
                         "verify": False,
-                        "loginname": arg.loginname,
+                        "loginname": arg.login,
                         "password": arg.password,
                         "actions": [],
                     }
@@ -156,7 +156,7 @@ def main():
             print("No config file given")
             run_manual_mode()
     except KeyboardInterrupt:
-        util.close_program()
+        close_program()
 
 
 def run_manual_mode():
@@ -164,9 +164,9 @@ def run_manual_mode():
     connection_log = ConnectionLog()
 
     while True:
-        active_connection = util.login()
+        active_connection = login()
         connection_log.add_connection(active_connection)
-        next_action = util.choose_action()
+        next_action = choose_action()
         while next_action is not None:
             try:
                 preparation_success = next_action.prepare(connection_log)
@@ -190,7 +190,7 @@ def run_manual_mode():
                 print("Action aborted due to timeout.")
 
             active_connection = connection_log.active_connection
-            next_action = util.choose_action()
+            next_action = choose_action()
 
 
 def run_automatic_mode(
@@ -245,7 +245,7 @@ def run_automatic_mode(
                     active_connection.actions_to_finish.append(action_to_wait_for)
                     active_connection.actions_to_wait_for.remove(action_to_wait_for)
                 else:
-                    active_connection.actions_to_wait_for = util.rotate(
+                    active_connection.actions_to_wait_for = rotate(
                         active_connection.actions_to_wait_for
                     )
 
@@ -255,7 +255,7 @@ def run_automatic_mode(
                     active_connection.action_log.append(action_to_finish)
                     active_connection.actions_to_finish.remove(action_to_finish)
                 else:
-                    active_connection.actions_to_finish = util.rotate(
+                    active_connection.actions_to_finish = rotate(
                         active_connection.actions_to_finish
                     )
 

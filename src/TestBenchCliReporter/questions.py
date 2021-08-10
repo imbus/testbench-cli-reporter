@@ -292,7 +292,8 @@ def ask_for_output_path(default: str = "report.zip") -> str:
         else f"Path '{path}' does not exist or is not writeable.",
         filter=lambda path: os.path.join(path, default) if isdir(path or ".") else path,
     )
-    pprint(f"Output Path: {output_path}", style="#06c8ff bold italic")
+    pprint(f"Output Path: ", end=None)
+    pprint(f"{output_path}", style="#06c8ff bold italic")
     return abspath(output_path)
 
 

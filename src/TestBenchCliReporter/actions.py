@@ -22,9 +22,14 @@ from xml.etree import ElementTree as ET
 import sys
 import base64
 from TestBenchCliReporter import questions
-from TestBenchCliReporter import util
 from TestBenchCliReporter import testbench
-from questionary import print
+from TestBenchCliReporter.util import (
+    close_program,
+    get_project_keys,
+    XmlExportConfig,
+    login,
+    pretty_print,
+)
 
 
 def Action(class_name: str, parameters: dict[str, str]) -> AbstractAction:
@@ -32,7 +37,7 @@ def Action(class_name: str, parameters: dict[str, str]) -> AbstractAction:
         return globals()[class_name](parameters)
     except AttributeError:
         print(f"Failed to create class {class_name}")
-        util.close_program()
+        close_program()
 
 
 class AbstractAction(ABC):
@@ -79,35 +84,45 @@ class ExportXMLReport(AbstractAction):
         selected_cycle = questions.ask_to_select_cycle(selected_tov, export=True)
         print("  Selection:")
 
-        print(
-            f"{' '*4 + selected_project['name']: <50}",
-            style="#06c8ff bold italic",
-            end=None,
+        pretty_print(
+            {
+                "value": f"{' ' * 4 + selected_project['name']: <50}",
+                "style": "#06c8ff bold italic",
+                "end": None,
+            },
+            {"value": f"  projectKey: ", "end": None},
+            {
+                "value": f"{selected_project['key']['serial']: >15}",
+                "style": "#06c8ff bold italic",
+            },
+            {
+                "value": f"{' ' * 6 + selected_tov['name']: <50}",
+                "style": "#06c8ff bold italic",
+                "end": None,
+            },
+            {"value": f"  tovKey:     ", "end": None},
+            {
+                "value": f"{selected_tov['key']['serial']: >15}",
+                "style": "#06c8ff bold italic",
+            },
         )
-        print(f"  projectKey: ", end=None)
-        print(f"{selected_project['key']['serial']: >15}", style="#06c8ff bold italic")
-
-        print(
-            f"{' '*6 + selected_tov['name']: <50}",
-            style="#06c8ff bold italic",
-            end=None,
-        )
-        print(f"  tovKey:     ", end=None)
-        print(f"{selected_tov['key']['serial']: >15}", style="#06c8ff bold italic")
         if selected_cycle == "NO_EXEC":
             self.parameters["cycleKey"] = None
             tttree_structure = connection_log.active_connection.get_tov_structure(
                 self.parameters["tovKey"]
             )
         else:
-            print(
-                f"{' '*8 + selected_cycle['name']: <50}",
-                style="#06c8ff bold italic",
-                end=None,
-            )
-            print(f"  cycleKey:   ", end=None)
-            print(
-                f"{selected_cycle['key']['serial']: >15}", style="#06c8ff bold italic"
+            pretty_print(
+                {
+                    "value": f"{' ' * 8 + selected_cycle['name']: <50}",
+                    "style": "#06c8ff bold italic",
+                    "end": None,
+                },
+                {"value": f"  cycleKey:   ", "end": None},
+                {
+                    "value": f"{selected_cycle['key']['serial']: >15}",
+                    "style": "#06c8ff bold italic",
+                },
             )
             self.parameters["cycleKey"] = selected_cycle["key"]["serial"]
             self.parameters["projectPath"].append(selected_cycle["name"])
@@ -137,16 +152,14 @@ class ExportXMLReport(AbstractAction):
                     project_key,
                     self.parameters["tovKey"],
                     self.parameters["cycleKey"],
-                ) = util.get_project_keys(all_projects, *self.parameters["projectPath"])
+                ) = get_project_keys(all_projects, *self.parameters["projectPath"])
 
-        self.job_id = (
-            connection_log.active_connection.trigger_xml_report_generation(
-                self.parameters.get("tovKey"),
-                self.parameters.get("cycleKey"),
-                self.parameters.get("reportRootUID", "ROOT"),
-                self.parameters.get("filters", []),
-                self.parameters.get("report_config", util.XmlExportConfig["Itep Export"]),
-            )
+        self.job_id = connection_log.active_connection.trigger_xml_report_generation(
+            self.parameters.get("tovKey"),
+            self.parameters.get("cycleKey"),
+            self.parameters.get("reportRootUID", "ROOT"),
+            self.parameters.get("filters", []),
+            self.parameters.get("report_config", XmlExportConfig["Itep Export"]),
         )
         return self.job_id
 
@@ -174,13 +187,15 @@ class ExportXMLReport(AbstractAction):
         )
         with open(self.parameters["outputPath"], "wb") as output_file:
             output_file.write(report)
-        print(f"Report ", end=None)
-        print(
-            f'{path.abspath(self.parameters["outputPath"])}',
-            style="#06c8ff bold italic",
-            end=None,
+        pretty_print(
+            {"value": f"Report ", "end": None},
+            {
+                "value": f'{path.abspath(self.parameters["outputPath"])}',
+                "style": "#06c8ff bold italic",
+                "end": None,
+            },
+            {"value": f" was generated"},
         )
-        print(f" was generated")
         return True
 
 
@@ -229,7 +244,7 @@ class ImportExecutionResults(AbstractAction):
                     project_key,
                     tov_key,
                     self.parameters["cycleKey"],
-                ) = util.get_project_keys(all_projects, *self.parameters["projectPath"])
+                ) = get_project_keys(all_projects, *self.parameters["projectPath"])
             else:
                 raise ValueError("Invalid Config! 'cycleKey' missing.")
 
@@ -268,13 +283,15 @@ class ImportExecutionResults(AbstractAction):
 
     def finish(self, connection_log: testbench.ConnectionLog) -> bool:
         if self.report_tmp_name:
-            print(f"Report ", end=None)
-            print(
-                f'{path.abspath(self.parameters["inputPath"])}',
-                style="#06c8ff bold italic",
-                end=None,
+            pretty_print(
+                {"value": f"Report ", "end": None},
+                {
+                    "value": f'{path.abspath(self.parameters["inputPath"])}',
+                    "style": "#06c8ff bold italic",
+                    "end": None,
+                },
+                {"value": f" was imported"},
             )
-            print(f" was imported")
             return True
 
 
@@ -286,13 +303,15 @@ class ExportActionLog(UnloggedAction):
     def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         try:
             connection_log.export_as_json(self.parameters["outputPath"])
-            print(f"Config ", end=None)
-            print(
-                f'{path.abspath(self.parameters["outputPath"])}',
-                style="#06c8ff bold italic",
-                end=None,
+            pretty_print(
+                {"value": f"Config ", "end": None},
+                {
+                    "value": f'{path.abspath(self.parameters["outputPath"])}',
+                    "style": "#06c8ff bold italic",
+                    "end": None,
+                },
+                {"value": f" was generated"},
             )
-            print(f" was generated")
             return True
         except KeyError as e:
             print(f"{str(e)}")
@@ -301,7 +320,7 @@ class ExportActionLog(UnloggedAction):
 
 class ChangeConnection(UnloggedAction):
     def prepare(self, connection_log: testbench.ConnectionLog):
-        self.parameters["newConnection"] = util.login()
+        self.parameters["newConnection"] = login()
         return True
 
     def trigger(self, connection_log: testbench.ConnectionLog) -> bool:

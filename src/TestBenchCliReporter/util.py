@@ -14,10 +14,10 @@
 
 from __future__ import annotations
 import sys
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, List
 
 import requests
-from questionary import print
+from questionary import print as pprint
 from TestBenchCliReporter import questions
 from TestBenchCliReporter import testbench
 from TestBenchCliReporter import actions
@@ -203,6 +203,18 @@ def rotate(li):
         return li
 
 
+def pretty_print(*print_statements: dict):
+    try:
+        for statement in print_statements:
+            pprint(
+                statement.get("value"),
+                style=statement.get("style", None),
+                end=statement.get("end", "\r\n"),
+            )
+    except Exception:
+        print("".join([statement["value"] for statement in print_statements]))
+
+
 def get_project_keys(
     projects: Dict,
     project_name: str,
@@ -235,10 +247,12 @@ def get_project_keys(
         raise ValueError(
             f"Cycle '{cycle_name}' not found in TOV '{tov_name}' in project '{project_name}'."
         )
-    print(f"PROJECT_KEY: ", end=None)
-    print(f"{project_key}", style="#06c8ff bold italic", end=None)
-    print(f", TOV_Key: ", end=None)
-    print(f"{tov_key}", style="#06c8ff bold italic", end=None)
-    print(f", CYCLE_KEY: ", end=None)
-    print(f"{cycle_key}", style="#06c8ff bold italic")
+    pretty_print(
+        {"value": f"PROJECT_KEY: ", "end": None},
+        {"value": f"{project_key}", "style": "#06c8ff bold italic", "end": None},
+        {"value": f", TOV_Key: ", "end": None},
+        {"value": f"{tov_key}", "style": "#06c8ff bold italic", "end": None},
+        {"value": f", CYCLE_KEY: ", "end": None},
+        {"value": f"{cycle_key}", "style": "#06c8ff bold italic"},
+    )
     return project_key, tov_key, cycle_key

@@ -93,7 +93,7 @@ def spinner():
 
 def delay():
     if os.name == "nt":
-        return 0.5
+        return 0.1
     else:
         return 0.02
 
