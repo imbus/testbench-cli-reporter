@@ -27,6 +27,7 @@ from TestBenchCliReporter.util import (
     close_program,
     get_project_keys,
     XmlExportConfig,
+    ImportConfig,
     login,
     pretty_print,
 )
@@ -264,7 +265,7 @@ class ImportExecutionResults(AbstractAction):
                     serverside_file_name,
                     self.parameters["defaultTester"],
                     self.parameters["filters"],
-                    self.parameters["importConfig"],
+                    self.parameters.get("importConfig", ImportConfig["Typical"]),
                 )
             )
             return True
