@@ -205,11 +205,7 @@ class ImportExecutionResults(AbstractAction):
         self.parameters["inputPath"] = questions.ask_for_input_path()
         project = version = cycle = None
         try:
-            zip_file = ZipFile(self.parameters["inputPath"])
-            xml = ET.fromstring(zip_file.read("report.xml"))
-            project = xml.find("./header/project").get("name")
-            version = xml.find("./header/version").get("name")
-            cycle = xml.find("./header/cycle").get("name")
+            project, version, cycle = self.get_project_path_from_report()
         except:
             pass
         all_projects = connection_log.active_connection.get_all_projects()
@@ -237,17 +233,19 @@ class ImportExecutionResults(AbstractAction):
         self.parameters["importConfig"] = questions.ask_to_config_import()
         return True
 
+    def get_project_path_from_report(self):
+        zip_file = ZipFile(self.parameters["inputPath"])
+        xml = ET.fromstring(zip_file.read("report.xml"))
+        project = xml.find("./header/project").get("name")
+        version = xml.find("./header/version").get("name")
+        cycle = xml.find("./header/cycle").get("name")
+        return project, version, cycle
+
     def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         if not self.parameters.get("cycleKey"):
-            if len(self.parameters.get("projectPath")) == 3:
-                all_projects = connection_log.active_connection.get_all_projects()
-                (
-                    project_key,
-                    tov_key,
-                    self.parameters["cycleKey"],
-                ) = get_project_keys(all_projects, *self.parameters["projectPath"])
-            else:
-                raise ValueError("Invalid Config! 'cycleKey' missing.")
+            if len(self.parameters.get("projectPath", [])) != 3:
+                self.parameters["projectPath"] = self.get_project_path_from_report()
+            self.set_cycle_key_from_path(connection_log)
 
         with open(self.parameters["inputPath"], "rb") as execution_report:
             execution_report_base64 = base64.b64encode(execution_report.read()).decode()
@@ -269,6 +267,16 @@ class ImportExecutionResults(AbstractAction):
                 )
             )
             return True
+
+    def set_cycle_key_from_path(self, connection_log):
+        all_projects = connection_log.active_connection.get_all_projects()
+        (
+            project_key,
+            tov_key,
+            self.parameters["cycleKey"],
+        ) = get_project_keys(all_projects, *self.parameters["projectPath"])
+        if not self.parameters["cycleKey"]:
+            raise ValueError("Invalid Config! 'cycleKey' missing.")
 
     def wait(self, connection_log: testbench.ConnectionLog) -> bool:
         self.report_tmp_name = connection_log.active_connection.wait_for_execution_results_import_to_finish(

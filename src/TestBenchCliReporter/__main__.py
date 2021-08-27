@@ -28,7 +28,7 @@ from TestBenchCliReporter.util import (
 from TestBenchCliReporter.actions import Action
 from requests.exceptions import Timeout
 
-__version__ = "1.0.rc6"
+__version__ = "1.0.0"
 
 
 def main():
@@ -36,53 +36,57 @@ def main():
     parser.add_argument(
         "-c",
         "--config",
-        help="Path to a config file to execute pre-set actions based on the given configuration.",
+        help="Path to a config json file to execute pre-set actions based on the given configuration.",
         type=str,
     )
     parser.add_argument(
         "-s",
         "--server",
-        help="TestBench Server address (hostname:port)",
+        help="TestBench Server address (hostname:port).",
         type=str,
     )
     parser.add_argument(
         "--login",
-        help="Users Login (only if config file is given)",
+        help="Users Login.",
         type=str,
     )
     parser.add_argument(
         "--password",
-        help="Users Password (only if config file is given)",
+        help="Users Password.",
         type=str,
     )
     parser.add_argument(
         "-p",
         "--project",
-        help="Project name to be exported",
+        help="Project name to be exported <OPTIONAL if --type is 'i'>.",
         type=str,
+        default="",
     )
     parser.add_argument(
         "-v",
         "--version",
-        help="Test Object Version name to be exported",
+        help="Test Object Version name to be exported <OPTIONAL if --type is 'i'>.",
         type=str,
+        default="",
     )
     parser.add_argument(
         "-y",
         "--cycle",
-        help="Test Cycle name to be exported",
+        help="Test Cycle name to be exported <OPTIONAL>",
         type=str,
+        default="",
     )
     parser.add_argument(
         "-u",
         "--uid",
-        help="Root UID to be exported",
+        help="Root UID to be exported <OPTIONAL, Default = ROOT>",
         type=str,
+        default="ROOT",
     )
     parser.add_argument(
         "-t",
         "--type",
-        help="'e' for Export (default), 'i' for Import",
+        help="'e' for Export <default>, 'i' for Import",
         type=str,
         choices=["e", "i"],
         default="e",
@@ -90,7 +94,7 @@ def main():
     parser.add_argument(
         "path",
         nargs="?",
-        help="Input- and Output-Path for xml reports.",
+        help="Input- and Output-Path for xml reports <OPTIONAL, Default = report.zip>.",
         type=str,
         default="report.zip",
     )
@@ -99,16 +103,16 @@ def main():
         if arg.config:
             configuration = get_configuration(arg.config)
             print("Config file found")
-            run_automatic_mode(configuration)
-        elif arg.server and arg.login and arg.password and arg.project and arg.version:
-            if fullmatch(r"([\w\-.\d]+)(:\d{1,5})", arg.server):
-                server = f"https://{arg.server}/api/1/"
-            elif fullmatch(r"([\w\-.\d]+)", arg.server):
-                server = f"https://{arg.server}:9443/api/1/"
-            elif fullmatch(r"https?://([\w\-.\d]+)(:\d{1,5})/api/1/", arg.server):
-                server = arg.server
-            else:
-                raise ValueError(f"Server name '{arg.server}' is not valid.")
+            run_automatic_mode(
+                configuration, loginname=arg.login, password=arg.password
+            )
+        elif (
+            arg.server
+            and arg.login
+            and arg.password
+            and ((arg.project and arg.version) or arg.type == "i")
+        ):
+            server = resolve_server_name(arg.server)
 
             configuration = {
                 "configuration": [
@@ -129,7 +133,7 @@ def main():
                             "projectPath": [
                                 e for e in [arg.project, arg.version, arg.cycle] if e
                             ],
-                            "reportRootUID": arg.uid if arg.uid else "ROOT",
+                            "reportRootUID": arg.uid,
                             "filters": [],
                             "outputPath": arg.path,
                         },
@@ -143,7 +147,7 @@ def main():
                             "projectPath": [
                                 e for e in [arg.project, arg.version, arg.cycle] if e
                             ],
-                            "reportRootUID": arg.uid if arg.uid else "ROOT",
+                            "reportRootUID": arg.uid,
                             "defaultTester": None,
                             "filters": [],
                             "inputPath": arg.path,
@@ -157,6 +161,18 @@ def main():
             run_manual_mode()
     except KeyboardInterrupt:
         close_program()
+
+
+def resolve_server_name(server):
+    if fullmatch(r"([\w\-.\d]+)(:\d{1,5})", server):
+        server = f"https://{server}/api/1/"
+    elif fullmatch(r"([\w\-.\d]+)", server):
+        server = f"https://{server}:9443/api/1/"
+    elif fullmatch(r"https?://([\w\-.\d]+)(:\d{1,5})/api/1/", server):
+        server = server
+    else:
+        raise ValueError(f"Server name '{server}' is not valid.")
+    return server
 
 
 def run_manual_mode():
