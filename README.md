@@ -9,7 +9,7 @@
 
 Python 3.6 is required!
 
-`pip install --pre testbench-cli-reporter`
+`pip install testbench-cli-reporter`
 
 ## Manual mode
 Just execute in Command Line 
