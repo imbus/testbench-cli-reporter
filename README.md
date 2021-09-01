@@ -18,7 +18,7 @@ Just execute in Command Line
 ## Automatic mode
 Run in automatic mode:
 `
-testbench-cli-reporter --configfile /path/to/config/file.json
+testbench-cli-reporter --config /path/to/config/file.json
 `
 
 ## Config file structure
