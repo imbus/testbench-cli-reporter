@@ -246,7 +246,7 @@ class Connection:
             report_config["reportRootUID"] = reportRootUID
         report_config["filters"]: filters
 
-        if cycle_key:
+        if cycle_key and cycle_key != "0":
             response = self.session.post(
                 self.server_url + "cycle/" + cycle_key + "/xmlReport",
                 json=report_config,

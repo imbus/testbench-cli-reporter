@@ -134,7 +134,7 @@ class ExportXMLReport(AbstractAction):
         return True
 
     def trigger(self, connection_log) -> Union[bool, str]:
-        if not self.parameters.get("cycleKey"):
+        if not self.parameters.get("cycleKey") or self.parameters.get("cycleKey") == "0":
             if (
                     not self.parameters.get("tovKey")
                     and len(self.parameters["projectPath"]) >= 2
