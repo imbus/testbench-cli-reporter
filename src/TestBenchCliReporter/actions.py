@@ -33,7 +33,7 @@ from TestBenchCliReporter.util import (
 
 
 class AbstractAction(ABC):
-    def __init__(self, parameters: Optional[Dict] = None):
+    def __init__(self, parameters: Optional[dict] = None):
         self.parameters = parameters or {}
         self.report_tmp_name = ""
         self.job_id = ""
@@ -191,7 +191,7 @@ class ExportXMLReport(AbstractAction):
         return True
 
 
-def Action(class_name: str, parameters: dict[str, str]) -> AbstractAction:
+def Action(class_name: str, parameters: Dict[str, str]) -> AbstractAction:
     try:
         return globals()[class_name](parameters)
     except AttributeError:

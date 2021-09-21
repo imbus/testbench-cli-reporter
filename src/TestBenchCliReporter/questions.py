@@ -45,7 +45,7 @@ custom_style_fancy = Style(
 
 def selection_prompt(
     message: str,
-    choices: list[Choice],
+    choices: List[Choice],
     no_valid_option_message: str = None,
     style: Style = custom_style_fancy,
     default=None,
@@ -76,7 +76,7 @@ def confirm_prompt(
 
 def checkbox_prompt(
     message: str,
-    choices: list[Choice],
+    choices: List[Choice],
     no_valid_option_message: str = None,
     style: Style = custom_style_fancy,
 ):
@@ -213,7 +213,7 @@ def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
     )
 
 
-def ask_to_select_filters(all_filters: list[dict]) -> List:
+def ask_to_select_filters(all_filters: List[dict]) -> List:
     if selection_prompt(
         "Activate Filters:", choices=[Choice("No", False), Choice("Yes", True)]
     ):
@@ -357,7 +357,7 @@ def ask_for_next_action():
     )
 
 
-def ask_to_select_default_tester(all_testers: list[dict]) -> dict[str, str]:
+def ask_to_select_default_tester(all_testers: List[dict]) -> Dict[str, str]:
     all_testers_sorted = sorted(
         all_testers, key=lambda tester: tester["value"]["user-name"].casefold()
     )
@@ -373,7 +373,7 @@ def ask_to_select_default_tester(all_testers: list[dict]) -> dict[str, str]:
     )
 
 
-def ask_to_select_report_root_uid(cycle_structure: list[dict]):
+def ask_to_select_report_root_uid(cycle_structure: List[dict]):
     cycle_structure_tree = util.add_numbering_to_cycle(cycle_structure)
     selected_uid = navigate_in_cycle_stucture(cycle_structure_tree)
     return selected_uid

@@ -131,7 +131,7 @@ class Connection:
             self.password = password
         self.job_timeout_sec = job_timeout_sec
         self.action_log: List[AbstractAction] = []
-        self.actions_to_trigger: List[Dict] = actions or []
+        self.actions_to_trigger: List[dict] = actions or []
         self.actions_to_wait_for: List[AbstractAction] = []
         self.actions_to_finish: List[AbstractAction] = []
         self.connection_timeout = connection_timeout_sec
@@ -197,7 +197,7 @@ class Connection:
 
         return True
 
-    def get_all_projects(self) -> dict:
+    def get_all_projects(self) -> Dict:
         all_projects = self.session.get(
             self.server_url + "projects",
             params={"includeTOVs": "true", "includeCycles": "true"},
@@ -205,7 +205,7 @@ class Connection:
         all_projects["projects"].sort(key=lambda proj: proj["name"].casefold())
         return all_projects
 
-    def get_all_filters(self) -> list[dict]:
+    def get_all_filters(self) -> List[dict]:
         all_filters = self.session.get(
             self.server_url + "filters",
         )
@@ -286,14 +286,14 @@ class Connection:
 
         return report.content
 
-    def get_all_testers_of_project(self, project_key: str) -> list[dict]:
+    def get_all_testers_of_project(self, project_key: str) -> List[dict]:
         return [
             member
             for member in self.get_all_members_of_project(project_key)
             if "Tester" in member["value"]["membership"]["roles"]
         ]
 
-    def get_all_members_of_project(self, project_key: str) -> list[dict]:
+    def get_all_members_of_project(self, project_key: str) -> List[dict]:
         all_project_members = self.session.get(
             self.server_url + "project/" + project_key + "/members",
         )
@@ -318,7 +318,7 @@ class Connection:
         report_root_uid: str,
         serverside_file_name: str,
         default_tester: str,
-        filters: list[dict[str, str]],
+        filters: List[Dict[str, str]],
         import_config: Dict = ImportConfig["Typical"],
     ) -> str:
 
@@ -379,13 +379,13 @@ class Connection:
         else:
             raise AssertionError(result)
 
-    def get_test_cycle_structure(self, cycle_key: str) -> list[dict]:
+    def get_test_cycle_structure(self, cycle_key: str) -> List[dict]:
         test_cycle_structure = self.session.get(
             self.server_url + "cycle/" + cycle_key + "/structure",
         )
         return test_cycle_structure.json()
 
-    def get_tov_structure(self, tovKey: str) -> list[dict]:
+    def get_tov_structure(self, tovKey: str) -> List[dict]:
         tov_structure = self.session.get(
             self.server_url + "tov/" + tovKey + "/structure",
         )
@@ -453,7 +453,7 @@ class JobTimeout(requests.exceptions.Timeout):
 
 class ConnectionLog:
     def __init__(self):
-        self.connections: list[Connection] = []
+        self.connections: List[Connection] = []
 
     @property
     def len(self) -> int:
