@@ -16,7 +16,7 @@
 
 from os.path import isdir, isfile, abspath, dirname
 import os
-from typing import Callable, Union, List
+from typing import Callable, Union, List, Dict
 from questionary import select, checkbox, unsafe_prompt, confirm
 from questionary import Style
 from questionary import Choice
