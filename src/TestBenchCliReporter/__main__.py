@@ -121,7 +121,7 @@ def main():
             arg.server
             and arg.login
             and arg.password
-            and ((arg.project and arg.version) or arg.type == "i")
+            and ((arg.project and arg.version) or arg.tovKey or arg.cycleKey or arg.type == "i")
         ):
             server = resolve_server_name(arg.server)
 
