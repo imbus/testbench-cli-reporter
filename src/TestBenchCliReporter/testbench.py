@@ -101,12 +101,15 @@ def delay():
 
 
 def spin_spinner(message: str):
-    for cursor in spinner():
-        print(
-            f"{message} {cursor}",
-            end="\r",
-        )
-        time.sleep(delay())
+    try:
+        for cursor in spinner():
+            print(
+                f"{message} {cursor}",
+                end="\r",
+            )
+            time.sleep(delay())
+    except UnicodeEncodeError:
+        pass
 
 
 class Connection:
