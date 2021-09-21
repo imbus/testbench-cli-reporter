@@ -29,7 +29,7 @@ import os
 
 
 def spinner():
-    if os.name == "nt":
+    if os.name != "posix":
         return ["_", "_", "_", "-", "`", "`", "'", "´", "-", "_", "_", "_"]
     else:
         return [
