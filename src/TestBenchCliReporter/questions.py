@@ -16,7 +16,7 @@
 
 from os.path import isdir, isfile, abspath, dirname
 import os
-from typing import Optional, Callable, Union, List
+from typing import Callable, Union, List
 from questionary import select, checkbox, unsafe_prompt, confirm
 from questionary import Style
 from questionary import Choice
@@ -48,7 +48,7 @@ def selection_prompt(
     choices: list[Choice],
     no_valid_option_message: str = None,
     style: Style = custom_style_fancy,
-    default: Union[str, None] = None,
+    default=None,
 ):
     valid_choices = [choice for choice in choices if not choice.disabled]
     if valid_choices:
