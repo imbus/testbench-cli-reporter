@@ -76,6 +76,18 @@ def main():
         default="",
     )
     parser.add_argument(
+        "--tovKey",
+        help="Test Object Version key to be exported <OPTIONAL>. If set overrides names.",
+        type=str,
+        default="",
+    )
+    parser.add_argument(
+        "--cycleKey",
+        help="Test Cycle key to be exported <OPTIONAL>. If set overrides names.",
+        type=str,
+        default="",
+    )
+    parser.add_argument(
         "-u",
         "--uid",
         help="Root UID to be exported <OPTIONAL, Default = ROOT>",
@@ -132,6 +144,8 @@ def main():
                             "projectPath": [
                                 e for e in [arg.project, arg.version, arg.cycle] if e
                             ],
+                            "cycleKey": arg.cycleKey,
+                            "tovKey": arg.tovKey,
                             "reportRootUID": arg.uid,
                             "filters": [],
                             "outputPath": arg.path,
@@ -146,6 +160,8 @@ def main():
                             "projectPath": [
                                 e for e in [arg.project, arg.version, arg.cycle] if e
                             ],
+                            "cycleKey": arg.cycleKey,
+                            "tovKey": arg.tovKey,
                             "reportRootUID": arg.uid,
                             "defaultTester": None,
                             "filters": [],
