@@ -12,15 +12,12 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from __future__ import annotations
+#from __future__ import annotations
 import sys
-from typing import Dict, Optional, Union, List
+from typing import Dict, Optional
 
-import requests
 from questionary import print as pprint
 from TestBenchCliReporter import questions
-from TestBenchCliReporter import testbench
-from TestBenchCliReporter import actions
 import json
 from collections import OrderedDict
 
@@ -70,52 +67,7 @@ XmlExportConfig = {
 }
 
 
-def login() -> testbench.Connection:
-    credentials = questions.ask_for_test_bench_credentials()
-
-    while True:
-        connection = testbench.Connection(**credentials)
-        try:
-            if connection.check_is_working():
-                return connection
-
-        except requests.HTTPError:
-            print("Invalid login credentials.")
-            action = questions.ask_for_action_after_failed_login()
-            if action == "retry_password":
-                credentials["password"] = questions.ask_for_testbench_password()
-            elif action == "change_user":
-                credentials["loginname"] = questions.ask_for_testbench_loginname()
-                credentials["password"] = questions.ask_for_testbench_password()
-            elif action == "change_server":
-                credentials = questions.ask_for_test_bench_credentials()
-            else:
-                close_program()
-
-        except (requests.ConnectionError, requests.exceptions.MissingSchema):
-            print("Invalid server url.")
-            action = questions.ask_for_action_after_failed_server_connection()
-            if action == "retry_server":
-                credentials["server_url"] = questions.ask_for_test_bench_server_url()
-            elif action == "change_server":
-                credentials = questions.ask_for_test_bench_credentials()
-            else:
-                close_program()
-
-        except requests.exceptions.Timeout:
-            print("No connection could be established due to timeout.")
-            action = questions.ask_for_action_after_login_timeout()
-            if action == "retry":
-                pass
-            elif action == "retry_server":
-                credentials["server_url"] = questions.ask_for_test_bench_server_url()
-            elif action == "change_server":
-                credentials = questions.ask_for_test_bench_credentials()
-            else:
-                close_program()
-
-
-def choose_action() -> actions.AbstractAction:
+def choose_action():
     return questions.ask_for_next_action()
 
 

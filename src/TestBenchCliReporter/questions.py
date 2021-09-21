@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from __future__ import annotations
+#from __future__ import annotations
 
 from os.path import isdir, isfile, abspath, dirname
 import os
@@ -48,7 +48,7 @@ def selection_prompt(
     choices: list[Choice],
     no_valid_option_message: str = None,
     style: Style = custom_style_fancy,
-    default: Optional[str] = None,
+    default: Union[str, None] = None,
 ):
     valid_choices = [choice for choice in choices if not choice.disabled]
     if valid_choices:
@@ -65,7 +65,7 @@ def selection_prompt(
 def confirm_prompt(
     message: str,
     style: Style = custom_style_fancy,
-    default: Optional[bool] = False,
+    default: bool = False,
 ):
     return confirm(
         message=message,
@@ -95,10 +95,10 @@ def checkbox_prompt(
 def text_prompt(
     message: str,
     type: str = "text",
-    validation: Optional[Callable[[str], bool]] = lambda val: val != "",
+    validation: Callable[[str], bool] = lambda val: val != "",
     style: Style = custom_style_fancy,
     default: str = "",
-    filter: Optional[Callable[[str], str]] = lambda val: val,
+    filter: Callable[[str], str] = lambda val: val,
 ):
     question = [
         {
@@ -344,7 +344,7 @@ def ask_for_action_after_login_timeout() -> str:
     )
 
 
-def ask_for_next_action() -> actions.AbstractAction:
+def ask_for_next_action():
     return selection_prompt(
         message="What do you want to do?",
         choices=[

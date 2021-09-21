@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from __future__ import annotations
+#from __future__ import annotations
 
 import base64
 from typing import Optional, Union, List, Dict
@@ -20,7 +20,8 @@ import requests
 import urllib3
 import time
 from TestBenchCliReporter.actions import AbstractAction
-from TestBenchCliReporter.util import XmlExportConfig, ImportConfig
+from TestBenchCliReporter import questions
+from TestBenchCliReporter.util import XmlExportConfig, ImportConfig, close_program
 from questionary import print as pprint
 import json
 import os
@@ -107,37 +108,6 @@ def spin_spinner(message: str):
         time.sleep(delay())
 
 
-class ConnectionLog:
-    def __init__(self):
-        self.connections: list[Connection] = []
-
-    @property
-    def len(self) -> int:
-        return len(self.connections)
-
-    @property
-    def active_connection(self) -> Connection:
-        return self.connections[-1]
-
-    def next(self):
-        self.connections = self.connections[1:] + self.connections[:1]
-
-    def remove(self, connection):
-        self.connections.remove(connection)
-
-    def add_connection(self, new_connection: Connection):
-        self.connections.append(new_connection)
-
-    def export_as_json(self, output_file_path: str):
-        print("Generating JSON export")
-        export_dict = {
-            "configuration": [connection.export() for connection in self.connections]
-        }
-
-        with open(output_file_path, "w") as output_file:
-            json.dump(export_dict, output_file, indent=2)
-
-
 class Connection:
     def __init__(
         self,
@@ -204,7 +174,7 @@ class Connection:
     def add_action(self, action: AbstractAction):
         self.action_log.append(action)
 
-    def check_is_identical(self, other: Connection) -> bool:
+    def check_is_identical(self, other) -> bool:
         if (
             self.server_url == other.server_url
             and self.loginname == other.loginname
@@ -422,6 +392,51 @@ class Connection:
         return tov_structure.json()
 
 
+def login() -> Connection:
+    credentials = questions.ask_for_test_bench_credentials()
+
+    while True:
+        connection = Connection(**credentials)
+        try:
+            if connection.check_is_working():
+                return connection
+
+        except requests.HTTPError:
+            print("Invalid login credentials.")
+            action = questions.ask_for_action_after_failed_login()
+            if action == "retry_password":
+                credentials["password"] = questions.ask_for_testbench_password()
+            elif action == "change_user":
+                credentials["loginname"] = questions.ask_for_testbench_loginname()
+                credentials["password"] = questions.ask_for_testbench_password()
+            elif action == "change_server":
+                credentials = questions.ask_for_test_bench_credentials()
+            else:
+                close_program()
+
+        except (requests.ConnectionError, requests.exceptions.MissingSchema):
+            print("Invalid server url.")
+            action = questions.ask_for_action_after_failed_server_connection()
+            if action == "retry_server":
+                credentials["server_url"] = questions.ask_for_test_bench_server_url()
+            elif action == "change_server":
+                credentials = questions.ask_for_test_bench_credentials()
+            else:
+                close_program()
+
+        except requests.exceptions.Timeout:
+            print("No connection could be established due to timeout.")
+            action = questions.ask_for_action_after_login_timeout()
+            if action == "retry":
+                pass
+            elif action == "retry_server":
+                credentials["server_url"] = questions.ask_for_test_bench_server_url()
+            elif action == "change_server":
+                credentials = questions.ask_for_test_bench_credentials()
+            else:
+                close_program()
+
+
 class TimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
     def __init__(self, timeout: Optional[int] = 60, *args, **kwargs):
         self.timeout = timeout
@@ -434,3 +449,34 @@ class TimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
 
 class JobTimeout(requests.exceptions.Timeout):
     pass
+
+
+class ConnectionLog:
+    def __init__(self):
+        self.connections: list[Connection] = []
+
+    @property
+    def len(self) -> int:
+        return len(self.connections)
+
+    @property
+    def active_connection(self) -> Connection:
+        return self.connections[-1]
+
+    def next(self):
+        self.connections = self.connections[1:] + self.connections[:1]
+
+    def remove(self, connection):
+        self.connections.remove(connection)
+
+    def add_connection(self, new_connection: Connection):
+        self.connections.append(new_connection)
+
+    def export_as_json(self, output_file_path: str):
+        print("Generating JSON export")
+        export_dict = {
+            "configuration": [connection.export() for connection in self.connections]
+        }
+
+        with open(output_file_path, "w") as output_file:
+            json.dump(export_dict, output_file, indent=2)

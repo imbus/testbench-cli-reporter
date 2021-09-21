@@ -17,18 +17,17 @@ from re import fullmatch
 from time import sleep
 from typing import Optional
 
-from TestBenchCliReporter.testbench import ConnectionLog, Connection, spin_spinner
+from TestBenchCliReporter.testbench import ConnectionLog, Connection, spin_spinner, login
 from TestBenchCliReporter.util import (
     rotate,
     close_program,
-    login,
     get_configuration,
     choose_action,
 )
 from TestBenchCliReporter.actions import Action
 from requests.exceptions import Timeout
 
-__version__ = "1.0.0"
+__version__ = "1.0.1a5"
 
 
 def main():

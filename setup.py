@@ -39,6 +39,6 @@ setup(
         "Topic :: Software Development :: Testing",
         "Topic :: Software Development :: Testing :: Acceptance",
     ],
-    install_requires=["questionary>=1.9.0", "requests", "urllib3"],
+    install_requires=["questionary>=1.9.0", "requests", "urllib3", "typing-extensions >= 3.7.4.3"],
     python_requires=">=3.6",
 )
