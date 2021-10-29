@@ -32,6 +32,8 @@ Starting manual mode
 In here enter the testbench server you want to interact with. 
 If you don't enter a port, the default TestBench port 9443 is used.
 
+If you don't know the server adress of your testbench instance you can find it inside your iTBClient intallation folder: bin/application.conf
+
 2. Enter Credential
 
 Next Step is providing login data the testbench-cli-reporter should use to connect with the TestBench. 
