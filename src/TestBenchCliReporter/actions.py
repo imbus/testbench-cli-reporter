@@ -21,14 +21,16 @@ from os import path
 from xml.etree import ElementTree as ET
 import sys
 import base64
-from TestBenchCliReporter import questions
-from TestBenchCliReporter import testbench
+from TestBenchCliReporter import questions, testbench
 from TestBenchCliReporter.util import (
     close_program,
     get_project_keys,
     XmlExportConfig,
     ImportConfig,
     pretty_print,
+    parser,
+    pretty_print_project_selection,
+    pretty_print_tse_information,
 )
 
 
@@ -74,48 +76,13 @@ class ExportXMLReport(AbstractAction):
             selected_tov["name"],
         ]
         selected_cycle = questions.ask_to_select_cycle(selected_tov, export=True)
-        print("  Selection:")
-
-        pretty_print(
-            {
-                "value": f"{' ' * 4 + selected_project['name']: <50}",
-                "style": "#06c8ff bold italic",
-                "end": None,
-            },
-            {"value": f"  projectKey: ", "end": None},
-            {
-                "value": f"{selected_project['key']['serial']: >15}",
-                "style": "#06c8ff bold italic",
-            },
-            {
-                "value": f"{' ' * 6 + selected_tov['name']: <50}",
-                "style": "#06c8ff bold italic",
-                "end": None,
-            },
-            {"value": f"  tovKey:     ", "end": None},
-            {
-                "value": f"{selected_tov['key']['serial']: >15}",
-                "style": "#06c8ff bold italic",
-            },
-        )
+        pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
         if selected_cycle == "NO_EXEC":
             self.parameters["cycleKey"] = None
             tttree_structure = connection_log.active_connection.get_tov_structure(
                 self.parameters["tovKey"]
             )
         else:
-            pretty_print(
-                {
-                    "value": f"{' ' * 8 + selected_cycle['name']: <50}",
-                    "style": "#06c8ff bold italic",
-                    "end": None,
-                },
-                {"value": f"  cycleKey:   ", "end": None},
-                {
-                    "value": f"{selected_cycle['key']['serial']: >15}",
-                    "style": "#06c8ff bold italic",
-                },
-            )
             self.parameters["cycleKey"] = selected_cycle["key"]["serial"]
             self.parameters["projectPath"].append(selected_cycle["name"])
             tttree_structure = (
@@ -134,10 +101,13 @@ class ExportXMLReport(AbstractAction):
         return True
 
     def trigger(self, connection_log) -> Union[bool, str]:
-        if not self.parameters.get("cycleKey") or self.parameters.get("cycleKey") == "0":
+        if (
+            not self.parameters.get("cycleKey")
+            or self.parameters.get("cycleKey") == "0"
+        ):
             if (
-                    not self.parameters.get("tovKey")
-                    and len(self.parameters["projectPath"]) >= 2
+                not self.parameters.get("tovKey")
+                and len(self.parameters["projectPath"]) >= 2
             ):
                 all_projects = connection_log.active_connection.get_all_projects()
                 (
@@ -212,9 +182,9 @@ class ImportExecutionResults(AbstractAction):
             all_projects, default=project
         )
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
-        self.parameters["cycleKey"] = questions.ask_to_select_cycle(
-            selected_tov, default=cycle
-        )["key"]["serial"]
+        selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle)
+        pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
+        self.parameters["cycleKey"] = selected_cycle["key"]["serial"]
         cycle_structure = connection_log.active_connection.get_test_cycle_structure(
             self.parameters["cycleKey"]
         )
@@ -301,6 +271,59 @@ class ImportExecutionResults(AbstractAction):
                 {"value": f" was imported"},
             )
             return True
+
+
+class BrowseProjects(UnloggedAction):
+    def prepare(self, connection_log) -> bool:
+        arg = parser.parse_args()
+        project = arg.project
+        version = arg.version
+        cycle = arg.cycle
+        all_projects = connection_log.active_connection.get_all_projects()
+        selected_project = questions.ask_to_select_project(
+            all_projects, default=project
+        )
+        selected_tov = questions.ask_to_select_tov(selected_project, default=version)
+        selected_cycle = questions.ask_to_select_cycle(
+            selected_tov, default=cycle, export=True
+        )
+        pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
+        if selected_cycle == "NO_EXEC":
+            tttree_structure = connection_log.active_connection.get_tov_structure(
+                selected_tov["key"]["serial"]
+            )
+        else:
+            tttree_structure = (
+                connection_log.active_connection.get_test_cycle_structure(
+                    selected_cycle["key"]["serial"]
+                )
+            )
+        selected_uid = questions.ask_to_select_report_root_uid(tttree_structure)
+        for tse in tttree_structure:
+            info = (
+                tse.get("TestTheme_structure")
+                or tse.get("TestCaseSet_structure")
+                or tse.get("Root_structure")
+            )
+
+            if tse.get("TestTheme_structure"):
+                info = tse.get("TestTheme_structure")
+                typ = "TestTheme"
+            elif tse.get("TestCaseSet_structure"):
+                info = tse.get("TestCaseSet_structure")
+                typ = "TestCaseSet"
+            elif tse.get("Root_structure"):
+                info = tse.get("Root_structure")
+                typ = "Root"
+            else:
+                raise ValueError(f"Unknown Element Type: {str(tse)}")
+            if info.get("uniqueID") == selected_uid:
+                pretty_print_tse_information(tse, typ, info)
+
+        return True
+
+    def trigger(self, connection_log) -> bool:
+        return True
 
 
 class ExportActionLog(UnloggedAction):

@@ -12,8 +12,9 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-#from __future__ import annotations
+# from __future__ import annotations
 import sys
+import argparse
 from typing import Dict, Optional
 
 from questionary import print as pprint
@@ -65,6 +66,82 @@ XmlExportConfig = {
     },
     "<CUSTOM>": False,
 }
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "-c",
+    "--config",
+    help="Path to a config json file to execute pre-set actions based on the given configuration.",
+    type=str,
+)
+parser.add_argument(
+    "-s",
+    "--server",
+    help="TestBench Server address (hostname:port).",
+    type=str,
+    default="",
+)
+parser.add_argument("--login", help="Users Login.", type=str, default="")
+parser.add_argument("--password", help="Users Password.", type=str, default="")
+parser.add_argument(
+    "-p",
+    "--project",
+    help="Project name to be exported <OPTIONAL if --type is 'i'>.",
+    type=str,
+    default="",
+)
+parser.add_argument(
+    "-v",
+    "--version",
+    help="Test Object Version name to be exported <OPTIONAL if --type is 'i'>.",
+    type=str,
+    default="",
+)
+parser.add_argument(
+    "-y",
+    "--cycle",
+    help="Test Cycle name to be exported <OPTIONAL>",
+    type=str,
+    default="",
+)
+parser.add_argument(
+    "--tovKey",
+    help="Test Object Version key to be exported <OPTIONAL>. If set overrides names.",
+    type=str,
+    default="",
+)
+parser.add_argument(
+    "--cycleKey",
+    help="Test Cycle key to be exported <OPTIONAL>. If set overrides names.",
+    type=str,
+    default="",
+)
+parser.add_argument(
+    "-u",
+    "--uid",
+    help="Root UID to be exported <OPTIONAL, Default = ROOT>",
+    type=str,
+    default="ROOT",
+)
+parser.add_argument(
+    "-t",
+    "--type",
+    help="'e' for Export <default>, 'i' for Import",
+    type=str,
+    choices=["e", "i"],
+    default="e",
+)
+parser.add_argument(
+    "--manual", help="Switch to force manual mode.", action="store_true"
+)
+parser.add_argument(
+    "path",
+    nargs="?",
+    help="Input- and Output-Path for xml reports <OPTIONAL, Default = report.zip>.",
+    type=str,
+    default="report.zip",
+)
 
 
 def choose_action():
@@ -208,3 +285,91 @@ def get_project_keys(
         {"value": f"{cycle_key}", "style": "#06c8ff bold italic"},
     )
     return project_key, tov_key, cycle_key
+
+
+def pretty_print_project_selection(selected_project, selected_tov, selected_cycle):
+    print("  Selection:")
+    pretty_print(
+        {
+            "value": f"{' ' * 4 + selected_project['name']: <50}",
+            "style": "#06c8ff bold italic",
+            "end": None,
+        },
+        {"value": f"  projectKey: ", "end": None},
+        {
+            "value": f"{selected_project['key']['serial']: >15}",
+            "style": "#06c8ff bold italic",
+        },
+        {
+            "value": f"{' ' * 6 + selected_tov['name']: <50}",
+            "style": "#06c8ff bold italic",
+            "end": None,
+        },
+        {"value": f"  tovKey:     ", "end": None},
+        {
+            "value": f"{selected_tov['key']['serial']: >15}",
+            "style": "#06c8ff bold italic",
+        },
+    )
+    if selected_cycle != "NO_EXEC":
+        pretty_print(
+            {
+                "value": f"{' ' * 8 + selected_cycle['name']: <50}",
+                "style": "#06c8ff bold italic",
+                "end": None,
+            },
+            {"value": f"  cycleKey:   ", "end": None},
+            {
+                "value": f"{selected_cycle['key']['serial']: >15}",
+                "style": "#06c8ff bold italic",
+            },
+        )
+
+
+def pretty_print_tse_information(tse, typ, info):
+    print("  Selection:")
+    pretty_print(
+        {
+            "value": f"{' ' * 2 + typ: <40}",
+            "style": "#06c8ff bold italic",
+            "end": None,
+        },
+        {"value": f"{typ + 'Key:' : <18}", "end": None},
+        {
+            "value": f"{info['key']['serial']: >21}",
+            "style": "#06c8ff bold italic",
+        },
+        {
+            "value": f"{' ' * 4 + info['numbering'] + ' [' + info['uniqueID'] + ']': <40}",
+            "style": "#06c8ff bold italic",
+            "end": None,
+        },
+        {"value": f"{'Specification_key:':<18}", "end": None},
+        {
+            "value": f"{tse['spec']['Specification_key']['serial']: >21}",
+            "style": "#06c8ff bold italic",
+        },
+        {
+            "value": f"{' ' * 4: <40}",
+            "style": "#06c8ff bold italic",
+            "end": None,
+        },
+        {"value": f"{'Automation_key:':<18}", "end": None},
+        {
+            "value": f"{tse['aut']['Automation_key']['serial']: >21}",
+            "style": "#06c8ff bold italic",
+        },
+    )
+    if tse.get("exec"):
+        pretty_print(
+            {
+                "value": f"{'': <40}",
+                "style": "#06c8ff bold italic",
+                "end": None,
+            },
+            {"value": f"{'Execution_key:':<18}", "end": None},
+            {
+                "value": f"{tse['exec']['Execution_key']['serial']: >21}",
+                "style": "#06c8ff bold italic",
+            },
+        )

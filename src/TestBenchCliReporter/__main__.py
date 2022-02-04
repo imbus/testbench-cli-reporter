@@ -12,17 +12,22 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-import argparse
 from re import fullmatch
 from time import sleep
 from typing import Optional
 
-from TestBenchCliReporter.testbench import ConnectionLog, Connection, spin_spinner, login
+from TestBenchCliReporter.testbench import (
+    ConnectionLog,
+    Connection,
+    spin_spinner,
+    login,
+)
 from TestBenchCliReporter.util import (
     rotate,
     close_program,
     get_configuration,
     choose_action,
+    parser,
 )
 from TestBenchCliReporter.actions import Action
 from requests.exceptions import Timeout
@@ -31,84 +36,6 @@ __version__ = "1.0.1a5"
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-c",
-        "--config",
-        help="Path to a config json file to execute pre-set actions based on the given configuration.",
-        type=str,
-    )
-    parser.add_argument(
-        "-s",
-        "--server",
-        help="TestBench Server address (hostname:port).",
-        type=str,
-    )
-    parser.add_argument(
-        "--login",
-        help="Users Login.",
-        type=str,
-    )
-    parser.add_argument(
-        "--password",
-        help="Users Password.",
-        type=str,
-    )
-    parser.add_argument(
-        "-p",
-        "--project",
-        help="Project name to be exported <OPTIONAL if --type is 'i'>.",
-        type=str,
-        default="",
-    )
-    parser.add_argument(
-        "-v",
-        "--version",
-        help="Test Object Version name to be exported <OPTIONAL if --type is 'i'>.",
-        type=str,
-        default="",
-    )
-    parser.add_argument(
-        "-y",
-        "--cycle",
-        help="Test Cycle name to be exported <OPTIONAL>",
-        type=str,
-        default="",
-    )
-    parser.add_argument(
-        "--tovKey",
-        help="Test Object Version key to be exported <OPTIONAL>. If set overrides names.",
-        type=str,
-        default="",
-    )
-    parser.add_argument(
-        "--cycleKey",
-        help="Test Cycle key to be exported <OPTIONAL>. If set overrides names.",
-        type=str,
-        default="",
-    )
-    parser.add_argument(
-        "-u",
-        "--uid",
-        help="Root UID to be exported <OPTIONAL, Default = ROOT>",
-        type=str,
-        default="ROOT",
-    )
-    parser.add_argument(
-        "-t",
-        "--type",
-        help="'e' for Export <default>, 'i' for Import",
-        type=str,
-        choices=["e", "i"],
-        default="e",
-    )
-    parser.add_argument(
-        "path",
-        nargs="?",
-        help="Input- and Output-Path for xml reports <OPTIONAL, Default = report.zip>.",
-        type=str,
-        default="report.zip",
-    )
     arg = parser.parse_args()
     try:
         if arg.config:
@@ -121,7 +48,13 @@ def main():
             arg.server
             and arg.login
             and arg.password
-            and ((arg.project and arg.version) or arg.tovKey or arg.cycleKey or arg.type == "i")
+            and (
+                (arg.project and arg.version)
+                or arg.tovKey
+                or arg.cycleKey
+                or arg.type == "i"
+            )
+            and not arg.manual
         ):
             server = resolve_server_name(arg.server)
 
@@ -171,6 +104,26 @@ def main():
                 )
             print("Arguments found")
             run_automatic_mode(configuration)
+        elif (
+            arg.server
+            or arg.login
+            or arg.password
+            or arg.project
+            or arg.version
+            or arg.cycle
+        ):
+            server = resolve_server_name(arg.server) if arg.server else ""
+            configuration = {
+                "configuration": [
+                    {
+                        "server_url": server,
+                        "verify": False,
+                        "loginname": arg.login,
+                        "password": arg.password,
+                    }
+                ]
+            }
+            run_manual_mode(configuration)
         else:
             print("No config file given")
             run_manual_mode()
@@ -190,12 +143,17 @@ def resolve_server_name(server):
     return server
 
 
-def run_manual_mode():
+def run_manual_mode(configuration: dict = {}):
     print("Starting manual mode")
     connection_log = ConnectionLog()
 
     while True:
-        active_connection = login()
+        if configuration:
+            config = configuration.get("configuration", [{}])[0]
+            server = config.get("server_url", "")
+            loginname = config.get("loginname", "")
+            pwd = config.get("password", "")
+        active_connection = login(server, loginname, pwd)
         connection_log.add_connection(active_connection)
         next_action = choose_action()
         while next_action is not None:

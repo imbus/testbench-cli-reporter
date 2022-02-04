@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-#from __future__ import annotations
+# from __future__ import annotations
 
 from os.path import isdir, isfile, abspath, dirname
 import os
@@ -115,21 +115,22 @@ def text_prompt(
     return unsafe_prompt(question)["sole_question"]
 
 
-def ask_for_test_bench_credentials() -> dict:
+def ask_for_test_bench_credentials(server="", login="", pwd="") -> dict:
     return {
-        "server_url": ask_for_test_bench_server_url(),
+        "server_url": ask_for_test_bench_server_url(server),
         "verify": False,  # ask_for_ssl_verification_option(), #ToDo Hier könnten optional Certificate geprüft werden
-        "loginname": ask_for_testbench_loginname(),
-        "password": ask_for_testbench_password(),
+        "loginname": ask_for_testbench_loginname(login),
+        "password": ask_for_testbench_password(pwd),
     }
 
 
-def ask_for_test_bench_server_url() -> str:
+def ask_for_test_bench_server_url(default="") -> str:
     server_url = text_prompt(
         message="Enter the TestBench server address and port <host:port>:",
         validation=lambda text: True
         if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/)?", text)
         else f"Server '{text}' is not valid! ",
+        default=default,
         filter=lambda raw: sub(
             r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/?)?$",
             r"https://\2\3/api/1/",
@@ -168,17 +169,19 @@ def ask_for_certificate_path() -> str:
     )
 
 
-def ask_for_testbench_loginname() -> str:
+def ask_for_testbench_loginname(default="") -> str:
     return text_prompt(
         message="Enter your login name:",
+        default=default,
     )
 
 
-def ask_for_testbench_password() -> str:
+def ask_for_testbench_password(default="") -> str:
     return text_prompt(
         message="Enter your password:",
         type="password",
         validation=None,
+        default=default,
     )
 
 
@@ -350,6 +353,7 @@ def ask_for_next_action():
         choices=[
             Choice("Export XML Report", actions.ExportXMLReport()),
             Choice("Import execution results", actions.ImportExecutionResults()),
+            Choice("Browser Projects", actions.BrowseProjects()),
             Choice("Write history to config file", actions.ExportActionLog()),
             Choice("Change connection", actions.ChangeConnection()),
             Choice("Quit", actions.Quit()),

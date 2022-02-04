@@ -13,7 +13,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-#from __future__ import annotations
+# from __future__ import annotations
 
 import base64
 from typing import Optional, Union, List, Dict
@@ -396,8 +396,16 @@ class Connection:
         return tov_structure.json()
 
 
-def login() -> Connection:
-    credentials = questions.ask_for_test_bench_credentials()
+def login(server="", login="", pwd="") -> Connection:
+    if server and login and pwd:
+        credentials = {
+            "server_url": server,
+            "verify": False,
+            "loginname": login,
+            "password": pwd,
+        }
+    else:
+        credentials = questions.ask_for_test_bench_credentials(server, login, pwd)
 
     while True:
         connection = Connection(**credentials)
