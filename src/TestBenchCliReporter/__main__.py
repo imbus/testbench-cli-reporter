@@ -104,14 +104,7 @@ def main():
                 )
             print("Arguments found")
             run_automatic_mode(configuration)
-        elif (
-            arg.server
-            or arg.login
-            or arg.password
-            or arg.project
-            or arg.version
-            or arg.cycle
-        ):
+        else:
             server = resolve_server_name(arg.server) if arg.server else ""
             configuration = {
                 "configuration": [
@@ -123,10 +116,8 @@ def main():
                     }
                 ]
             }
-            run_manual_mode(configuration)
-        else:
             print("No config file given")
-            run_manual_mode()
+            run_manual_mode(configuration)
     except KeyboardInterrupt:
         close_program()
 
@@ -148,11 +139,10 @@ def run_manual_mode(configuration: dict = {}):
     connection_log = ConnectionLog()
 
     while True:
-        if configuration:
-            config = configuration.get("configuration", [{}])[0]
-            server = config.get("server_url", "")
-            loginname = config.get("loginname", "")
-            pwd = config.get("password", "")
+        config = configuration.get("configuration", [{}])[0]
+        server = config.get("server_url", "")
+        loginname = config.get("loginname", "")
+        pwd = config.get("password", "")
         active_connection = login(server, loginname, pwd)
         connection_log.add_connection(active_connection)
         next_action = choose_action()
