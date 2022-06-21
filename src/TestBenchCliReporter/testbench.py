@@ -13,103 +13,20 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# from __future__ import annotations
-
 import base64
 from typing import Optional, Union, List, Dict
 import requests
 import urllib3
-import time
-from TestBenchCliReporter.actions import AbstractAction
-from TestBenchCliReporter import questions
-from TestBenchCliReporter.util import XmlExportConfig, ImportConfig, close_program
+from . import questions
+from .util import (
+    XmlExportConfig,
+    ImportConfig,
+    close_program,
+    spin_spinner,
+    AbstractAction,
+)
 from questionary import print as pprint
 import json
-import os
-
-
-def spinner():
-    if os.name != "posix":
-        return ["_", "_", "_", "-", "`", "`", "'", "´", "-", "_", "_", "_"]
-    else:
-        return [
-            "⢀⠀",
-            "⡀⠀",
-            "⠄⠀",
-            "⢂⠀",
-            "⡂⠀",
-            "⠅⠀",
-            "⢃⠀",
-            "⡃⠀",
-            "⠍⠀",
-            "⢋⠀",
-            "⡋⠀",
-            "⠍⠁",
-            "⢋⠁",
-            "⡋⠁",
-            "⠍⠉",
-            "⠋⠉",
-            "⠋⠉",
-            "⠉⠙",
-            "⠉⠙",
-            "⠉⠩",
-            "⠈⢙",
-            "⠈⡙",
-            "⢈⠩",
-            "⡀⢙",
-            "⠄⡙",
-            "⢂⠩",
-            "⡂⢘",
-            "⠅⡘",
-            "⢃⠨",
-            "⡃⢐",
-            "⠍⡐",
-            "⢋⠠",
-            "⡋⢀",
-            "⠍⡁",
-            "⢋⠁",
-            "⡋⠁",
-            "⠍⠉",
-            "⠋⠉",
-            "⠋⠉",
-            "⠉⠙",
-            "⠉⠙",
-            "⠉⠩",
-            "⠈⢙",
-            "⠈⡙",
-            "⠈⠩",
-            "⠀⢙",
-            "⠀⡙",
-            "⠀⠩",
-            "⠀⢘",
-            "⠀⡘",
-            "⠀⠨",
-            "⠀⢐",
-            "⠀⡐",
-            "⠀⠠",
-            "⠀⢀",
-            "⠀⡀",
-            "⠀⠀",
-        ]
-
-
-def delay():
-    if os.name == "nt":
-        return 0.1
-    else:
-        return 0.02
-
-
-def spin_spinner(message: str):
-    try:
-        for cursor in spinner():
-            print(
-                f"{message} {cursor}",
-                end="\r",
-            )
-            time.sleep(delay())
-    except UnicodeEncodeError:
-        pass
 
 
 class Connection:

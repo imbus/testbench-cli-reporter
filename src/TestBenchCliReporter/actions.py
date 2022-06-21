@@ -12,17 +12,14 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# from __future__ import annotations
-
-from typing import Dict, Optional, Union
+from typing import Dict, Union
 from zipfile import ZipFile
-from abc import ABC, abstractmethod
 from os import path
 from xml.etree import ElementTree as ET
 import sys
 import base64
-from TestBenchCliReporter import questions, testbench
-from TestBenchCliReporter.util import (
+from . import questions, testbench
+from .util import (
     close_program,
     get_project_keys,
     XmlExportConfig,
@@ -31,33 +28,8 @@ from TestBenchCliReporter.util import (
     parser,
     pretty_print_project_selection,
     pretty_print_tse_information,
+    AbstractAction,
 )
-
-
-class AbstractAction(ABC):
-    def __init__(self, parameters: Optional[dict] = None):
-        self.parameters = parameters or {}
-        self.report_tmp_name = ""
-        self.job_id = ""
-
-    def prepare(self, connection_log) -> bool:
-        return True
-
-    @abstractmethod
-    def trigger(self, connection_log) -> bool:
-        raise NotImplementedError
-
-    def wait(self, connection_log) -> bool:
-        return True
-
-    def poll(self, connection_log) -> bool:
-        return True
-
-    def finish(self, connection_log) -> bool:
-        return True
-
-    def export(self):
-        return {"type": type(self).__name__, "parameters": self.parameters}
 
 
 class UnloggedAction(AbstractAction):
@@ -228,10 +200,10 @@ class ImportExecutionResults(AbstractAction):
             self.job_id = (
                 connection_log.active_connection.trigger_execution_results_import(
                     self.parameters["cycleKey"],
-                    self.parameters["reportRootUID"],
+                    self.parameters.get("reportRootUID", "ROOT"),
                     serverside_file_name,
-                    self.parameters["defaultTester"],
-                    self.parameters["filters"],
+                    self.parameters.get("defaultTester", False),
+                    self.parameters.get("filters", []),
                     self.parameters.get("importConfig", ImportConfig["Typical"]),
                 )
             )
@@ -300,12 +272,6 @@ class BrowseProjects(UnloggedAction):
             )
         selected_uid = questions.ask_to_select_report_root_uid(tttree_structure)
         for tse in tttree_structure:
-            info = (
-                tse.get("TestTheme_structure")
-                or tse.get("TestCaseSet_structure")
-                or tse.get("Root_structure")
-            )
-
             if tse.get("TestTheme_structure"):
                 info = tse.get("TestTheme_structure")
                 typ = "TestTheme"
@@ -319,7 +285,6 @@ class BrowseProjects(UnloggedAction):
                 raise ValueError(f"Unknown Element Type: {str(tse)}")
             if info.get("uniqueID") == selected_uid:
                 pretty_print_tse_information(tse, typ, info)
-
         return True
 
     def trigger(self, connection_log) -> bool:

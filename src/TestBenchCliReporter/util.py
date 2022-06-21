@@ -12,13 +12,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# from __future__ import annotations
+import os
 import sys
 import argparse
+import time
+from abc import ABC, abstractmethod
+from re import fullmatch
 from typing import Dict, Optional
 
 from questionary import print as pprint
-from TestBenchCliReporter import questions
 import json
 from collections import OrderedDict
 
@@ -142,10 +144,6 @@ parser.add_argument(
     type=str,
     default="report.zip",
 )
-
-
-def choose_action():
-    return questions.ask_for_next_action()
 
 
 def close_program():
@@ -373,3 +371,125 @@ def pretty_print_tse_information(tse, typ, info):
                 "style": "#06c8ff bold italic",
             },
         )
+
+
+def resolve_server_name(server):
+    if fullmatch(r"([\w\-.\d]+)(:\d{1,5})", server):
+        server = f"https://{server}/api/1/"
+    elif fullmatch(r"([\w\-.\d]+)", server):
+        server = f"https://{server}:9443/api/1/"
+    elif fullmatch(r"https?://([\w\-.\d]+)(:\d{1,5})/api/1/", server):
+        server = server
+    else:
+        raise ValueError(f"Server name '{server}' is not valid.")
+    return server
+
+
+def spinner():
+    if os.name != "posix":
+        return ["_", "_", "_", "-", "`", "`", "'", "´", "-", "_", "_", "_"]
+    else:
+        return [
+            "⢀⠀",
+            "⡀⠀",
+            "⠄⠀",
+            "⢂⠀",
+            "⡂⠀",
+            "⠅⠀",
+            "⢃⠀",
+            "⡃⠀",
+            "⠍⠀",
+            "⢋⠀",
+            "⡋⠀",
+            "⠍⠁",
+            "⢋⠁",
+            "⡋⠁",
+            "⠍⠉",
+            "⠋⠉",
+            "⠋⠉",
+            "⠉⠙",
+            "⠉⠙",
+            "⠉⠩",
+            "⠈⢙",
+            "⠈⡙",
+            "⢈⠩",
+            "⡀⢙",
+            "⠄⡙",
+            "⢂⠩",
+            "⡂⢘",
+            "⠅⡘",
+            "⢃⠨",
+            "⡃⢐",
+            "⠍⡐",
+            "⢋⠠",
+            "⡋⢀",
+            "⠍⡁",
+            "⢋⠁",
+            "⡋⠁",
+            "⠍⠉",
+            "⠋⠉",
+            "⠋⠉",
+            "⠉⠙",
+            "⠉⠙",
+            "⠉⠩",
+            "⠈⢙",
+            "⠈⡙",
+            "⠈⠩",
+            "⠀⢙",
+            "⠀⡙",
+            "⠀⠩",
+            "⠀⢘",
+            "⠀⡘",
+            "⠀⠨",
+            "⠀⢐",
+            "⠀⡐",
+            "⠀⠠",
+            "⠀⢀",
+            "⠀⡀",
+            "⠀⠀",
+        ]
+
+
+def delay():
+    if os.name == "nt":
+        return 0.1
+    else:
+        return 0.02
+
+
+def spin_spinner(message: str):
+    try:
+        for cursor in spinner():
+            print(
+                f"{message} {cursor}",
+                end="\r",
+            )
+            time.sleep(delay())
+    except UnicodeEncodeError:
+        pass
+
+
+class AbstractAction(ABC):
+    def __init__(self, parameters: Optional[dict] = None):
+        self.parameters = parameters or {}
+        self.report_tmp_name = ""
+        self.job_id = ""
+
+    def prepare(self, connection_log) -> bool:
+        return True
+
+    @abstractmethod
+    def trigger(self, connection_log) -> bool:
+        raise NotImplementedError
+
+    def wait(self, connection_log) -> bool:
+        return True
+
+    def poll(self, connection_log) -> bool:
+        return True
+
+    def finish(self, connection_log) -> bool:
+        return True
+
+    def export(self):
+        return {"type": type(self).__name__, "parameters": self.parameters}

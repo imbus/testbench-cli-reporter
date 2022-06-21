@@ -12,8 +12,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# from __future__ import annotations
-
 from os.path import isdir, isfile, abspath, dirname
 import os
 from typing import Callable, Union, List, Dict
@@ -22,9 +20,8 @@ from questionary import Style
 from questionary import Choice
 from questionary import print as pprint
 from re import fullmatch, sub
-from TestBenchCliReporter import actions
-from TestBenchCliReporter import util
-from TestBenchCliReporter.util import XmlExportConfig, ImportConfig
+from . import actions, util
+from .util import XmlExportConfig, ImportConfig
 
 
 custom_style_fancy = Style(
