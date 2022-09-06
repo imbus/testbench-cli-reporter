@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 import base64
+import dataclasses
 import json
 from typing import Dict, List, Optional, Union
 
@@ -22,6 +23,7 @@ import urllib3
 from questionary import print as pprint
 
 from . import questions
+from .config_model import CliReporterConfig, Configuration
 from .util import AbstractAction, ImportConfig, XmlExportConfig, close_program, spin_spinner
 
 
@@ -71,18 +73,14 @@ class Connection:
     def close(self):
         self.session.close()
 
-    def export(self) -> dict:
+    def export(self) -> Configuration:
         basic_auth = base64.b64encode(f"{self.loginname}:{self.password}".encode("utf-8")).decode()
-        return {
-            "server_url": self.server_url,
-            "verify": self.session.verify,
-            "basicAuth": basic_auth,
-            "actions": [
-                action_export
-                for action_export in (action.export() for action in self.action_log)
-                if action_export is not None
-            ],
-        }
+        return Configuration(
+            server_url=self.server_url,
+            verify=self.session.verify,
+            basicAuth=basic_auth,
+            actions=[action.export() for action in self.action_log if action.export() is not None],
+        )
 
     def add_action(self, action: AbstractAction):
         self.action_log.append(action)
@@ -150,21 +148,21 @@ class Connection:
             filters = []
 
         if reportRootUID and reportRootUID != "ROOT":
-            report_config["reportRootUID"] = reportRootUID
-        report_config["filters"]: filters
-
-        if cycle_key and cycle_key != "0":
-            response = self.session.post(
-                self.server_url + "cycle/" + cycle_key + "/xmlReport",
-                json=report_config,
-            )
-        else:
-            response = self.session.post(
-                self.server_url + "tovs/" + tov_key + "/xmlReport",
-                json=report_config,
-            )
-        if response.status_code != requests.codes.accepted:
-            raise AssertionError(f"{response.status_code} {response.text}")
+            report_config.reportRootUID = reportRootUID
+        report_config.filters = filters
+        try:
+            if cycle_key and cycle_key != "0":
+                response = self.session.post(
+                    f"{self.server_url}cycle/{cycle_key}/xmlReport",
+                    json=dataclasses.asdict(report_config),
+                )
+            else:
+                response = self.session.post(
+                    f"{self.server_url}tovs/{tov_key}/xmlReport",
+                    json=dataclasses.asdict(report_config),
+                )
+        except requests.exceptions.HTTPError as e:
+            print(e.response.text)
         return response.json()["jobID"]
 
     def wait_for_tmp_xml_report_name(self, job_id: str) -> str:
@@ -230,23 +228,22 @@ class Connection:
         serverside_file_name: str,
         default_tester: str,
         filters: List[Dict[str, str]],
-        import_config: Dict = ImportConfig["Typical"],
+        import_config: Dict = None,
     ) -> str:
-
-        import_config["fileName"] = serverside_file_name
-        import_config["filters"] = filters
+        if import_config is None:
+            import_config = ImportConfig["Typical"]
+        import_config.fileName = serverside_file_name
+        import_config.filters = filters
         if default_tester:
-            import_config["defaultTester"] = default_tester
+            import_config.defaultTester = default_tester
         if report_root_uid and report_root_uid != "ROOT":
-            import_config["reportRootUID"] = report_root_uid
+            import_config.reportRootUID = report_root_uid
 
         try:
             job_id = self.session.post(
-                self.server_url + "cycle/" + cycle_key + "/executionResultsImport",
-                headers={
-                    "Accept": "application/zip",
-                },
-                json=import_config,
+                f"{self.server_url}cycle/{cycle_key}/executionResultsImport",
+                headers={"Accept": "application/zip"},
+                json=dataclasses.asdict(import_config),
             )
             return job_id.json()["jobID"]
         except requests.exceptions.RequestException as e:
@@ -389,7 +386,9 @@ class ConnectionLog:
 
     def export_as_json(self, output_file_path: str):
         print("Generating JSON export")
-        export_dict = {"configuration": [connection.export() for connection in self.connections]}
+        export_config = CliReporterConfig(
+            configuration=[connection.export() for connection in self.connections]
+        )
 
         with open(output_file_path, "w") as output_file:
-            json.dump(export_dict, output_file, indent=2)
+            json.dump(dataclasses.asdict(export_config), output_file, indent=2)

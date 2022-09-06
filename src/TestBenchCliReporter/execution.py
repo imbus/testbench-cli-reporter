@@ -7,30 +7,31 @@ from . import questions
 from .actions import Action
 from .testbench import Connection, ConnectionLog, login
 from .util import rotate, spin_spinner
+from .config_model import CliReporterConfig, Configuration
+from .log import setup_logger, logger
 
 
-def run_manual_mode(configuration=None):
-    if configuration is None:
-        configuration = {}
+def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
+    cli_config: CliReporterConfig = (
+        CliReporterConfig(configuration=[]) if configuration is None else configuration
+    )
     print("Starting manual mode")
     connection_log = ConnectionLog()
 
     while True:
-        config = configuration.get("configuration", [{}])[0]
-        server = config.get("server_url", "")
-        loginname = config.get("loginname", "")
-        pwd = config.get("password", "")
-        active_connection = login(server, loginname, pwd)
+        config = cli_config.configuration[0] if len(cli_config.configuration) else Configuration("")
+        active_connection = login(config.server_url, config.loginname, config.password)
         connection_log.add_connection(active_connection)
         next_action = questions.ask_for_next_action()
         while next_action is not None:
             try:
-                preparation_success = next_action.prepare(connection_log)
-                if preparation_success:
-                    if next_action.trigger(connection_log):
-                        if next_action.wait(connection_log):
-                            if next_action.finish(connection_log):
-                                active_connection.add_action(next_action)
+                if (
+                    next_action.prepare(connection_log)
+                    and next_action.trigger(connection_log)
+                    and next_action.wait(connection_log)
+                    and next_action.finish(connection_log)
+                ):
+                    active_connection.add_action(next_action)
             except KeyError as e:
                 print(f"key {str(e)} not found")
                 print(f"Aborted action")
@@ -50,73 +51,94 @@ def run_manual_mode(configuration=None):
 
 
 def run_automatic_mode(
-    configuration: dict, loginname: Optional[str] = None, password: Optional[str] = None
+    configuration: CliReporterConfig,
+    loginname: Optional[str] = None,
+    password: Optional[str] = None,
 ):
+    setup_logger(configuration.loggingConfig)
     print("Run Automatic Mode")
     connection_queue = ConnectionLog()
     try:
-        for connection_data in configuration["configuration"]:
-            connection = Connection(**connection_data)
-            if loginname:
-                connection.loginname = loginname
-            if password:
-                connection.password = password
-            connection_queue.add_connection(connection)
-
-        job_counter = 0
-        for i in range(len(connection_queue.connections)):
-            while connection_queue.active_connection.actions_to_trigger:
-                action_to_trigger = connection_queue.active_connection.actions_to_trigger[0]
-                action = Action(action_to_trigger["type"], action_to_trigger["parameters"])
-                try:
-                    action.trigger(connection_queue)
-                    connection_queue.active_connection.actions_to_wait_for.append(action)
-                    job_counter += 1
-                except AssertionError as e:
-                    print(e)
-                finally:
-                    connection_queue.active_connection.actions_to_trigger.remove(action_to_trigger)
-                sleep(0.05)
-            connection_queue.next()
-
-        print(f"{job_counter} jobs started at {len(connection_queue.connections)} server(s).")
-
-        while True:
-            active_connection = connection_queue.active_connection
-
-            spin_spinner("Wait for Jobs to be finished.")
-            for i in range(len(active_connection.actions_to_wait_for)):
-                action_to_wait_for = active_connection.actions_to_wait_for[0]
-                if action_to_wait_for.poll(connection_queue):
-                    active_connection.actions_to_finish.append(action_to_wait_for)
-                    active_connection.actions_to_wait_for.remove(action_to_wait_for)
-                else:
-                    active_connection.actions_to_wait_for = rotate(
-                        active_connection.actions_to_wait_for
-                    )
-
-            for i in range(len(active_connection.actions_to_finish)):
-                action_to_finish = active_connection.actions_to_finish[0]
-                if action_to_finish.finish(connection_queue):
-                    active_connection.action_log.append(action_to_finish)
-                    active_connection.actions_to_finish.remove(action_to_finish)
-                else:
-                    active_connection.actions_to_finish = rotate(
-                        active_connection.actions_to_finish
-                    )
-
-            if (
-                len(active_connection.actions_to_trigger)
-                + len(active_connection.actions_to_wait_for)
-                + len(active_connection.actions_to_finish)
-                == 0
-            ):
-                connection_queue.remove(active_connection)
-            if connection_queue.len > 1:
-                connection_queue.next()
-            elif connection_queue.len == 0:
-                break
+        fill_connection_queue(configuration, connection_queue, loginname, password)
+        trigger_all_actions(connection_queue)
+        poll_and_finish_actions(connection_queue)
 
     except KeyError as e:
         # TODO proper error handling
         print(f"key {str(e)} not found")
+
+
+def fill_connection_queue(configuration, connection_queue, loginname, password):
+    for connection_data in configuration.configuration:
+        connection = Connection(
+            server_url=connection_data.server_url,
+            verify=connection_data.verify,
+            basicAuth=connection_data.basicAuth,
+            actions=connection_data.actions,
+            loginname=loginname,
+            password=password,
+        )
+        connection_queue.add_connection(connection)
+
+
+def poll_and_finish_actions(connection_queue):
+    while True:
+        active_connection = connection_queue.active_connection
+        spin_spinner("Wait for Jobs to be finished.")
+        poll_actions_to_wait_for(active_connection, connection_queue)
+        execute_actions_to_finish(active_connection, connection_queue)
+
+        if active_connection_finished(active_connection):
+            connection_queue.remove(active_connection)
+        if connection_queue.len > 1:
+            connection_queue.next()
+        elif connection_queue.len == 0:
+            break
+
+
+def trigger_all_actions(connection_queue):
+    job_counter = 0
+    for _ in range(len(connection_queue.connections)):
+        while connection_queue.active_connection.actions_to_trigger:
+            action_to_trigger = connection_queue.active_connection.actions_to_trigger[0]
+            action = Action(action_to_trigger.type, action_to_trigger.parameters)
+            try:
+                action.trigger(connection_queue)
+                connection_queue.active_connection.actions_to_wait_for.append(action)
+                job_counter += 1
+            except AssertionError as e:
+                print(e)
+            finally:
+                connection_queue.active_connection.actions_to_trigger.remove(action_to_trigger)
+            sleep(0.05)
+        connection_queue.next()
+    print(f"{job_counter} jobs started at {len(connection_queue.connections)} server(s).")
+
+
+def execute_actions_to_finish(active_connection, connection_queue):
+    for _ in range(len(active_connection.actions_to_finish)):
+        action_to_finish = active_connection.actions_to_finish[0]
+        if action_to_finish.finish(connection_queue):
+            active_connection.action_log.append(action_to_finish)
+            active_connection.actions_to_finish.remove(action_to_finish)
+        else:
+            active_connection.actions_to_finish = rotate(active_connection.actions_to_finish)
+
+
+def poll_actions_to_wait_for(active_connection, connection_queue):
+    for _ in range(len(active_connection.actions_to_wait_for)):
+        action_to_wait_for = active_connection.actions_to_wait_for[0]
+        if action_to_wait_for.poll(connection_queue):
+            active_connection.actions_to_finish.append(action_to_wait_for)
+            active_connection.actions_to_wait_for.remove(action_to_wait_for)
+        else:
+            active_connection.actions_to_wait_for = rotate(active_connection.actions_to_wait_for)
+
+
+def active_connection_finished(active_connection):
+    return (
+        len(active_connection.actions_to_trigger)
+        + len(active_connection.actions_to_wait_for)
+        + len(active_connection.actions_to_finish)
+        == 0
+    )

@@ -2,7 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from config_model import LoggingConfig
+from .config_model import LoggingConfig
 
 logger = logging.Logger("testbench-reporter", logging.DEBUG)
 

@@ -24,6 +24,8 @@ from typing import Dict, Optional
 
 from questionary import print as pprint
 
+from .config_model import CliReporterConfig, ExportAction, ImportAction, TestCycleXMLReportOptions
+
 ImportConfig = {
     "Typical": {
         "ignoreNonExecutedTestCases": True,
@@ -36,37 +38,43 @@ ImportConfig = {
 
 
 XmlExportConfig = {
-    "Itep Export": {
-        "exportAttachments": True,
-        "exportDesignData": True,
-        "characterEncoding": "utf-16",
-        "suppressFilteredData": True,
-        "exportExpandedData": True,
-        "exportDescriptionFields": True,
-        "outputFormattedText": False,
-        "exportExecutionProtocols": False,
-    },
-    "iTorx Export (execution)": {
-        "exportAttachments": True,
-        "exportDesignData": True,
-        "characterEncoding": "utf-8",
-        "suppressFilteredData": True,
-        "exportExpandedData": True,
-        "exportDescriptionFields": True,
-        "outputFormattedText": True,
-        "exportExecutionProtocols": False,
-    },
-    "iTorx Export (continue|view)": {
-        "exportAttachments": True,
-        "exportDesignData": True,
-        "characterEncoding": "utf-8",
-        "suppressFilteredData": True,
-        "exportExpandedData": True,
-        "exportDescriptionFields": True,
-        "outputFormattedText": True,
-        "exportExecutionProtocols": True,
-    },
-    "<CUSTOM>": False,
+    "Itep Export": TestCycleXMLReportOptions(
+        exportAttachments=True,
+        exportDesignData=True,
+        characterEncoding="utf-16",
+        suppressFilteredData=True,
+        exportExpandedData=True,
+        exportDescriptionFields=True,
+        outputFormattedText=False,
+        exportExecutionProtocols=False,
+        filters=[],
+        reportRootUID=None,
+    ),
+    "iTorx Export (execution)": TestCycleXMLReportOptions(
+        exportAttachments=True,
+        exportDesignData=True,
+        characterEncoding="utf-8",
+        suppressFilteredData=True,
+        exportExpandedData=True,
+        exportDescriptionFields=True,
+        outputFormattedText=True,
+        exportExecutionProtocols=False,
+        filters=[],
+        reportRootUID=None,
+    ),
+    "iTorx Export (continue|view)": TestCycleXMLReportOptions(
+        exportAttachments=True,
+        exportDesignData=True,
+        characterEncoding="utf-8",
+        suppressFilteredData=True,
+        exportExpandedData=True,
+        exportDescriptionFields=True,
+        outputFormattedText=True,
+        exportExecutionProtocols=True,
+        filters=[],
+        reportRootUID=None,
+    ),
+    "<CUSTOM>": None,
 }
 
 
@@ -153,7 +161,7 @@ def get_configuration(config_file_path: str):
     print("Trying to read config file")
     try:
         with open(config_file_path, "r") as config_file:
-            return json.load(config_file)
+            return CliReporterConfig.from_dict(json.load(config_file))
     except IOError:
         print("Could not open file")
         close_program()
@@ -463,6 +471,9 @@ def spin_spinner(message: str):
         pass
 
 
+ACTION_TYPES = {"ImportExecutionResults": ImportAction, "ExportXMLReport": ExportAction}
+
+
 class AbstractAction(ABC):
     def __init__(self, parameters: Optional[dict] = None):
         self.parameters = parameters or {}
@@ -486,4 +497,4 @@ class AbstractAction(ABC):
         return True
 
     def export(self):
-        return {"type": type(self).__name__, "parameters": self.parameters}
+        return ACTION_TYPES[type(self).__name__](self.parameters)

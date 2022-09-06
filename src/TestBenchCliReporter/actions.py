@@ -15,11 +15,13 @@
 import base64
 import sys
 from os import path
-from typing import Dict, Union
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 from . import questions, testbench
+from .config_model import ExportParameters, ImportParameters
 from .util import (
     AbstractAction,
     ImportConfig,
@@ -39,52 +41,58 @@ class UnloggedAction(AbstractAction):
 
 
 class ExportXMLReport(AbstractAction):
+    def __init__(self, parameters: Union[ExportParameters, Dict[str, Any]] = None):
+        if parameters and not isinstance(parameters, ExportParameters):
+            parameters = ExportParameters.from_dict(parameters)
+        super().__init__()
+        self.parameters: ExportParameters = parameters or ExportParameters("report.zip")
+
     def prepare(self, connection_log) -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects)
         selected_tov = questions.ask_to_select_tov(selected_project)
-        self.parameters["tovKey"] = selected_tov["key"]["serial"]
-        self.parameters["projectPath"] = [
+        self.parameters.tovKey = selected_tov["key"]["serial"]
+        self.parameters.projectPath = [
             selected_project["name"],
             selected_tov["name"],
         ]
         selected_cycle = questions.ask_to_select_cycle(selected_tov, export=True)
         pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
         if selected_cycle == "NO_EXEC":
-            self.parameters["cycleKey"] = None
+            self.parameters.cycleKey = None
             tttree_structure = connection_log.active_connection.get_tov_structure(
-                self.parameters["tovKey"]
+                self.parameters.tovKey
             )
         else:
-            self.parameters["cycleKey"] = selected_cycle["key"]["serial"]
-            self.parameters["projectPath"].append(selected_cycle["name"])
+            self.parameters.cycleKey = selected_cycle["key"]["serial"]
+            self.parameters.projectPath.append(selected_cycle["name"])
             tttree_structure = connection_log.active_connection.get_test_cycle_structure(
-                self.parameters["cycleKey"]
+                self.parameters.cycleKey
             )
-        self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(tttree_structure)
+        self.parameters.reportRootUID = questions.ask_to_select_report_root_uid(tttree_structure)
         all_filters = connection_log.active_connection.get_all_filters()
-        self.parameters["filters"] = questions.ask_to_select_filters(all_filters)
-        self.parameters["report_config"] = questions.ask_to_config_report()
-        self.parameters["outputPath"] = questions.ask_for_output_path()
+        self.filters = questions.ask_to_select_filters(all_filters)
+        self.parameters.report_config = questions.ask_to_config_report()
+        self.parameters.outputPath = questions.ask_for_output_path()
 
         return True
 
     def trigger(self, connection_log) -> Union[bool, str]:
-        if not self.parameters.get("cycleKey") or self.parameters.get("cycleKey") == "0":
-            if not self.parameters.get("tovKey") and len(self.parameters["projectPath"]) >= 2:
+        if not self.parameters.cycleKey or self.parameters.cycleKey == "0":
+            if not self.parameters.tovKey and len(self.parameters.projectPath) >= 2:
                 all_projects = connection_log.active_connection.get_all_projects()
                 (
                     project_key,
-                    self.parameters["tovKey"],
-                    self.parameters["cycleKey"],
-                ) = get_project_keys(all_projects, *self.parameters["projectPath"])
+                    self.parameters.tovKey,
+                    self.parameters.cycleKey,
+                ) = get_project_keys(all_projects, *self.parameters.projectPath)
 
         self.job_id = connection_log.active_connection.trigger_xml_report_generation(
-            self.parameters.get("tovKey"),
-            self.parameters.get("cycleKey"),
-            self.parameters.get("reportRootUID", "ROOT"),
-            self.parameters.get("filters", []),
-            self.parameters.get("report_config", XmlExportConfig["Itep Export"]),
+            self.parameters.tovKey,
+            self.parameters.cycleKey,
+            self.parameters.reportRootUID or "ROOT",
+            self.parameters.filters or [],
+            self.parameters.report_config or XmlExportConfig["Itep Export"],
         )
         return self.job_id
 
@@ -106,12 +114,12 @@ class ExportXMLReport(AbstractAction):
 
     def finish(self, connection_log) -> bool:
         report = connection_log.active_connection.get_xml_report_data(self.report_tmp_name)
-        with open(self.parameters["outputPath"], "wb") as output_file:
+        with open(self.parameters.outputPath, "wb") as output_file:
             output_file.write(report)
         pretty_print(
             {"value": f"Report ", "end": None},
             {
-                "value": f'{path.abspath(self.parameters["outputPath"])}',
+                "value": f'{Path(self.parameters.outputPath).resolve()}',
                 "style": "#06c8ff bold italic",
                 "end": None,
             },
@@ -129,8 +137,14 @@ def Action(class_name: str, parameters: Dict[str, str]) -> AbstractAction:
 
 
 class ImportExecutionResults(AbstractAction):
+    def __init__(self, parameters: Union[ImportParameters, Dict[str, Any]] = None):
+        if parameters and not isinstance(parameters, ImportParameters):
+            parameters = ImportParameters.from_dict(parameters)
+        super().__init__()
+        self.parameters: ImportParameters = parameters or ImportParameters("result.zip")
+
     def prepare(self, connection_log) -> bool:
-        self.parameters["inputPath"] = questions.ask_for_input_path()
+        self.parameters.inputPath = questions.ask_for_input_path()
         project = version = cycle = None
         try:
             project, version, cycle = self.get_project_path_from_report()
@@ -141,35 +155,35 @@ class ImportExecutionResults(AbstractAction):
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
         selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle)
         pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
-        self.parameters["cycleKey"] = selected_cycle["key"]["serial"]
+        self.parameters.cycleKey = selected_cycle["key"]["serial"]
         cycle_structure = connection_log.active_connection.get_test_cycle_structure(
-            self.parameters["cycleKey"]
+            self.parameters.cycleKey
         )
-        self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(cycle_structure)
+        self.parameters.reportRootUID = questions.ask_to_select_report_root_uid(cycle_structure)
         available_testers = connection_log.active_connection.get_all_testers_of_project(
             selected_project["key"]["serial"]
         )
-        self.parameters["defaultTester"] = questions.ask_to_select_default_tester(available_testers)
+        self.parameters.defaultTester = questions.ask_to_select_default_tester(available_testers)
         all_filters = connection_log.active_connection.get_all_filters()
-        self.parameters["filters"] = questions.ask_to_select_filters(all_filters)
-        self.parameters["importConfig"] = questions.ask_to_config_import()
+        self.parameters.filters = questions.ask_to_select_filters(all_filters)
+        self.parameters.importConfig = questions.ask_to_config_import()
         return True
 
     def get_project_path_from_report(self):
-        zip_file = ZipFile(self.parameters["inputPath"])
-        xml = ET.fromstring(zip_file.read("report.xml"))
-        project = xml.find("./header/project").get("name")
-        version = xml.find("./header/version").get("name")
-        cycle = xml.find("./header/cycle").get("name")
-        return project, version, cycle
+        with ZipFile(self.parameters.inputPath) as zip_file:
+            xml = ET.fromstring(zip_file.read("report.xml"))
+            project = xml.find("./header/project").get("name")
+            version = xml.find("./header/version").get("name")
+            cycle = xml.find("./header/cycle").get("name")
+            return project, version, cycle
 
     def trigger(self, connection_log) -> bool:
-        if not self.parameters.get("cycleKey"):
-            if len(self.parameters.get("projectPath", [])) != 3:
-                self.parameters["projectPath"] = self.get_project_path_from_report()
+        if not self.parameters.cycleKey:
+            if len(self.parameters.projectPath or []) != 3:
+                self.parameters.projectPath = self.get_project_path_from_report()
             self.set_cycle_key_from_path(connection_log)
 
-        with open(self.parameters["inputPath"], "rb") as execution_report:
+        with open(self.parameters.inputPath, "rb") as execution_report:
             execution_report_base64 = base64.b64encode(execution_report.read()).decode()
 
         serverside_file_name = connection_log.active_connection.upload_execution_results(
@@ -177,12 +191,12 @@ class ImportExecutionResults(AbstractAction):
         )
         if serverside_file_name:
             self.job_id = connection_log.active_connection.trigger_execution_results_import(
-                self.parameters["cycleKey"],
-                self.parameters.get("reportRootUID", "ROOT"),
+                self.parameters.cycleKey,
+                self.parameters.reportRootUID or "ROOT",
                 serverside_file_name,
-                self.parameters.get("defaultTester", False),
-                self.parameters.get("filters", []),
-                self.parameters.get("importConfig", ImportConfig["Typical"]),
+                bool(self.parameters.defaultTester),
+                self.parameters.filters or [],
+                self.parameters.importConfig or ImportConfig["Typical"],
             )
             return True
 
@@ -191,9 +205,9 @@ class ImportExecutionResults(AbstractAction):
         (
             project_key,
             tov_key,
-            self.parameters["cycleKey"],
-        ) = get_project_keys(all_projects, *self.parameters["projectPath"])
-        if not self.parameters["cycleKey"]:
+            self.parameters.cycleKey,
+        ) = get_project_keys(all_projects, *self.parameters.projectPath)
+        if not self.parameters.cycleKey:
             raise ValueError("Invalid Config! 'cycleKey' missing.")
 
     def wait(self, connection_log) -> bool:
@@ -215,7 +229,7 @@ class ImportExecutionResults(AbstractAction):
             pretty_print(
                 {"value": f"Report ", "end": None},
                 {
-                    "value": f'{path.abspath(self.parameters["inputPath"])}',
+                    "value": f'{path.abspath(self.parameters.inputPath)}',
                     "style": "#06c8ff bold italic",
                     "end": None,
                 },

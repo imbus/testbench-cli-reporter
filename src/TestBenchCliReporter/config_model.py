@@ -56,12 +56,12 @@ class TestCycleXMLReportOptions:
 @dataclass
 class ExportParameters:
     outputPath: str
-    projectPath: Optional[List[str]]
-    tovKey: Optional[str]
-    cycleKey: Optional[str]
-    reportRootUID: Optional[str]
-    report_config: Optional[TestCycleXMLReportOptions]
-    filters: Optional[list]
+    projectPath: Optional[List[str]] = None
+    tovKey: Optional[str] = None
+    cycleKey: Optional[str] = None
+    reportRootUID: Optional[str] = None
+    report_config: Optional[TestCycleXMLReportOptions] = None
+    filters: Optional[List[FilterInfo]] = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -80,8 +80,8 @@ class ExportParameters:
 
 @dataclass
 class ExportAction:
-    type = "ExportXMLReport"
     parameters: ExportParameters
+    type: str = "ExportXMLReport"
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -116,10 +116,12 @@ class ExecutionResultsImportOptions:
 @dataclass
 class ImportParameters:
     inputPath: str
-    reportRootUID: Optional[str]
-    defaultTester: Optional[bool]
-    filters: Optional[list]
-    importConfig: Optional[ExecutionResultsImportOptions]
+    cycleKey: Optional[str] = None
+    projectPath: Optional[List[str]] = None
+    reportRootUID: Optional[str] = None
+    defaultTester: Optional[bool] = None
+    filters: Optional[List[FilterInfo]] = None
+    importConfig: Optional[ExecutionResultsImportOptions] = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -136,16 +138,38 @@ class ImportParameters:
 
 @dataclass
 class ImportAction:
-    type = "ImportExecutionResults"
     parameters: ImportParameters
+    type: str = "ImportExecutionResults"
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(parameters=ImportParameters.from_dict(dictionary.get("parameters", {})))
 
 
 @dataclass
 class Configuration:
-    server_url: str
-    verify: bool
-    basicAuth: str
-    actions: List[Union[ExportAction, ImportAction]]
+    server_url: Optional[str] = None
+    verify: bool = True
+    basicAuth: Optional[str] = None
+    loginname: Optional[str] = None
+    password: Optional[str] = None
+    actions: Optional[List[Union[ExportAction, ImportAction]]] = None
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            server_url=dictionary["server_url"],
+            verify=dictionary.get("verify", True),
+            basicAuth=dictionary.get("basicAuth"),
+            loginname=dictionary.get("loginname"),
+            password=dictionary.get("password"),
+            actions=[
+                ExportAction.from_dict(a)
+                if a["type"] == "ExportXMLReport"
+                else ImportAction.from_dict(a)
+                for a in dictionary["actions"]
+            ],
+        )
 
 
 class LogLevel(Enum):
@@ -166,7 +190,7 @@ class ConsoleLoggerConfig:
 
     @classmethod
     def from_dict(cls, dictionary):
-        log_level = LogLevel[dictionary.get("logLevel", "INFO").upper()]
+        log_level = LogLevel[dictionary.get("logLevel", "ERROR").upper()]
         if log_level.value not in LogLevel.__members__:
             print(
                 f"ValueError: {log_level} is not a valid logLevel. "
@@ -198,7 +222,7 @@ class FileLoggerConfig(ConsoleLoggerConfig):
                 "logFormat",
                 "%(asctime)s - %(filename)s:%(lineno)d - %(levelname)8s - %(message)s",
             ),
-            fileName=dictionary.get("fileName", "testbench-reporter.log"),
+            fileName=dictionary.get("fileName", "testbench-cli-reporter.log"),
         )
 
 
@@ -218,4 +242,11 @@ class LoggingConfig:
 @dataclass
 class CliReporterConfig:
     configuration: List[Configuration]
-    loggingConfig: Optional[LoggingConfig]
+    loggingConfig: Optional[LoggingConfig] = None
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            configuration=[Configuration.from_dict(c) for c in dictionary.get("configuration", [])],
+            loggingConfig=LoggingConfig.from_dict(dictionary.get("loggingConfig", {}) or {}),
+        )
