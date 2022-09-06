@@ -1,0 +1,57 @@
+[tool.pylint.FORMAT]
+max-line-length = 100
+max-module-lines = 1000
+
+[tool.pylint.MASTER]
+ignore = "tests"
+max-complexity = 15
+
+[tool.pylint.BASIC]
+argument-naming-style = 'snake_case'
+attr-naming-style = 'snake_case'
+class-naming-style = 'PascalCase'
+const-naming-style = 'UPPER_CASE'
+function-naming-style = 'snake_case'
+method-naming-style = 'snake_case'
+module-naming-style = 'snake_case'
+variable-naming-style = 'snake_case'
+
+[tool.pylint.DESIGN]
+# Maximum number of arguments for function / method.
+max-args = 5
+# Maximum number of statements in function / method body.
+max-statements = 50
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = '''
+    logging-fstring-interpolation,
+    fixme,
+    import-error,
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-many-instance-attributes,
+    too-few-public-methods,
+    wrong-import-order,
+    broad-except,
+'''
+
+[tool.pylint.REFACTORING]
+# Maximum number of nested blocks for function / method body
+max-nested-blocks = 3
+
+[tool.mypy]
+python_version = "3.7"
+ignore_missing_imports = true
+no_implicit_optional = true
+strict_optional = true
+warn_return_any = true
+warn_no_return = true
+warn_unreachable = true
+pretty = true
+
+[tool.black]
+target-version = ['py37']
+line-length = 100
+include_trailing_comma = false
+skip-string-normalization = true

@@ -12,17 +12,17 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import argparse
+import json
 import os
 import sys
-import argparse
 import time
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from re import fullmatch
 from typing import Dict, Optional
 
 from questionary import print as pprint
-import json
-from collections import OrderedDict
 
 ImportConfig = {
     "Typical": {
@@ -134,9 +134,7 @@ parser.add_argument(
     choices=["e", "i"],
     default="e",
 )
-parser.add_argument(
-    "--manual", help="Switch to force manual mode.", action="store_true"
-)
+parser.add_argument("--manual", help="Switch to force manual mode.", action="store_true")
 parser.add_argument(
     "path",
     nargs="?",
@@ -177,9 +175,7 @@ def add_numbering_to_cycle(cycle_structure):
             root_key = test_structure_element[key]["key"]["serial"]
             test_structure_element[key]["numbering"] = "-1"
         else:
-            raise KeyError(
-                f"Unexpected Test Structure Element! : {test_structure_element}"
-            )
+            raise KeyError(f"Unexpected Test Structure Element! : {test_structure_element}")
 
         tse_serial = test_structure_element[key]["key"]["serial"]
         tse_parent_serial = test_structure_element[key]["parentPK"]["serial"]
@@ -192,9 +188,7 @@ def add_numbering_to_cycle(cycle_structure):
         if tse_parent_serial not in tse_dict:
             tse_dict[tse_parent_serial] = {
                 "tse": None,
-                "childs": {
-                    int(test_structure_element[key]["orderPos"]): tse_dict[tse_serial]
-                },
+                "childs": {int(test_structure_element[key]["orderPos"]): tse_dict[tse_serial]},
             }
         else:
             tse_dict[tse_parent_serial]["childs"][

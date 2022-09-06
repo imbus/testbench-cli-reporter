@@ -14,19 +14,15 @@
 #  limitations under the License.
 
 import base64
-from typing import Optional, Union, List, Dict
+import json
+from typing import Dict, List, Optional, Union
+
 import requests
 import urllib3
-from . import questions
-from .util import (
-    XmlExportConfig,
-    ImportConfig,
-    close_program,
-    spin_spinner,
-    AbstractAction,
-)
 from questionary import print as pprint
-import json
+
+from . import questions
+from .util import AbstractAction, ImportConfig, XmlExportConfig, close_program, spin_spinner
 
 
 class Connection:
@@ -66,9 +62,7 @@ class Connection:
         self._session.headers.update(
             {"Content-Type": "application/vnd.testbench+json; charset=utf-8"}
         )
-        self._session.hooks = {
-            "response": lambda r, *args, **kwargs: r.raise_for_status()
-        }
+        self._session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}
         self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))
         self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))
         self._session.verify = self.verify_ssl
@@ -78,9 +72,7 @@ class Connection:
         self.session.close()
 
     def export(self) -> dict:
-        basic_auth = base64.b64encode(
-            f"{self.loginname}:{self.password}".encode("utf-8")
-        ).decode()
+        basic_auth = base64.b64encode(f"{self.loginname}:{self.password}".encode("utf-8")).decode()
         return {
             "server_url": self.server_url,
             "verify": self.session.verify,
@@ -138,9 +130,7 @@ class Connection:
     ) -> bytes:
         if filters is None:
             filters = []
-        job_id = self.trigger_xml_report_generation(
-            tov_key, cycle_key, reportRootUID, filters
-        )
+        job_id = self.trigger_xml_report_generation(tov_key, cycle_key, reportRootUID, filters)
         report_tmp_name = self.wait_for_tmp_xml_report_name(job_id)
         report = self.get_xml_report_data(report_tmp_name)
 
@@ -265,9 +255,7 @@ class Connection:
     def wait_for_execution_results_import_to_finish(self, job_id: str) -> bool:
         try:
             while True:
-                import_status = self.get_job_result(
-                    "executionResultsImporterJob/", job_id
-                )
+                import_status = self.get_job_result("executionResultsImporterJob/", job_id)
                 if import_status is not None:
                     break
                 spin_spinner("Waiting until import of execution results is done")
@@ -289,9 +277,7 @@ class Connection:
         pprint(f"URL: {e.response.url}")
 
     def get_imp_job_result(self, job_id):
-        report_import_status = self.get_job_result(
-            "executionResultsImporterJob/", job_id
-        )
+        report_import_status = self.get_job_result("executionResultsImporterJob/", job_id)
         if report_import_status is None:
             return None
         result = report_import_status["result"]
@@ -403,9 +389,7 @@ class ConnectionLog:
 
     def export_as_json(self, output_file_path: str):
         print("Generating JSON export")
-        export_dict = {
-            "configuration": [connection.export() for connection in self.connections]
-        }
+        export_dict = {"configuration": [connection.export() for connection in self.connections]}
 
         with open(output_file_path, "w") as output_file:
             json.dump(export_dict, output_file, indent=2)

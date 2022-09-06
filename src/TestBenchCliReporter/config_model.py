@@ -1,0 +1,221 @@
+from dataclasses import dataclass
+from enum import Enum
+from typing import List, Optional, Union
+
+
+class FilterInfoType(str, Enum):
+    TestTheme = "TestTheme"
+    TestCaseSet = "TestCaseSet"
+    TestCase = "TestCase"
+
+
+@dataclass
+class FilterInfo:
+    name: str
+    type: FilterInfoType
+    testThemeUID: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            name=dictionary["name"],
+            type=FilterInfoType(dictionary["type"]),
+            testThemeUID=dictionary.get("testThemeUID"),
+        )
+
+
+@dataclass
+class TestCycleXMLReportOptions:
+    exportAttachments: Optional[bool]
+    exportDesignData: Optional[bool]
+    reportRootUID: Optional[str]
+    suppressFilteredData: Optional[bool]
+    characterEncoding: Optional[str]
+    exportExpandedData: Optional[bool]
+    filters: Optional[List[FilterInfo]]
+    exportExecutionProtocols: Optional[bool]
+    exportDescriptionFields: Optional[bool]
+    outputFormattedText: Optional[bool]
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            exportAttachments=dictionary.get("exportAttachments"),
+            exportDesignData=dictionary.get("exportDesignData"),
+            reportRootUID=dictionary.get("reportRootUID"),
+            suppressFilteredData=dictionary.get("suppressFilteredData"),
+            characterEncoding=dictionary.get("characterEncoding"),
+            exportExpandedData=dictionary.get("exportExpandedData"),
+            filters=[FilterInfo.from_dict(f) for f in dictionary.get("filters", [])],
+            exportExecutionProtocols=dictionary.get("exportExecutionProtocols"),
+            exportDescriptionFields=dictionary.get("exportDescriptionFields"),
+            outputFormattedText=dictionary.get("outputFormattedText"),
+        )
+
+
+@dataclass
+class ExportParameters:
+    outputPath: str
+    projectPath: Optional[List[str]]
+    tovKey: Optional[str]
+    cycleKey: Optional[str]
+    reportRootUID: Optional[str]
+    report_config: Optional[TestCycleXMLReportOptions]
+    filters: Optional[list]
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            outputPath=dictionary["outputPath"],
+            projectPath=dictionary.get("projectPath", []),
+            tovKey=dictionary.get("tovKey"),
+            cycleKey=dictionary.get("cycleKey"),
+            reportRootUID=dictionary.get("reportRootUID"),
+            report_config=TestCycleXMLReportOptions.from_dict(dictionary.get("report_config", {}))
+            if dictionary.get("report_config")
+            else None,
+            filters=dictionary.get("filters", []),
+        )
+
+
+@dataclass
+class ExportAction:
+    type = "ExportXMLReport"
+    parameters: ExportParameters
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(parameters=ExportParameters.from_dict(dictionary.get("parameters", {})))
+
+
+@dataclass
+class ExecutionResultsImportOptions:
+    fileName: str
+    reportRootUID: Optional[str]
+    ignoreNonExecutedTestCases: Optional[bool]
+    defaultTester: Optional[str]
+    checkPaths: Optional[bool]
+    filters: Optional[List[FilterInfo]]
+    discardTesterInformation: Optional[bool]
+    useExistingDefect: Optional[bool]
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            fileName=dictionary["fileName"],
+            reportRootUID=dictionary.get("reportRootUID"),
+            ignoreNonExecutedTestCases=dictionary.get("ignoreNonExecutedTestCases"),
+            defaultTester=dictionary.get("defaultTester"),
+            checkPaths=dictionary.get("checkPaths"),
+            filters=[FilterInfo.from_dict(f) for f in dictionary.get("filters", [])],
+            discardTesterInformation=dictionary.get("discardTesterInformation"),
+            useExistingDefect=dictionary.get("useExistingDefect"),
+        )
+
+
+@dataclass
+class ImportParameters:
+    inputPath: str
+    reportRootUID: Optional[str]
+    defaultTester: Optional[bool]
+    filters: Optional[list]
+    importConfig: Optional[ExecutionResultsImportOptions]
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            inputPath=dictionary["inputPath"],
+            reportRootUID=dictionary.get("reportRootUID"),
+            defaultTester=dictionary.get("defaultTester"),
+            filters=dictionary.get("filters", []),
+            importConfig=ExecutionResultsImportOptions.from_dict(
+                dictionary.get("importConfig") if dictionary.get("importConfig") else None
+            ),
+        )
+
+
+@dataclass
+class ImportAction:
+    type = "ImportExecutionResults"
+    parameters: ImportParameters
+
+
+@dataclass
+class Configuration:
+    server_url: str
+    verify: bool
+    basicAuth: str
+    actions: List[Union[ExportAction, ImportAction]]
+
+
+class LogLevel(Enum):
+    CRITICAL = "CRITICAL"
+    FATAL = CRITICAL
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    WARN = WARNING
+    INFO = "INFO"
+    DEBUG = "DEBUG"
+    NOTSET = "NOTSET"
+
+
+@dataclass
+class ConsoleLoggerConfig:
+    logLevel: LogLevel
+    logFormat: str
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        log_level = LogLevel[dictionary.get("logLevel", "INFO").upper()]
+        if log_level.value not in LogLevel.__members__:
+            print(
+                f"ValueError: {log_level} is not a valid logLevel. "
+                f"Available logLevel are: {list(LogLevel.__members__)}"
+            )
+            log_level = LogLevel.INFO
+        return cls(
+            logLevel=log_level,
+            logFormat=dictionary.get("logFormat", "%(levelname)s: %(message)s"),
+        )
+
+
+@dataclass
+class FileLoggerConfig(ConsoleLoggerConfig):
+    fileName: str
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        log_level = LogLevel[dictionary.get("logLevel", "DEBUG").upper()]
+        if log_level.value not in LogLevel.__members__:
+            print(
+                f"ValueError: {log_level} is not a valid logLevel. "
+                f"Available logLevel are: {list(LogLevel.__members__)}"
+            )
+            log_level = LogLevel.DEBUG
+        return cls(
+            logLevel=log_level,
+            logFormat=dictionary.get(
+                "logFormat",
+                "%(asctime)s - %(filename)s:%(lineno)d - %(levelname)8s - %(message)s",
+            ),
+            fileName=dictionary.get("fileName", "testbench-reporter.log"),
+        )
+
+
+@dataclass
+class LoggingConfig:
+    console: ConsoleLoggerConfig
+    file: FileLoggerConfig
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            console=ConsoleLoggerConfig.from_dict(dictionary.get("console", {})),
+            file=FileLoggerConfig.from_dict(dictionary.get("file", {})),
+        )
+
+
+@dataclass
+class CliReporterConfig:
+    configuration: List[Configuration]
+    loggingConfig: Optional[LoggingConfig]

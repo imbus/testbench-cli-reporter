@@ -5,7 +5,7 @@ from requests import Timeout
 
 from . import questions
 from .actions import Action
-from .testbench import ConnectionLog, login, Connection
+from .testbench import Connection, ConnectionLog, login
 from .util import rotate, spin_spinner
 
 
@@ -66,30 +66,20 @@ def run_automatic_mode(
         job_counter = 0
         for i in range(len(connection_queue.connections)):
             while connection_queue.active_connection.actions_to_trigger:
-                action_to_trigger = (
-                    connection_queue.active_connection.actions_to_trigger[0]
-                )
-                action = Action(
-                    action_to_trigger["type"], action_to_trigger["parameters"]
-                )
+                action_to_trigger = connection_queue.active_connection.actions_to_trigger[0]
+                action = Action(action_to_trigger["type"], action_to_trigger["parameters"])
                 try:
                     action.trigger(connection_queue)
-                    connection_queue.active_connection.actions_to_wait_for.append(
-                        action
-                    )
+                    connection_queue.active_connection.actions_to_wait_for.append(action)
                     job_counter += 1
                 except AssertionError as e:
                     print(e)
                 finally:
-                    connection_queue.active_connection.actions_to_trigger.remove(
-                        action_to_trigger
-                    )
+                    connection_queue.active_connection.actions_to_trigger.remove(action_to_trigger)
                 sleep(0.05)
             connection_queue.next()
 
-        print(
-            f"{job_counter} jobs started at {len(connection_queue.connections)} server(s)."
-        )
+        print(f"{job_counter} jobs started at {len(connection_queue.connections)} server(s).")
 
         while True:
             active_connection = connection_queue.active_connection

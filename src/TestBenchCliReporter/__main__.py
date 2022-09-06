@@ -12,13 +12,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from .util import (
-    close_program,
-    get_configuration,
-    parser,
-    resolve_server_name,
-)
-from .execution import run_manual_mode, run_automatic_mode
+from .execution import run_automatic_mode, run_manual_mode
+from .util import close_program, get_configuration, parser, resolve_server_name
 
 __version__ = "1.0.2"
 
@@ -29,19 +24,12 @@ def main():
         if arg.config:
             configuration = get_configuration(arg.config)
             print("Config file found")
-            run_automatic_mode(
-                configuration, loginname=arg.login, password=arg.password
-            )
+            run_automatic_mode(configuration, loginname=arg.login, password=arg.password)
         elif (
             arg.server
             and arg.login
             and arg.password
-            and (
-                (arg.project and arg.version)
-                or arg.tovKey
-                or arg.cycleKey
-                or arg.type == "i"
-            )
+            and ((arg.project and arg.version) or arg.tovKey or arg.cycleKey or arg.type == "i")
             and not arg.manual
         ):
             server = resolve_server_name(arg.server)
@@ -62,9 +50,7 @@ def main():
                     {
                         "type": "ExportXMLReport",
                         "parameters": {
-                            "projectPath": [
-                                e for e in [arg.project, arg.version, arg.cycle] if e
-                            ],
+                            "projectPath": [e for e in [arg.project, arg.version, arg.cycle] if e],
                             "cycleKey": arg.cycleKey,
                             "tovKey": arg.tovKey,
                             "reportRootUID": arg.uid,
@@ -78,9 +64,7 @@ def main():
                     {
                         "type": "ImportExecutionResults",
                         "parameters": {
-                            "projectPath": [
-                                e for e in [arg.project, arg.version, arg.cycle] if e
-                            ],
+                            "projectPath": [e for e in [arg.project, arg.version, arg.cycle] if e],
                             "cycleKey": arg.cycleKey,
                             "tovKey": arg.tovKey,
                             "reportRootUID": arg.uid,

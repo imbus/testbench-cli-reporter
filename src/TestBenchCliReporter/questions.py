@@ -12,17 +12,17 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from os.path import isdir, isfile, abspath, dirname
 import os
-from typing import Callable, Union, List, Dict
-from questionary import select, checkbox, unsafe_prompt, confirm
-from questionary import Style
-from questionary import Choice
-from questionary import print as pprint
+from os.path import abspath, dirname, isdir, isfile
 from re import fullmatch, sub
-from . import actions, util
-from .util import XmlExportConfig, ImportConfig
+from typing import Callable, Dict, List, Union
 
+from questionary import Choice, Style, checkbox, confirm
+from questionary import print as pprint
+from questionary import select, unsafe_prompt
+
+from . import actions, util
+from .util import ImportConfig, XmlExportConfig
 
 custom_style_fancy = Style(
     [
@@ -144,9 +144,7 @@ def ask_for_ssl_verification_option() -> Union[bool, str]:
         choices=[
             Choice("Do not verify the certificate at all.", False),
             Choice("Automatically verify the certificate.", True),
-            Choice(
-                "Provide a path to a local certificate file for verification.", "path"
-            ),
+            Choice("Provide a path to a local certificate file for verification.", "path"),
         ],
     )
 
@@ -214,12 +212,8 @@ def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
 
 
 def ask_to_select_filters(all_filters: List[dict]) -> List:
-    if selection_prompt(
-        "Activate Filters:", choices=[Choice("No", False), Choice("Yes", True)]
-    ):
-        all_filters_sorted = sorted(
-            all_filters, key=lambda filter: filter["name"].casefold()
-        )
+    if selection_prompt("Activate Filters:", choices=[Choice("No", False), Choice("Yes", True)]):
+        all_filters_sorted = sorted(all_filters, key=lambda filter: filter["name"].casefold())
 
         return checkbox_prompt(
             message="Provide a set of filters.",
@@ -235,10 +229,7 @@ def ask_to_select_filters(all_filters: List[dict]) -> List:
 def ask_to_config_report():
     selection = selection_prompt(
         "Select Report Configuration:",
-        choices=[
-            Choice(config_name, config)
-            for config_name, config in XmlExportConfig.items()
-        ],
+        choices=[Choice(config_name, config) for config_name, config in XmlExportConfig.items()],
     )
     if not selection:
         selection = {
@@ -261,9 +252,7 @@ def ask_to_config_report():
 def ask_to_config_import():
     selection = selection_prompt(
         "Select Import Configuration:",
-        choices=[
-            Choice(config_name, config) for config_name, config in ImportConfig.items()
-        ],
+        choices=[Choice(config_name, config) for config_name, config in ImportConfig.items()],
     )
     if not selection:
         selection = {

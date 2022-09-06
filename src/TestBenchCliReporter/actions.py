@@ -12,23 +12,24 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from typing import Dict, Union
-from zipfile import ZipFile
-from os import path
-from xml.etree import ElementTree as ET
-import sys
 import base64
+import sys
+from os import path
+from typing import Dict, Union
+from xml.etree import ElementTree as ET
+from zipfile import ZipFile
+
 from . import questions, testbench
 from .util import (
+    AbstractAction,
+    ImportConfig,
+    XmlExportConfig,
     close_program,
     get_project_keys,
-    XmlExportConfig,
-    ImportConfig,
-    pretty_print,
     parser,
+    pretty_print,
     pretty_print_project_selection,
     pretty_print_tse_information,
-    AbstractAction,
 )
 
 
@@ -57,14 +58,10 @@ class ExportXMLReport(AbstractAction):
         else:
             self.parameters["cycleKey"] = selected_cycle["key"]["serial"]
             self.parameters["projectPath"].append(selected_cycle["name"])
-            tttree_structure = (
-                connection_log.active_connection.get_test_cycle_structure(
-                    self.parameters["cycleKey"]
-                )
+            tttree_structure = connection_log.active_connection.get_test_cycle_structure(
+                self.parameters["cycleKey"]
             )
-        self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(
-            tttree_structure
-        )
+        self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(tttree_structure)
         all_filters = connection_log.active_connection.get_all_filters()
         self.parameters["filters"] = questions.ask_to_select_filters(all_filters)
         self.parameters["report_config"] = questions.ask_to_config_report()
@@ -73,14 +70,8 @@ class ExportXMLReport(AbstractAction):
         return True
 
     def trigger(self, connection_log) -> Union[bool, str]:
-        if (
-            not self.parameters.get("cycleKey")
-            or self.parameters.get("cycleKey") == "0"
-        ):
-            if (
-                not self.parameters.get("tovKey")
-                and len(self.parameters["projectPath"]) >= 2
-            ):
+        if not self.parameters.get("cycleKey") or self.parameters.get("cycleKey") == "0":
+            if not self.parameters.get("tovKey") and len(self.parameters["projectPath"]) >= 2:
                 all_projects = connection_log.active_connection.get_all_projects()
                 (
                     project_key,
@@ -99,10 +90,8 @@ class ExportXMLReport(AbstractAction):
 
     def wait(self, connection_log) -> Union[bool, str]:
         try:
-            self.report_tmp_name = (
-                connection_log.active_connection.wait_for_tmp_xml_report_name(
-                    self.job_id
-                )
+            self.report_tmp_name = connection_log.active_connection.wait_for_tmp_xml_report_name(
+                self.job_id
             )
             return self.report_tmp_name
         except KeyError as e:
@@ -116,9 +105,7 @@ class ExportXMLReport(AbstractAction):
         return result
 
     def finish(self, connection_log) -> bool:
-        report = connection_log.active_connection.get_xml_report_data(
-            self.report_tmp_name
-        )
+        report = connection_log.active_connection.get_xml_report_data(self.report_tmp_name)
         with open(self.parameters["outputPath"], "wb") as output_file:
             output_file.write(report)
         pretty_print(
@@ -150,9 +137,7 @@ class ImportExecutionResults(AbstractAction):
         except:
             pass
         all_projects = connection_log.active_connection.get_all_projects()
-        selected_project = questions.ask_to_select_project(
-            all_projects, default=project
-        )
+        selected_project = questions.ask_to_select_project(all_projects, default=project)
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
         selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle)
         pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
@@ -160,15 +145,11 @@ class ImportExecutionResults(AbstractAction):
         cycle_structure = connection_log.active_connection.get_test_cycle_structure(
             self.parameters["cycleKey"]
         )
-        self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(
-            cycle_structure
-        )
+        self.parameters["reportRootUID"] = questions.ask_to_select_report_root_uid(cycle_structure)
         available_testers = connection_log.active_connection.get_all_testers_of_project(
             selected_project["key"]["serial"]
         )
-        self.parameters["defaultTester"] = questions.ask_to_select_default_tester(
-            available_testers
-        )
+        self.parameters["defaultTester"] = questions.ask_to_select_default_tester(available_testers)
         all_filters = connection_log.active_connection.get_all_filters()
         self.parameters["filters"] = questions.ask_to_select_filters(all_filters)
         self.parameters["importConfig"] = questions.ask_to_config_import()
@@ -191,21 +172,17 @@ class ImportExecutionResults(AbstractAction):
         with open(self.parameters["inputPath"], "rb") as execution_report:
             execution_report_base64 = base64.b64encode(execution_report.read()).decode()
 
-        serverside_file_name = (
-            connection_log.active_connection.upload_execution_results(
-                execution_report_base64
-            )
+        serverside_file_name = connection_log.active_connection.upload_execution_results(
+            execution_report_base64
         )
         if serverside_file_name:
-            self.job_id = (
-                connection_log.active_connection.trigger_execution_results_import(
-                    self.parameters["cycleKey"],
-                    self.parameters.get("reportRootUID", "ROOT"),
-                    serverside_file_name,
-                    self.parameters.get("defaultTester", False),
-                    self.parameters.get("filters", []),
-                    self.parameters.get("importConfig", ImportConfig["Typical"]),
-                )
+            self.job_id = connection_log.active_connection.trigger_execution_results_import(
+                self.parameters["cycleKey"],
+                self.parameters.get("reportRootUID", "ROOT"),
+                serverside_file_name,
+                self.parameters.get("defaultTester", False),
+                self.parameters.get("filters", []),
+                self.parameters.get("importConfig", ImportConfig["Typical"]),
             )
             return True
 
@@ -220,8 +197,10 @@ class ImportExecutionResults(AbstractAction):
             raise ValueError("Invalid Config! 'cycleKey' missing.")
 
     def wait(self, connection_log) -> bool:
-        self.report_tmp_name = connection_log.active_connection.wait_for_execution_results_import_to_finish(
-            self.job_id
+        self.report_tmp_name = (
+            connection_log.active_connection.wait_for_execution_results_import_to_finish(
+                self.job_id
+            )
         )
         return self.report_tmp_name
 
@@ -252,23 +231,17 @@ class BrowseProjects(UnloggedAction):
         version = arg.version
         cycle = arg.cycle
         all_projects = connection_log.active_connection.get_all_projects()
-        selected_project = questions.ask_to_select_project(
-            all_projects, default=project
-        )
+        selected_project = questions.ask_to_select_project(all_projects, default=project)
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
-        selected_cycle = questions.ask_to_select_cycle(
-            selected_tov, default=cycle, export=True
-        )
+        selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle, export=True)
         pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
         if selected_cycle == "NO_EXEC":
             tttree_structure = connection_log.active_connection.get_tov_structure(
                 selected_tov["key"]["serial"]
             )
         else:
-            tttree_structure = (
-                connection_log.active_connection.get_test_cycle_structure(
-                    selected_cycle["key"]["serial"]
-                )
+            tttree_structure = connection_log.active_connection.get_test_cycle_structure(
+                selected_cycle["key"]["serial"]
             )
         selected_uid = questions.ask_to_select_report_root_uid(tttree_structure)
         for tse in tttree_structure:
