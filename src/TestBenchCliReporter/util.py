@@ -17,6 +17,7 @@ import json
 import os
 import sys
 import time
+import traceback
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from re import fullmatch
@@ -25,6 +26,7 @@ from typing import Dict, Optional
 from questionary import print as pprint
 
 from .config_model import CliReporterConfig, ExportAction, ImportAction, TestCycleXMLReportOptions
+from .log import logger
 
 ImportConfig = {
     "Typical": {
@@ -158,15 +160,17 @@ def close_program():
 
 
 def get_configuration(config_file_path: str):
-    print("Trying to read config file")
+    logger.info("Trying to read config file")
     try:
         with open(config_file_path, "r") as config_file:
             return CliReporterConfig.from_dict(json.load(config_file))
-    except IOError:
-        print("Could not open file")
+    except IOError as e:
+        logger.error("Could not open file")
+        logger.debug(traceback.format_exc())
         close_program()
-    except json.JSONDecodeError:
-        print("Could not parse config file as JSON.")
+    except json.JSONDecodeError as e:
+        logger.error("Could not parse config file as JSON.")
+        logger.debug(e)
         close_program()
 
 

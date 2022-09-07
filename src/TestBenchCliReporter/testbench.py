@@ -16,6 +16,7 @@
 import base64
 import dataclasses
 import json
+import traceback
 from typing import Dict, List, Optional, Union
 
 import requests
@@ -24,6 +25,7 @@ from questionary import print as pprint
 
 from . import questions
 from .config_model import CliReporterConfig, Configuration
+from .log import logger
 from .util import AbstractAction, ImportConfig, XmlExportConfig, close_program, spin_spinner
 
 
@@ -150,19 +152,16 @@ class Connection:
         if reportRootUID and reportRootUID != "ROOT":
             report_config.reportRootUID = reportRootUID
         report_config.filters = filters
-        try:
-            if cycle_key and cycle_key != "0":
-                response = self.session.post(
-                    f"{self.server_url}cycle/{cycle_key}/xmlReport",
-                    json=dataclasses.asdict(report_config),
-                )
-            else:
-                response = self.session.post(
-                    f"{self.server_url}tovs/{tov_key}/xmlReport",
-                    json=dataclasses.asdict(report_config),
-                )
-        except requests.exceptions.HTTPError as e:
-            print(e.response.text)
+        if cycle_key and cycle_key != "0":
+            response = self.session.post(
+                f"{self.server_url}cycle/{cycle_key}/xmlReport",
+                json=dataclasses.asdict(report_config),
+            )
+        else:
+            response = self.session.post(
+                f"{self.server_url}tovs/{tov_key}/xmlReport",
+                json=dataclasses.asdict(report_config),
+            )
         return response.json()["jobID"]
 
     def wait_for_tmp_xml_report_name(self, job_id: str) -> str:
@@ -246,8 +245,9 @@ class Connection:
                 json=dataclasses.asdict(import_config),
             )
             return job_id.json()["jobID"]
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.HTTPError as e:
             self.render_import_error(e)
+            raise e
 
     def wait_for_execution_results_import_to_finish(self, job_id: str) -> bool:
         try:
@@ -265,6 +265,7 @@ class Connection:
                 raise AssertionError(result)
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
+            raise e
 
     def render_import_error(self, e):
         pprint("!!!ERROR DURING IMPORT!!!", style="#ff0e0e italic")
@@ -314,7 +315,8 @@ def login(server="", login="", pwd="") -> Connection:
                 return connection
 
         except requests.HTTPError:
-            print("Invalid login credentials.")
+            logger.error("Invalid login credentials.")
+            logger.debug(traceback.format_exc())
             action = questions.ask_for_action_after_failed_login()
             if action == "retry_password":
                 credentials["password"] = questions.ask_for_testbench_password()
@@ -327,7 +329,8 @@ def login(server="", login="", pwd="") -> Connection:
                 close_program()
 
         except (requests.ConnectionError, requests.exceptions.MissingSchema):
-            print("Invalid server url.")
+            logger.error("Invalid server url.")
+            logger.debug(traceback.format_exc())
             action = questions.ask_for_action_after_failed_server_connection()
             if action == "retry_server":
                 credentials["server_url"] = questions.ask_for_test_bench_server_url()
@@ -337,7 +340,8 @@ def login(server="", login="", pwd="") -> Connection:
                 close_program()
 
         except requests.exceptions.Timeout:
-            print("No connection could be established due to timeout.")
+            logger.error("No connection could be established due to timeout.")
+            logger.debug(traceback.format_exc())
             action = questions.ask_for_action_after_login_timeout()
             if action == "retry":
                 pass
@@ -385,7 +389,7 @@ class ConnectionLog:
         self.connections.append(new_connection)
 
     def export_as_json(self, output_file_path: str):
-        print("Generating JSON export")
+        logger.info("Generating JSON export")
         export_config = CliReporterConfig(
             configuration=[connection.export() for connection in self.connections]
         )

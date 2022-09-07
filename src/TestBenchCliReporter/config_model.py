@@ -102,7 +102,7 @@ class ExecutionResultsImportOptions:
     @classmethod
     def from_dict(cls, dictionary):
         return cls(
-            fileName=dictionary["fileName"],
+            fileName=dictionary.get("fileName", "result.zip"),
             reportRootUID=dictionary.get("reportRootUID"),
             ignoreNonExecutedTestCases=dictionary.get("ignoreNonExecutedTestCases"),
             defaultTester=dictionary.get("defaultTester"),
@@ -172,7 +172,7 @@ class Configuration:
         )
 
 
-class LogLevel(Enum):
+class LogLevel(str, Enum):
     CRITICAL = "CRITICAL"
     FATAL = CRITICAL
     ERROR = "ERROR"
@@ -190,7 +190,7 @@ class ConsoleLoggerConfig:
 
     @classmethod
     def from_dict(cls, dictionary):
-        log_level = LogLevel[dictionary.get("logLevel", "ERROR").upper()]
+        log_level = LogLevel[dictionary.get("logLevel", "INFO").upper()]
         if log_level.value not in LogLevel.__members__:
             print(
                 f"ValueError: {log_level} is not a valid logLevel. "
@@ -199,7 +199,7 @@ class ConsoleLoggerConfig:
             log_level = LogLevel.INFO
         return cls(
             logLevel=log_level,
-            logFormat=dictionary.get("logFormat", "%(levelname)s: %(message)s"),
+            logFormat=dictionary.get("logFormat", "%(message)s"),
         )
 
 
@@ -227,7 +227,7 @@ class FileLoggerConfig(ConsoleLoggerConfig):
 
 
 @dataclass
-class LoggingConfig:
+class loggingConfiguration:
     console: ConsoleLoggerConfig
     file: FileLoggerConfig
 
@@ -242,11 +242,13 @@ class LoggingConfig:
 @dataclass
 class CliReporterConfig:
     configuration: List[Configuration]
-    loggingConfig: Optional[LoggingConfig] = None
+    loggingConfiguration: Optional[loggingConfiguration] = None
 
     @classmethod
     def from_dict(cls, dictionary):
         return cls(
             configuration=[Configuration.from_dict(c) for c in dictionary.get("configuration", [])],
-            loggingConfig=LoggingConfig.from_dict(dictionary.get("loggingConfig", {}) or {}),
+            loggingConfiguration=loggingConfiguration.from_dict(
+                dictionary.get("loggingConfiguration", {}) or {}
+            ),
         )

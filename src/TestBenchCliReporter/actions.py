@@ -14,6 +14,7 @@
 
 import base64
 import sys
+import traceback
 from os import path
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
@@ -22,6 +23,7 @@ from zipfile import ZipFile
 
 from . import questions, testbench
 from .config_model import ExportParameters, ImportParameters
+from .log import logger
 from .util import (
     AbstractAction,
     ImportConfig,
@@ -46,6 +48,7 @@ class ExportXMLReport(AbstractAction):
             parameters = ExportParameters.from_dict(parameters)
         super().__init__()
         self.parameters: ExportParameters = parameters or ExportParameters("report.zip")
+        self.filters = []
 
     def prepare(self, connection_log) -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
@@ -102,8 +105,8 @@ class ExportXMLReport(AbstractAction):
                 self.job_id
             )
             return self.report_tmp_name
-        except KeyError as e:
-            print(f"{str(e)}")
+        except KeyError:
+            logger.debug(traceback.format_exc())
             return False
 
     def poll(self, connection_log) -> bool:
@@ -125,6 +128,7 @@ class ExportXMLReport(AbstractAction):
             },
             {"value": f" was generated"},
         )
+        logger.debug(f"Report {Path(self.parameters.outputPath).resolve()} was generated")
         return True
 
 
@@ -132,7 +136,7 @@ def Action(class_name: str, parameters: Dict[str, str]) -> AbstractAction:
     try:
         return globals()[class_name](parameters)
     except AttributeError:
-        print(f"Failed to create class {class_name}")
+        logger.error(f"Failed to create class {class_name}")
         close_program()
 
 
@@ -194,7 +198,7 @@ class ImportExecutionResults(AbstractAction):
                 self.parameters.cycleKey,
                 self.parameters.reportRootUID or "ROOT",
                 serverside_file_name,
-                bool(self.parameters.defaultTester),
+                self.parameters.defaultTester,
                 self.parameters.filters or [],
                 self.parameters.importConfig or ImportConfig["Typical"],
             )
@@ -295,6 +299,8 @@ class ExportActionLog(UnloggedAction):
                 },
                 {"value": f" was generated"},
             )
+            logger.debug(f"Config {Path(self.parameters.outputPath).resolve()} was generated")
+
             return True
         except KeyError as e:
             print(f"{str(e)}")

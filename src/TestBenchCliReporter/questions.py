@@ -22,6 +22,7 @@ from questionary import print as pprint
 from questionary import select, unsafe_prompt
 
 from . import actions, util
+from .log import logger
 from .util import ImportConfig, XmlExportConfig
 
 custom_style_fancy = Style(
@@ -85,7 +86,7 @@ def checkbox_prompt(
             style=style,
         ).unsafe_ask()
     else:
-        print(no_valid_option_message)
+        logger.info(no_valid_option_message)
         return []
 
 
