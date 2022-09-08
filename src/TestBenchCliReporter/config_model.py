@@ -228,8 +228,8 @@ class FileLoggerConfig(ConsoleLoggerConfig):
 
 @dataclass
 class loggingConfiguration:
-    console: ConsoleLoggerConfig
-    file: FileLoggerConfig
+    console: ConsoleLoggerConfig = ConsoleLoggerConfig(logLevel=LogLevel.INFO, logFormat="%(message)s")
+    file: FileLoggerConfig = FileLoggerConfig(logLevel=LogLevel.DEBUG, logFormat="%(asctime)s - %(filename)s:%(lineno)d - %(levelname)8s - %(message)s", fileName="testbench-cli-reporter.log")
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -242,7 +242,7 @@ class loggingConfiguration:
 @dataclass
 class CliReporterConfig:
     configuration: List[Configuration]
-    loggingConfiguration: Optional[loggingConfiguration] = None
+    loggingConfiguration: loggingConfiguration = loggingConfiguration()
 
     @classmethod
     def from_dict(cls, dictionary):
