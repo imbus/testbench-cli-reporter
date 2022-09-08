@@ -9,7 +9,7 @@ logger = logging.Logger("testbench-reporter", logging.DEBUG)
 
 def setup_logger(config: loggingConfiguration):
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(config.console.logLevel)
+    console_handler.setLevel(config.console.logLevel.value)
     console_handler.setFormatter(logging.Formatter(config.console.logFormat))
     logger.addHandler(console_handler)
     if config.file:

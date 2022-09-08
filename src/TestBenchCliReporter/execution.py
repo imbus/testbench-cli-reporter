@@ -7,7 +7,7 @@ from requests import Timeout
 
 from . import questions
 from .actions import Action
-from .config_model import CliReporterConfig, Configuration
+from .config_model import CliReporterConfig, Configuration, LogLevel
 from .log import logger, setup_logger
 from .testbench import Connection, ConnectionLog, login
 from .util import rotate, spin_spinner
@@ -18,7 +18,7 @@ def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
         CliReporterConfig(configuration=[]) if configuration is None else configuration
     )
     cli_config.loggingConfiguration.file = None
-    cli_config.loggingConfiguration.console.logLevel = "INFO"
+    cli_config.loggingConfiguration.console.logLevel = LogLevel.INFO
     cli_config.loggingConfiguration.console.logFormat = "%(message)s"
     setup_logger(cli_config.loggingConfiguration)
 
