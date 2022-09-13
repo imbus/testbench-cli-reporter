@@ -12,61 +12,85 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import argparse
+import json
 import os
 import sys
-import argparse
 import time
+import traceback
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from re import fullmatch
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from questionary import print as pprint
-import json
-from collections import OrderedDict
+
+from .config_model import (
+    CliReporterConfig,
+    ExecutionResultsImportOptions,
+    ExportAction,
+    ImportAction,
+    TestCycleXMLReportOptions,
+)
+from .log import logger
+
+BLUE_ITALIC = "#06c8ff italic"
+
+BLUE_BOLD_ITALIC = "#06c8ff bold italic"
 
 ImportConfig = {
-    "Typical": {
-        "ignoreNonExecutedTestCases": True,
-        "checkPaths": True,
-        "discardTesterInformation": True,
-        "useExistingDefect": True,
-    },
+    "Typical": ExecutionResultsImportOptions(
+        fileName="",
+        reportRootUID=None,
+        ignoreNonExecutedTestCases=True,
+        defaultTester=None,
+        checkPaths=True,
+        filters=None,
+        discardTesterInformation=True,
+        useExistingDefect=True,
+    ),
     "<CUSTOM>": False,
 }
 
 
 XmlExportConfig = {
-    "Itep Export": {
-        "exportAttachments": True,
-        "exportDesignData": True,
-        "characterEncoding": "utf-16",
-        "suppressFilteredData": True,
-        "exportExpandedData": True,
-        "exportDescriptionFields": True,
-        "outputFormattedText": False,
-        "exportExecutionProtocols": False,
-    },
-    "iTorx Export (execution)": {
-        "exportAttachments": True,
-        "exportDesignData": True,
-        "characterEncoding": "utf-8",
-        "suppressFilteredData": True,
-        "exportExpandedData": True,
-        "exportDescriptionFields": True,
-        "outputFormattedText": True,
-        "exportExecutionProtocols": False,
-    },
-    "iTorx Export (continue|view)": {
-        "exportAttachments": True,
-        "exportDesignData": True,
-        "characterEncoding": "utf-8",
-        "suppressFilteredData": True,
-        "exportExpandedData": True,
-        "exportDescriptionFields": True,
-        "outputFormattedText": True,
-        "exportExecutionProtocols": True,
-    },
-    "<CUSTOM>": False,
+    "Itep Export": TestCycleXMLReportOptions(
+        exportAttachments=True,
+        exportDesignData=True,
+        characterEncoding="utf-16",
+        suppressFilteredData=True,
+        exportExpandedData=True,
+        exportDescriptionFields=True,
+        outputFormattedText=False,
+        exportExecutionProtocols=False,
+        filters=[],
+        reportRootUID=None,
+    ),
+    "iTorx Export (execution)": TestCycleXMLReportOptions(
+        exportAttachments=True,
+        exportDesignData=True,
+        characterEncoding="utf-8",
+        suppressFilteredData=True,
+        exportExpandedData=True,
+        exportDescriptionFields=True,
+        outputFormattedText=True,
+        exportExecutionProtocols=False,
+        filters=[],
+        reportRootUID=None,
+    ),
+    "iTorx Export (continue|view)": TestCycleXMLReportOptions(
+        exportAttachments=True,
+        exportDesignData=True,
+        characterEncoding="utf-8",
+        suppressFilteredData=True,
+        exportExpandedData=True,
+        exportDescriptionFields=True,
+        outputFormattedText=True,
+        exportExecutionProtocols=True,
+        filters=[],
+        reportRootUID=None,
+    ),
+    "<CUSTOM>": None,
 }
 
 
@@ -134,9 +158,7 @@ parser.add_argument(
     choices=["e", "i"],
     default="e",
 )
-parser.add_argument(
-    "--manual", help="Switch to force manual mode.", action="store_true"
-)
+parser.add_argument("--manual", help="Switch to force manual mode.", action="store_true")
 parser.add_argument(
     "path",
     nargs="?",
@@ -152,15 +174,17 @@ def close_program():
 
 
 def get_configuration(config_file_path: str):
-    print("Trying to read config file")
+    logger.info("Trying to read config file")
     try:
         with open(config_file_path, "r") as config_file:
-            return json.load(config_file)
-    except IOError:
-        print("Could not open file")
+            return CliReporterConfig.from_dict(json.load(config_file))
+    except IOError as e:
+        logger.error("Could not open file")
+        logger.debug(traceback.format_exc())
         close_program()
-    except json.JSONDecodeError:
-        print("Could not parse config file as JSON.")
+    except json.JSONDecodeError as e:
+        logger.error("Could not parse config file as JSON.")
+        logger.debug(e)
         close_program()
 
 
@@ -177,9 +201,7 @@ def add_numbering_to_cycle(cycle_structure):
             root_key = test_structure_element[key]["key"]["serial"]
             test_structure_element[key]["numbering"] = "-1"
         else:
-            raise KeyError(
-                f"Unexpected Test Structure Element! : {test_structure_element}"
-            )
+            raise KeyError(f"Unexpected Test Structure Element! : {test_structure_element}")
 
         tse_serial = test_structure_element[key]["key"]["serial"]
         tse_parent_serial = test_structure_element[key]["parentPK"]["serial"]
@@ -192,9 +214,7 @@ def add_numbering_to_cycle(cycle_structure):
         if tse_parent_serial not in tse_dict:
             tse_dict[tse_parent_serial] = {
                 "tse": None,
-                "childs": {
-                    int(test_structure_element[key]["orderPos"]): tse_dict[tse_serial]
-                },
+                "childs": {int(test_structure_element[key]["orderPos"]): tse_dict[tse_serial]},
             }
         else:
             tse_dict[tse_parent_serial]["childs"][
@@ -276,11 +296,11 @@ def get_project_keys(
         )
     pretty_print(
         {"value": f"PROJECT_KEY: ", "end": None},
-        {"value": f"{project_key}", "style": "#06c8ff bold italic", "end": None},
+        {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
         {"value": f", TOV_Key: ", "end": None},
-        {"value": f"{tov_key}", "style": "#06c8ff bold italic", "end": None},
+        {"value": f"{tov_key}", "style": BLUE_BOLD_ITALIC, "end": None},
         {"value": f", CYCLE_KEY: ", "end": None},
-        {"value": f"{cycle_key}", "style": "#06c8ff bold italic"},
+        {"value": f"{cycle_key}", "style": BLUE_BOLD_ITALIC},
     )
     return project_key, tov_key, cycle_key
 
@@ -290,36 +310,117 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
     pretty_print(
         {
             "value": f"{' ' * 4 + selected_project['name']: <50}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"  projectKey: ", "end": None},
         {
             "value": f"{selected_project['key']['serial']: >15}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
         {
             "value": f"{' ' * 6 + selected_tov['name']: <50}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"  tovKey:     ", "end": None},
         {
             "value": f"{selected_tov['key']['serial']: >15}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
     )
     if selected_cycle != "NO_EXEC":
         pretty_print(
             {
                 "value": f"{' ' * 8 + selected_cycle['name']: <50}",
-                "style": "#06c8ff bold italic",
+                "style": BLUE_BOLD_ITALIC,
                 "end": None,
             },
             {"value": f"  cycleKey:   ", "end": None},
             {
                 "value": f"{selected_cycle['key']['serial']: >15}",
-                "style": "#06c8ff bold italic",
+                "style": BLUE_BOLD_ITALIC,
+            },
+        )
+
+
+def pretty_print_test_cases(test_cases: Dict[str, Any]):
+    print("   Test Cases:")
+    if not test_cases.get('equal_lists'):
+        _pretty_print_test_cases_spec(test_cases)
+    _pretty_print_test_cases_exec(test_cases)
+    print()
+
+
+def _pretty_print_test_cases_spec(test_cases):
+    print(f"    Specification:")
+    pretty_print(
+        {
+            "value": f"{' Nr.  ': >10}",
+            "end": None,
+        },
+        {
+            "value": f"{'UniqueID': <35}",
+            "end": None,
+        },
+        {"value": f"{'testCaseSpecificationKey' : >25}"},
+    )
+    for index, (uid, tc) in enumerate(test_cases['spec'].items()):
+        pretty_print(
+            {
+                "value": f"{str(index + 1) + '  ': >10}",
+                "style": BLUE_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{uid: <35}",
+                "style": BLUE_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{tc['testCaseSpecificationKey']['serial'] : >25}",
+                "style": BLUE_BOLD_ITALIC,
+            },
+        )
+
+
+def _pretty_print_test_cases_exec(test_cases):
+    print(f"    Execution:")
+    pretty_print(
+        {
+            "value": f"{' Nr.  ': >10}",
+            "end": None,
+        },
+        {
+            "value": f"{'UniqueID': <35}",
+            "end": None,
+        },
+        {
+            "value": f"{'testCaseSpecificationKey' : >25}",
+            "end": None,
+        },
+        {"value": f"{'testCaseExecutionKey' : >25}"},
+    )
+    for index, (uid, tc) in enumerate(test_cases['exec'].items()):
+        pretty_print(
+            {
+                "value": f"{str(index + 1) + '  ': >10}",
+                "style": BLUE_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{uid: <35}",
+                "style": BLUE_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{tc['paramCombPK']['serial'] : >25}",
+                "style": BLUE_BOLD_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{tc['testCaseExecutionKey']['serial'] : >25}",
+                "style": BLUE_BOLD_ITALIC,
             },
         )
 
@@ -328,61 +429,74 @@ def pretty_print_tse_information(tse, typ, info):
     print("  Selection:")
     pretty_print(
         {
-            "value": f"{' ' * 2 + typ: <40}",
-            "style": "#06c8ff bold italic",
+            "value": f"{' ' * 4 + typ: <40}",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"{typ + 'Key:' : <18}", "end": None},
         {
             "value": f"{info['key']['serial']: >21}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
         {
-            "value": f"{' ' * 4 + info['numbering'] + ' [' + info['uniqueID'] + ']': <40}",
-            "style": "#06c8ff bold italic",
+            "value": f"{' ' * 6 + info['numbering'] + ' [' + info['uniqueID'] + ']': <40}",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"{'Specification_key:':<18}", "end": None},
         {
             "value": f"{tse['spec']['Specification_key']['serial']: >21}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
         {
             "value": f"{' ' * 4: <40}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"{'Automation_key:':<18}", "end": None},
         {
             "value": f"{tse['aut']['Automation_key']['serial']: >21}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
     )
     if tse.get("exec"):
         pretty_print(
             {
                 "value": f"{'': <40}",
-                "style": "#06c8ff bold italic",
+                "style": BLUE_BOLD_ITALIC,
                 "end": None,
             },
             {"value": f"{'Execution_key:':<18}", "end": None},
             {
                 "value": f"{tse['exec']['Execution_key']['serial']: >21}",
-                "style": "#06c8ff bold italic",
+                "style": BLUE_BOLD_ITALIC,
             },
         )
 
 
+def pretty_print_success_message(prefix: str, value: Any, suffix: str):
+    logger.debug(f"{prefix} {value} {suffix}")
+    pretty_print(
+        {"value": f"{prefix} ", "end": None},
+        {
+            "value": str(value),
+            "style": "#06c8ff bold italic",
+            "end": None,
+        },
+        {"value": f" {suffix}"},
+    )
+
+
 def resolve_server_name(server):
-    if fullmatch(r"([\w\-.\d]+)(:\d{1,5})", server):
-        server = f"https://{server}/api/1/"
-    elif fullmatch(r"([\w\-.\d]+)", server):
-        server = f"https://{server}:9443/api/1/"
-    elif fullmatch(r"https?://([\w\-.\d]+)(:\d{1,5})/api/1/", server):
-        server = server
+    if fullmatch(r"([\w\-.]+)(:\d{1,5})", server):
+        resolved_server = f"https://{server}/api/1/"
+    elif fullmatch(r"([\w\-.]+)", server):
+        resolved_server = f"https://{server}:9443/api/1/"
+    elif fullmatch(r"https?://([\w\-.]+)(:\d{1,5})/api/1/", server):
+        resolved_server = server
     else:
         raise ValueError(f"Server name '{server}' is not valid.")
-    return server
+    return resolved_server
 
 
 def spinner():
@@ -469,6 +583,9 @@ def spin_spinner(message: str):
         pass
 
 
+ACTION_TYPES = {"ImportExecutionResults": ImportAction, "ExportXMLReport": ExportAction}
+
+
 class AbstractAction(ABC):
     def __init__(self, parameters: Optional[dict] = None):
         self.parameters = parameters or {}
@@ -492,4 +609,4 @@ class AbstractAction(ABC):
         return True
 
     def export(self):
-        return {"type": type(self).__name__, "parameters": self.parameters}
+        return ACTION_TYPES[type(self).__name__](self.parameters)

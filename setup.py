@@ -1,13 +1,11 @@
-from setuptools import setup
-from setuptools import find_packages
 import re
 from os.path import abspath, dirname, join
 
+from setuptools import find_packages, setup
+
 CURDIR = dirname(abspath(__file__))
 
-with open(
-    join(CURDIR, "src", "TestBenchCliReporter", "__main__.py"), encoding="utf-8"
-) as f:
+with open(join(CURDIR, "src", "TestBenchCliReporter", "__main__.py"), encoding="utf-8") as f:
     VERSION = re.search('\n__version__ = "(.*)"', f.read()).group(1)
 
 with open("README.md", "r") as fh:
