@@ -71,7 +71,7 @@ class ExportParameters:
             tovKey=dictionary.get("tovKey"),
             cycleKey=dictionary.get("cycleKey"),
             reportRootUID=dictionary.get("reportRootUID"),
-            report_config=TestCycleXMLReportOptions.from_dict(dictionary.get("report_config", {}))
+            report_config=TestCycleXMLReportOptions.from_dict(dictionary.get("report_config") or {})
             if dictionary.get("report_config")
             else None,
             filters=dictionary.get("filters", []),
@@ -85,7 +85,7 @@ class ExportAction:
 
     @classmethod
     def from_dict(cls, dictionary):
-        return cls(parameters=ExportParameters.from_dict(dictionary.get("parameters", {})))
+        return cls(parameters=ExportParameters.from_dict(dictionary.get("parameters") or {}))
 
 
 @dataclass
@@ -119,7 +119,7 @@ class ImportParameters:
     cycleKey: Optional[str] = None
     projectPath: Optional[List[str]] = None
     reportRootUID: Optional[str] = None
-    defaultTester: Optional[bool] = None
+    defaultTester: Optional[str] = None
     filters: Optional[List[FilterInfo]] = None
     importConfig: Optional[ExecutionResultsImportOptions] = None
 
@@ -143,7 +143,7 @@ class ImportAction:
 
     @classmethod
     def from_dict(cls, dictionary):
-        return cls(parameters=ImportParameters.from_dict(dictionary.get("parameters", {})))
+        return cls(parameters=ImportParameters.from_dict(dictionary.get("parameters") or {}))
 
 
 @dataclass
@@ -236,8 +236,8 @@ class loggingConfiguration:
     @classmethod
     def from_dict(cls, dictionary):
         return cls(
-            console=ConsoleLoggerConfig.from_dict(dictionary.get("console", {})),
-            file=FileLoggerConfig.from_dict(dictionary.get("file", {})),
+            console=ConsoleLoggerConfig.from_dict(dictionary.get("console") or {}),
+            file=FileLoggerConfig.from_dict(dictionary.get("file") or {}),
         )
 
 
@@ -251,6 +251,6 @@ class CliReporterConfig:
         return cls(
             configuration=[Configuration.from_dict(c) for c in dictionary.get("configuration", [])],
             loggingConfiguration=loggingConfiguration.from_dict(
-                dictionary.get("loggingConfiguration", {}) or {}
+                dictionary.get("loggingConfiguration") or {}
             ),
         )

@@ -17,14 +17,14 @@ import sys
 import traceback
 from os import path
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, List
+from typing import Any, Dict, Union
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 from . import questions, testbench
 from .config_model import ExportParameters, ImportParameters
 from .log import logger
-from .testbench import Connection, ConnectionLog
+from .testbench import ConnectionLog
 from .util import (
     AbstractAction,
     ImportConfig,
@@ -32,8 +32,9 @@ from .util import (
     close_program,
     get_project_keys,
     parser,
-    pretty_print,
     pretty_print_project_selection,
+    pretty_print_success_message,
+    pretty_print_test_cases,
     pretty_print_tse_information,
 )
 
@@ -51,7 +52,7 @@ class ExportXMLReport(AbstractAction):
         self.parameters: ExportParameters = parameters or ExportParameters("report.zip")
         self.filters = []
 
-    def prepare(self, connection_log) -> bool:
+    def prepare(self, connection_log: ConnectionLog) -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects)
         selected_tov = questions.ask_to_select_tov(selected_project)
@@ -75,13 +76,14 @@ class ExportXMLReport(AbstractAction):
             )
         self.parameters.reportRootUID = questions.ask_to_select_report_root_uid(tttree_structure)
         all_filters = connection_log.active_connection.get_all_filters()
-        self.filters = questions.ask_to_select_filters(all_filters)
+        self.parameters.filters = questions.ask_to_select_filters(all_filters)
+        self.filters = self.parameters.filters
         self.parameters.report_config = questions.ask_to_config_report()
         self.parameters.outputPath = questions.ask_for_output_path()
 
         return True
 
-    def trigger(self, connection_log) -> Union[bool, str]:
+    def trigger(self, connection_log: ConnectionLog) -> Union[bool, str]:
         if not self.parameters.cycleKey or self.parameters.cycleKey == "0":
             if not self.parameters.tovKey and len(self.parameters.projectPath) >= 2:
                 all_projects = connection_log.active_connection.get_all_projects()
@@ -100,7 +102,7 @@ class ExportXMLReport(AbstractAction):
         )
         return self.job_id
 
-    def wait(self, connection_log) -> Union[bool, str]:
+    def wait(self, connection_log: ConnectionLog) -> Union[bool, str]:
         try:
             self.report_tmp_name = connection_log.active_connection.wait_for_tmp_xml_report_name(
                 self.job_id
@@ -110,26 +112,19 @@ class ExportXMLReport(AbstractAction):
             logger.debug(traceback.format_exc())
             return False
 
-    def poll(self, connection_log) -> bool:
+    def poll(self, connection_log: ConnectionLog) -> bool:
         result = connection_log.active_connection.get_exp_job_result(self.job_id)
         if result is not None:
             self.report_tmp_name = result
         return result
 
-    def finish(self, connection_log) -> bool:
+    def finish(self, connection_log: ConnectionLog) -> bool:
         report = connection_log.active_connection.get_xml_report_data(self.report_tmp_name)
         with open(self.parameters.outputPath, "wb") as output_file:
             output_file.write(report)
-        pretty_print(
-            {"value": f"Report ", "end": None},
-            {
-                "value": f'{Path(self.parameters.outputPath).resolve()}',
-                "style": "#06c8ff bold italic",
-                "end": None,
-            },
-            {"value": f" was generated"},
+        pretty_print_success_message(
+            "Report", Path(self.parameters.outputPath).resolve(), "was generated"
         )
-        logger.debug(f"Report {Path(self.parameters.outputPath).resolve()} was generated")
         return True
 
 
@@ -148,7 +143,7 @@ class ImportExecutionResults(AbstractAction):
         super().__init__()
         self.parameters: ImportParameters = parameters or ImportParameters("result.zip")
 
-    def prepare(self, connection_log) -> bool:
+    def prepare(self, connection_log: ConnectionLog) -> bool:
         self.parameters.inputPath = questions.ask_for_input_path()
         project = version = cycle = None
         try:
@@ -182,7 +177,7 @@ class ImportExecutionResults(AbstractAction):
             cycle = xml.find("./header/cycle").get("name")
             return project, version, cycle
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: ConnectionLog) -> bool:
         if not self.parameters.cycleKey:
             if len(self.parameters.projectPath or []) != 3:
                 self.parameters.projectPath = self.get_project_path_from_report()
@@ -205,7 +200,7 @@ class ImportExecutionResults(AbstractAction):
             )
             return True
 
-    def set_cycle_key_from_path(self, connection_log):
+    def set_cycle_key_from_path(self, connection_log: ConnectionLog):
         all_projects = connection_log.active_connection.get_all_projects()
         (
             project_key,
@@ -215,7 +210,7 @@ class ImportExecutionResults(AbstractAction):
         if not self.parameters.cycleKey:
             raise ValueError("Invalid Config! 'cycleKey' missing.")
 
-    def wait(self, connection_log) -> bool:
+    def wait(self, connection_log: ConnectionLog) -> bool:
         self.report_tmp_name = (
             connection_log.active_connection.wait_for_execution_results_import_to_finish(
                 self.job_id
@@ -223,22 +218,16 @@ class ImportExecutionResults(AbstractAction):
         )
         return self.report_tmp_name
 
-    def poll(self, connection_log) -> bool:
+    def poll(self, connection_log: ConnectionLog) -> bool:
         result = connection_log.active_connection.get_imp_job_result(self.job_id)
         if result is not None:
             self.report_tmp_name = result
         return result
 
-    def finish(self, connection_log) -> bool:
+    def finish(self, connection_log: ConnectionLog) -> bool:
         if self.report_tmp_name:
-            pretty_print(
-                {"value": f"Report ", "end": None},
-                {
-                    "value": f'{path.abspath(self.parameters.inputPath)}',
-                    "style": "#06c8ff bold italic",
-                    "end": None,
-                },
-                {"value": f" was imported"},
+            pretty_print_success_message(
+                "Report", Path(self.parameters.inputPath).resolve(), "was imported"
             )
             return True
 
@@ -277,32 +266,26 @@ class BrowseProjects(UnloggedAction):
                 raise ValueError(f"Unknown Element Type: {str(tse)}")
             if info.get("uniqueID") == selected_uid:
                 pretty_print_tse_information(tse, typ, info)
-                connection_log.active_connection.get_test_cases(tse)
+                if typ == "TestCaseSet":
+                    test_cases = connection_log.active_connection.get_test_cases(tse)
+                    pretty_print_test_cases(test_cases)
         return True
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: ConnectionLog) -> bool:
         return True
 
 
 class ExportActionLog(UnloggedAction):
-    def prepare(self, connection_log):
+    def prepare(self, connection_log: ConnectionLog):
         self.parameters["outputPath"] = questions.ask_for_output_path("config.json")
         return True
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: ConnectionLog) -> bool:
         try:
             connection_log.export_as_json(self.parameters["outputPath"])
-            pretty_print(
-                {"value": f"Config ", "end": None},
-                {
-                    "value": f'{path.abspath(self.parameters["outputPath"])}',
-                    "style": "#06c8ff bold italic",
-                    "end": None,
-                },
-                {"value": f" was generated"},
+            pretty_print_success_message(
+                "Config", path.abspath(self.parameters["outputPath"]), "was generated"
             )
-            logger.debug(f"Config {Path(self.parameters.outputPath).resolve()} was generated")
-
             return True
         except KeyError as e:
             print(f"{str(e)}")
@@ -310,11 +293,11 @@ class ExportActionLog(UnloggedAction):
 
 
 class ChangeConnection(UnloggedAction):
-    def prepare(self, connection_log):
+    def prepare(self, connection_log: ConnectionLog):
         self.parameters["newConnection"] = testbench.login()
         return True
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: ConnectionLog) -> bool:
         connection_log.active_connection.close()
         connection_log.add_connection(self.parameters["newConnection"])
         return True

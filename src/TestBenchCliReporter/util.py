@@ -21,20 +21,34 @@ import traceback
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from re import fullmatch
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from questionary import print as pprint
 
-from .config_model import CliReporterConfig, ExportAction, ImportAction, TestCycleXMLReportOptions
+from .config_model import (
+    CliReporterConfig,
+    ExecutionResultsImportOptions,
+    ExportAction,
+    ImportAction,
+    TestCycleXMLReportOptions,
+)
 from .log import logger
 
+BLUE_ITALIC = "#06c8ff italic"
+
+BLUE_BOLD_ITALIC = "#06c8ff bold italic"
+
 ImportConfig = {
-    "Typical": {
-        "ignoreNonExecutedTestCases": True,
-        "checkPaths": True,
-        "discardTesterInformation": True,
-        "useExistingDefect": True,
-    },
+    "Typical": ExecutionResultsImportOptions(
+        fileName="",
+        reportRootUID=None,
+        ignoreNonExecutedTestCases=True,
+        defaultTester=None,
+        checkPaths=True,
+        filters=None,
+        discardTesterInformation=True,
+        useExistingDefect=True,
+    ),
     "<CUSTOM>": False,
 }
 
@@ -282,11 +296,11 @@ def get_project_keys(
         )
     pretty_print(
         {"value": f"PROJECT_KEY: ", "end": None},
-        {"value": f"{project_key}", "style": "#06c8ff bold italic", "end": None},
+        {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
         {"value": f", TOV_Key: ", "end": None},
-        {"value": f"{tov_key}", "style": "#06c8ff bold italic", "end": None},
+        {"value": f"{tov_key}", "style": BLUE_BOLD_ITALIC, "end": None},
         {"value": f", CYCLE_KEY: ", "end": None},
-        {"value": f"{cycle_key}", "style": "#06c8ff bold italic"},
+        {"value": f"{cycle_key}", "style": BLUE_BOLD_ITALIC},
     )
     return project_key, tov_key, cycle_key
 
@@ -296,36 +310,117 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
     pretty_print(
         {
             "value": f"{' ' * 4 + selected_project['name']: <50}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"  projectKey: ", "end": None},
         {
             "value": f"{selected_project['key']['serial']: >15}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
         {
             "value": f"{' ' * 6 + selected_tov['name']: <50}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"  tovKey:     ", "end": None},
         {
             "value": f"{selected_tov['key']['serial']: >15}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
     )
     if selected_cycle != "NO_EXEC":
         pretty_print(
             {
                 "value": f"{' ' * 8 + selected_cycle['name']: <50}",
-                "style": "#06c8ff bold italic",
+                "style": BLUE_BOLD_ITALIC,
                 "end": None,
             },
             {"value": f"  cycleKey:   ", "end": None},
             {
                 "value": f"{selected_cycle['key']['serial']: >15}",
-                "style": "#06c8ff bold italic",
+                "style": BLUE_BOLD_ITALIC,
+            },
+        )
+
+
+def pretty_print_test_cases(test_cases: Dict[str, Any]):
+    print("   Test Cases:")
+    if not test_cases.get('equal_lists'):
+        _pretty_print_test_cases_spec(test_cases)
+    _pretty_print_test_cases_exec(test_cases)
+    print()
+
+
+def _pretty_print_test_cases_spec(test_cases):
+    print(f"    Specification:")
+    pretty_print(
+        {
+            "value": f"{' Nr.  ': >10}",
+            "end": None,
+        },
+        {
+            "value": f"{'UniqueID': <35}",
+            "end": None,
+        },
+        {"value": f"{'testCaseSpecificationKey' : >25}"},
+    )
+    for index, (uid, tc) in enumerate(test_cases['spec'].items()):
+        pretty_print(
+            {
+                "value": f"{str(index + 1) + '  ': >10}",
+                "style": BLUE_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{uid: <35}",
+                "style": BLUE_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{tc['testCaseSpecificationKey']['serial'] : >25}",
+                "style": BLUE_BOLD_ITALIC,
+            },
+        )
+
+
+def _pretty_print_test_cases_exec(test_cases):
+    print(f"    Execution:")
+    pretty_print(
+        {
+            "value": f"{' Nr.  ': >10}",
+            "end": None,
+        },
+        {
+            "value": f"{'UniqueID': <35}",
+            "end": None,
+        },
+        {
+            "value": f"{'testCaseSpecificationKey' : >25}",
+            "end": None,
+        },
+        {"value": f"{'testCaseExecutionKey' : >25}"},
+    )
+    for index, (uid, tc) in enumerate(test_cases['exec'].items()):
+        pretty_print(
+            {
+                "value": f"{str(index + 1) + '  ': >10}",
+                "style": BLUE_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{uid: <35}",
+                "style": BLUE_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{tc['paramCombPK']['serial'] : >25}",
+                "style": BLUE_BOLD_ITALIC,
+                "end": None,
+            },
+            {
+                "value": f"{tc['testCaseExecutionKey']['serial'] : >25}",
+                "style": BLUE_BOLD_ITALIC,
             },
         )
 
@@ -334,61 +429,74 @@ def pretty_print_tse_information(tse, typ, info):
     print("  Selection:")
     pretty_print(
         {
-            "value": f"{' ' * 2 + typ: <40}",
-            "style": "#06c8ff bold italic",
+            "value": f"{' ' * 4 + typ: <40}",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"{typ + 'Key:' : <18}", "end": None},
         {
             "value": f"{info['key']['serial']: >21}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
         {
-            "value": f"{' ' * 4 + info['numbering'] + ' [' + info['uniqueID'] + ']': <40}",
-            "style": "#06c8ff bold italic",
+            "value": f"{' ' * 6 + info['numbering'] + ' [' + info['uniqueID'] + ']': <40}",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"{'Specification_key:':<18}", "end": None},
         {
             "value": f"{tse['spec']['Specification_key']['serial']: >21}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
         {
             "value": f"{' ' * 4: <40}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
         {"value": f"{'Automation_key:':<18}", "end": None},
         {
             "value": f"{tse['aut']['Automation_key']['serial']: >21}",
-            "style": "#06c8ff bold italic",
+            "style": BLUE_BOLD_ITALIC,
         },
     )
     if tse.get("exec"):
         pretty_print(
             {
                 "value": f"{'': <40}",
-                "style": "#06c8ff bold italic",
+                "style": BLUE_BOLD_ITALIC,
                 "end": None,
             },
             {"value": f"{'Execution_key:':<18}", "end": None},
             {
                 "value": f"{tse['exec']['Execution_key']['serial']: >21}",
-                "style": "#06c8ff bold italic",
+                "style": BLUE_BOLD_ITALIC,
             },
         )
 
 
+def pretty_print_success_message(prefix: str, value: Any, suffix: str):
+    logger.debug(f"{prefix} {value} {suffix}")
+    pretty_print(
+        {"value": f"{prefix} ", "end": None},
+        {
+            "value": str(value),
+            "style": "#06c8ff bold italic",
+            "end": None,
+        },
+        {"value": f" {suffix}"},
+    )
+
+
 def resolve_server_name(server):
-    if fullmatch(r"([\w\-.\d]+)(:\d{1,5})", server):
-        server = f"https://{server}/api/1/"
-    elif fullmatch(r"([\w\-.\d]+)", server):
-        server = f"https://{server}:9443/api/1/"
-    elif fullmatch(r"https?://([\w\-.\d]+)(:\d{1,5})/api/1/", server):
-        server = server
+    if fullmatch(r"([\w\-.]+)(:\d{1,5})", server):
+        resolved_server = f"https://{server}/api/1/"
+    elif fullmatch(r"([\w\-.]+)", server):
+        resolved_server = f"https://{server}:9443/api/1/"
+    elif fullmatch(r"https?://([\w\-.]+)(:\d{1,5})/api/1/", server):
+        resolved_server = server
     else:
         raise ValueError(f"Server name '{server}' is not valid.")
-    return server
+    return resolved_server
 
 
 def spinner():

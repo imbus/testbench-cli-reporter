@@ -17,14 +17,14 @@ import base64
 import dataclasses
 import json
 import traceback
-from typing import Dict, List, Optional, Union, Any
+from typing import Any, Dict, List, Optional, Union
 
 import requests
 import urllib3
 from questionary import print as pprint
 
 from . import questions
-from .config_model import CliReporterConfig, Configuration
+from .config_model import CliReporterConfig, Configuration, ExecutionResultsImportOptions
 from .log import logger
 from .util import AbstractAction, ImportConfig, XmlExportConfig, close_program, spin_spinner
 
@@ -227,7 +227,7 @@ class Connection:
         serverside_file_name: str,
         default_tester: str,
         filters: List[Dict[str, str]],
-        import_config: Dict = None,
+        import_config: Optional[ExecutionResultsImportOptions] = None,
     ) -> str:
         if import_config is None:
             import_config = ImportConfig["Typical"]
@@ -309,10 +309,15 @@ class Connection:
             test_case_set_structure["exec"]["Execution_key"]["serial"],
         )
         test_cases_execs = {tc["uniqueID"]: tc for tc in exec_test_cases}
+        equal_lists = False not in [
+            test_cases.get(uid, {}).get('testCaseSpecificationKey')['serial']
+            == tc['paramCombPK']['serial']
+            for uid, tc in test_cases_execs.items()
+        ]
         return {
             "spec": test_cases,
             "exec": test_cases_execs,
-            "equal_lists": list(test_cases.keys()) == list(test_cases_execs.keys()),
+            "equal_lists": equal_lists,
         }
 
     def get_spec_test_cases(self, testCaseSetKey: str, specificationKey: str) -> List[dict]:
