@@ -17,13 +17,14 @@ import sys
 import traceback
 from os import path
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, List
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 from . import questions, testbench
 from .config_model import ExportParameters, ImportParameters
 from .log import logger
+from .testbench import Connection, ConnectionLog
 from .util import (
     AbstractAction,
     ImportConfig,
@@ -243,7 +244,7 @@ class ImportExecutionResults(AbstractAction):
 
 
 class BrowseProjects(UnloggedAction):
-    def prepare(self, connection_log) -> bool:
+    def prepare(self, connection_log: ConnectionLog) -> bool:
         arg = parser.parse_args()
         project = arg.project
         version = arg.version
@@ -276,11 +277,11 @@ class BrowseProjects(UnloggedAction):
                 raise ValueError(f"Unknown Element Type: {str(tse)}")
             if info.get("uniqueID") == selected_uid:
                 pretty_print_tse_information(tse, typ, info)
+                connection_log.active_connection.get_test_cases(tse)
         return True
 
     def trigger(self, connection_log) -> bool:
         return True
-
 
 class ExportActionLog(UnloggedAction):
     def prepare(self, connection_log):

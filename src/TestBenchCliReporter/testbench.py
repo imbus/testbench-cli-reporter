@@ -17,7 +17,7 @@ import base64
 import dataclasses
 import json
 import traceback
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 import requests
 import urllib3
@@ -99,7 +99,7 @@ class Connection:
 
     def check_is_working(self) -> bool:
         response = self.session.get(
-            self.server_url + "projects",
+            f"{self.server_url}projects",
             params={
                 "includeTOVs": "false",
                 "includeCycles": "false",
@@ -112,7 +112,7 @@ class Connection:
 
     def get_all_projects(self) -> Dict:
         all_projects = self.session.get(
-            self.server_url + "projects",
+            f"{self.server_url}projects",
             params={"includeTOVs": "true", "includeCycles": "true"},
         ).json()
         all_projects["projects"].sort(key=lambda proj: proj["name"].casefold())
@@ -120,7 +120,7 @@ class Connection:
 
     def get_all_filters(self) -> List[dict]:
         all_filters = self.session.get(
-            self.server_url + "filters",
+            f"{self.server_url}filters",
         )
 
         return all_filters.json()
@@ -189,7 +189,7 @@ class Connection:
 
     def get_xml_report_data(self, report_tmp_name: str) -> bytes:
         report = self.session.get(
-            self.server_url + "xmlReport/" + report_tmp_name,
+            f"{self.server_url}xmlReport/{report_tmp_name}",
         )
 
         return report.content
@@ -203,7 +203,7 @@ class Connection:
 
     def get_all_members_of_project(self, project_key: str) -> List[dict]:
         all_project_members = self.session.get(
-            self.server_url + "project/" + project_key + "/members",
+            f"{self.server_url}project/{project_key}/members",
         )
 
         return all_project_members.json()
@@ -211,7 +211,7 @@ class Connection:
     def upload_execution_results(self, results_file_base64: str) -> str:
         try:
             serverside_file_name = self.session.post(
-                self.server_url + "executionResultsUpload",
+                f"{self.server_url}executionResultsUpload",
                 json={
                     "data": results_file_base64,
                 },
@@ -286,15 +286,45 @@ class Connection:
 
     def get_test_cycle_structure(self, cycle_key: str) -> List[dict]:
         test_cycle_structure = self.session.get(
-            self.server_url + "cycle/" + cycle_key + "/structure",
+            f"{self.server_url}cycle/{cycle_key}/structure",
         )
         return test_cycle_structure.json()
 
     def get_tov_structure(self, tovKey: str) -> List[dict]:
         tov_structure = self.session.get(
-            self.server_url + "tov/" + tovKey + "/structure",
+            f"{self.server_url}tov/{tovKey}/structure",
         )
         return tov_structure.json()
+
+    def get_test_cases(self, test_case_set_structure: Dict[str, Any]) -> Dict[str, Dict]:
+        spec_test_cases = self.get_spec_test_cases(
+            test_case_set_structure["TestCaseSet_structure"]["key"]["serial"],
+            test_case_set_structure["spec"]["Specification_key"]["serial"])
+        test_cases = {tc["uniqueID"]: tc for tc in spec_test_cases}
+        if not test_case_set_structure.get("exec"):
+            return {"spec": test_cases}
+        exec_test_cases = self.get_exec_test_cases(
+            test_case_set_structure["TestCaseSet_structure"]["key"]["serial"],
+            test_case_set_structure["exec"]["Execution_key"]["serial"])
+        test_cases_execs = {tc["uniqueID"]: tc for tc in exec_test_cases}
+        return {"spec": test_cases, "exec": test_cases_execs, "equal_lists": list(test_cases.keys()) == list(test_cases_execs.keys())}
+
+
+    def get_spec_test_cases(self, testCaseSetKey: str, specificationKey: str) -> List[dict]:
+        spec_test_cases = self.session.get(
+            f"{self.server_url}testCaseSets/"
+            f"{testCaseSetKey}/specifications/"
+            f"{specificationKey}/testCases",
+        )
+        return spec_test_cases.json()
+
+    def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> List[dict]:
+        exec_test_cases = self.session.get(
+            f"{self.server_url}testCaseSets/"
+            f"{testCaseSetKey}/executions/"
+            f"{executionKey}/testCases",
+        )
+        return exec_test_cases.json()
 
 
 def login(server="", login="", pwd="") -> Connection:
