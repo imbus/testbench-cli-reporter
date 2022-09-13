@@ -299,16 +299,21 @@ class Connection:
     def get_test_cases(self, test_case_set_structure: Dict[str, Any]) -> Dict[str, Dict]:
         spec_test_cases = self.get_spec_test_cases(
             test_case_set_structure["TestCaseSet_structure"]["key"]["serial"],
-            test_case_set_structure["spec"]["Specification_key"]["serial"])
+            test_case_set_structure["spec"]["Specification_key"]["serial"],
+        )
         test_cases = {tc["uniqueID"]: tc for tc in spec_test_cases}
         if not test_case_set_structure.get("exec"):
             return {"spec": test_cases}
         exec_test_cases = self.get_exec_test_cases(
             test_case_set_structure["TestCaseSet_structure"]["key"]["serial"],
-            test_case_set_structure["exec"]["Execution_key"]["serial"])
+            test_case_set_structure["exec"]["Execution_key"]["serial"],
+        )
         test_cases_execs = {tc["uniqueID"]: tc for tc in exec_test_cases}
-        return {"spec": test_cases, "exec": test_cases_execs, "equal_lists": list(test_cases.keys()) == list(test_cases_execs.keys())}
-
+        return {
+            "spec": test_cases,
+            "exec": test_cases_execs,
+            "equal_lists": list(test_cases.keys()) == list(test_cases_execs.keys()),
+        }
 
     def get_spec_test_cases(self, testCaseSetKey: str, specificationKey: str) -> List[dict]:
         spec_test_cases = self.session.get(

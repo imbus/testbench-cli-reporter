@@ -228,7 +228,9 @@ class FileLoggerConfig(ConsoleLoggerConfig):
 
 @dataclass
 class loggingConfiguration:
-    console: ConsoleLoggerConfig = ConsoleLoggerConfig(logLevel=LogLevel.INFO, logFormat="%(message)s")
+    console: ConsoleLoggerConfig = ConsoleLoggerConfig(
+        logLevel=LogLevel.INFO, logFormat="%(message)s"
+    )
     file: Optional[FileLoggerConfig] = None
 
     @classmethod

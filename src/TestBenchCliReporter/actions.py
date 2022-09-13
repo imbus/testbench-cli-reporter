@@ -283,6 +283,7 @@ class BrowseProjects(UnloggedAction):
     def trigger(self, connection_log) -> bool:
         return True
 
+
 class ExportActionLog(UnloggedAction):
     def prepare(self, connection_log):
         self.parameters["outputPath"] = questions.ask_for_output_path("config.json")
