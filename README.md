@@ -39,7 +39,7 @@ Next Step is providing login data the testbench-cli-reporter should use to conne
 Make sure the user has rights to access the test project you want to work with.
 
 ```
-? Enter your login name: vadaj
+? Enter your login name: testbench-user
 ? Enter your password: ****************
 ```
 
@@ -156,9 +156,9 @@ If you didn't export nor import anything in the current session yet, at least th
 {
   "configuration": [
     {
-      "server_url": "https://vadaj:9443/api/1/",
+      "server_url": "https://localhost:9443/api/1/",
       "verify": false,
-      "basicAuth": "dHQtYWRtaW46YWRtaW4=",
+      "basicAuth": "XXXXXXXXXXXX=",
       "actions": []
     },
   ]
@@ -171,7 +171,7 @@ Connect to a different TestBench instance so you do not have to exit the testben
 ```
 ? What do you want to do? Change connection
 ? Enter the TestBench server address and port <host:port>:
-? Enter your login name: vadaj
+? Enter your login name: testbench-user
 ? Enter your password: ****************
 ```
 
@@ -191,9 +191,9 @@ The attribute `projectPath` is not mandatory though. Only using projectKey, tovK
 {
   "configuration": [
     {
-      "server_url": "https://remus:9443/api/1/",
+      "server_url": "https://localhost:9443/api/1/",
       "verify": false,
-      "basicAuth": "dHQtYWRtaW46YWRtaW4=",
+      "basicAuth": "XXXXXXXXXXXXX=",
       "actions": [
         {
           "type": "ExportXMLReport",
