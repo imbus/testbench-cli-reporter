@@ -22,6 +22,7 @@ from questionary import print as pprint
 from questionary import select, unsafe_prompt
 
 from . import actions, util
+from .config_model import ExecutionResultsImportOptions
 from .log import logger
 from .util import ImportConfig, XmlExportConfig
 
@@ -250,26 +251,27 @@ def ask_to_config_report():
     return selection
 
 
-def ask_to_config_import():
+def ask_to_config_import() -> ExecutionResultsImportOptions:
     selection = selection_prompt(
         "Select Import Configuration:",
         choices=[Choice(config_name, config) for config_name, config in ImportConfig.items()],
     )
-    if not selection:
-        selection = {
-            "ignoreNonExecutedTestCases": [
-                Choice("True", True),
-                Choice("False", False),
-            ],
-            "checkPaths": [Choice("True", True), Choice("False", False)],
-            "discardTesterInformation": [Choice("True", True), Choice("False", False)],
-            "useExistingDefect": [Choice("True", True), Choice("False", False)],
-        }
-        pprint("  {", style="bold")
-        for key, value in selection.items():
-            selection[key] = selection_prompt(f'   "{key}": ', value)
-        pprint("  }", style="bold")
-    return selection
+    if isinstance(selection, ExecutionResultsImportOptions):
+        return selection
+    selection = {
+        "ignoreNonExecutedTestCases": [
+            Choice("True", True),
+            Choice("False", False),
+        ],
+        "checkPaths": [Choice("True", True), Choice("False", False)],
+        "discardTesterInformation": [Choice("True", True), Choice("False", False)],
+        "useExistingDefect": [Choice("True", True), Choice("False", False)],
+    }
+    pprint("  {", style="bold")
+    for key, value in selection.items():
+        selection[key] = selection_prompt(f'   "{key}": ', value)
+    pprint("  }", style="bold")
+    return ExecutionResultsImportOptions.from_dict(selection)
 
 
 def ask_for_output_path(default: str = "report.zip") -> str:

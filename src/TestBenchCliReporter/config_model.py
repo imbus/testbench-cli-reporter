@@ -228,9 +228,7 @@ class FileLoggerConfig(ConsoleLoggerConfig):
 
 @dataclass
 class loggingConfiguration:
-    console: ConsoleLoggerConfig = ConsoleLoggerConfig(
-        logLevel=LogLevel.INFO, logFormat="%(message)s"
-    )
+    console: Optional[ConsoleLoggerConfig] = None
     file: Optional[FileLoggerConfig] = None
 
     @classmethod
@@ -244,7 +242,7 @@ class loggingConfiguration:
 @dataclass
 class CliReporterConfig:
     configuration: List[Configuration]
-    loggingConfiguration: loggingConfiguration = loggingConfiguration()
+    loggingConfiguration: loggingConfiguration
 
     @classmethod
     def from_dict(cls, dictionary):
