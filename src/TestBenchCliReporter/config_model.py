@@ -12,7 +12,7 @@ class FilterInfoType(str, Enum):
 @dataclass
 class FilterInfo:
     name: str
-    type: FilterInfoType
+    type: FilterInfoType  # noqa: A003
     testThemeUID: Optional[str] = None
 
     @classmethod
@@ -81,7 +81,7 @@ class ExportParameters:
 @dataclass
 class ExportAction:
     parameters: ExportParameters
-    type: str = "ExportXMLReport"
+    type: str = "ExportXMLReport"  # noqa: A003
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -139,7 +139,7 @@ class ImportParameters:
 @dataclass
 class ImportAction:
     parameters: ImportParameters
-    type: str = "ImportExecutionResults"
+    type: str = "ImportExecutionResults"  # noqa: A003
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -227,7 +227,7 @@ class FileLoggerConfig(ConsoleLoggerConfig):
 
 
 @dataclass
-class loggingConfiguration:
+class loggingConfiguration:  # noqa: N801
     console: Optional[ConsoleLoggerConfig] = None
     file: Optional[FileLoggerConfig] = None
 

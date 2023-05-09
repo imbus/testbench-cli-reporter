@@ -13,12 +13,12 @@
 #  limitations under the License.
 
 import base64
+import contextlib
 import sys
 import traceback
-from os import path
 from pathlib import Path
 from typing import Any, Dict, Union
-from xml.etree import ElementTree as ET
+from xml.etree import ElementTree
 from zipfile import ZipFile
 
 from . import questions, testbench
@@ -84,14 +84,15 @@ class ExportXMLReport(AbstractAction):
         return True
 
     def trigger(self, connection_log: ConnectionLog) -> Union[bool, str]:
-        if not self.parameters.cycleKey or self.parameters.cycleKey == "0":
-            if not self.parameters.tovKey and len(self.parameters.projectPath) >= 2:
-                all_projects = connection_log.active_connection.get_all_projects()
-                (
-                    project_key,
-                    self.parameters.tovKey,
-                    self.parameters.cycleKey,
-                ) = get_project_keys(all_projects, *self.parameters.projectPath)
+        if (not self.parameters.cycleKey or self.parameters.cycleKey == "0") and (
+            not self.parameters.tovKey and len(self.parameters.projectPath) >= 2  # noqa: PLR2004
+        ):
+            all_projects = connection_log.active_connection.get_all_projects()
+            (
+                project_key,
+                self.parameters.tovKey,
+                self.parameters.cycleKey,
+            ) = get_project_keys(all_projects, *self.parameters.projectPath)
 
         self.job_id = connection_log.active_connection.trigger_xml_report_generation(
             self.parameters.tovKey,
@@ -120,7 +121,7 @@ class ExportXMLReport(AbstractAction):
 
     def finish(self, connection_log: ConnectionLog) -> bool:
         report = connection_log.active_connection.get_xml_report_data(self.report_tmp_name)
-        with open(self.parameters.outputPath, "wb") as output_file:
+        with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(report)
         pretty_print_success_message(
             "Report", Path(self.parameters.outputPath).resolve(), "was generated"
@@ -128,7 +129,7 @@ class ExportXMLReport(AbstractAction):
         return True
 
 
-def Action(class_name: str, parameters: Dict[str, str]) -> AbstractAction:
+def Action(class_name: str, parameters: Dict[str, str]) -> AbstractAction:  # noqa: N802
     try:
         return globals()[class_name](parameters)
     except AttributeError:
@@ -146,10 +147,9 @@ class ImportExecutionResults(AbstractAction):
     def prepare(self, connection_log: ConnectionLog) -> bool:
         self.parameters.inputPath = questions.ask_for_input_path()
         project = version = cycle = None
-        try:
+        with contextlib.suppress(Exception):
             project, version, cycle = self.get_project_path_from_report()
-        except:
-            pass
+
         all_projects = connection_log.active_connection.get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects, default=project)
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
@@ -171,7 +171,7 @@ class ImportExecutionResults(AbstractAction):
 
     def get_project_path_from_report(self):
         with ZipFile(self.parameters.inputPath) as zip_file:
-            xml = ET.fromstring(zip_file.read("report.xml"))
+            xml = ElementTree.fromstring(zip_file.read("report.xml"))
             project = xml.find("./header/project").get("name")
             version = xml.find("./header/version").get("name")
             cycle = xml.find("./header/cycle").get("name")
@@ -179,11 +179,11 @@ class ImportExecutionResults(AbstractAction):
 
     def trigger(self, connection_log: ConnectionLog) -> bool:
         if not self.parameters.cycleKey:
-            if len(self.parameters.projectPath or []) != 3:
+            if len(self.parameters.projectPath or []) != 3:  # noqa: PLR2004
                 self.parameters.projectPath = self.get_project_path_from_report()
             self.set_cycle_key_from_path(connection_log)
 
-        with open(self.parameters.inputPath, "rb") as execution_report:
+        with Path(self.parameters.inputPath).open("rb") as execution_report:
             execution_report_base64 = base64.b64encode(execution_report.read()).decode()
 
         serverside_file_name = connection_log.active_connection.upload_execution_results(
@@ -199,6 +199,7 @@ class ImportExecutionResults(AbstractAction):
                 self.parameters.importConfig or ImportConfig["Typical"],
             )
             return True
+        return None
 
     def set_cycle_key_from_path(self, connection_log: ConnectionLog):
         all_projects = connection_log.active_connection.get_all_projects()
@@ -230,6 +231,7 @@ class ImportExecutionResults(AbstractAction):
                 "Report", Path(self.parameters.inputPath).resolve(), "was imported"
             )
             return True
+        return None
 
 
 class BrowseProjects(UnloggedAction):
@@ -284,7 +286,7 @@ class ExportActionLog(UnloggedAction):
         try:
             connection_log.export_as_json(self.parameters["outputPath"])
             pretty_print_success_message(
-                "Config", path.abspath(self.parameters["outputPath"]), "was generated"
+                "Config", str(Path(self.parameters["outputPath"]).resolve()), "was generated"
             )
             return True
         except KeyError as e:

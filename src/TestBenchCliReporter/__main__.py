@@ -49,9 +49,7 @@ def main():
                     Configuration(
                         server_url=server,
                         verify=False,
-                        basicAuth=base64.b64encode(
-                            f"{arg.login}:{arg.password}".encode("utf-8")
-                        ).decode(),
+                        basicAuth=base64.b64encode(f"{arg.login}:{arg.password}".encode()).decode(),
                         actions=[],
                     )
                 ],

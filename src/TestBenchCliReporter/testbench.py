@@ -1,4 +1,3 @@
-# coding=utf8
 #  Copyright 2021- imbus AG
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +16,7 @@ import base64
 import dataclasses
 import json
 import traceback
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import requests
@@ -24,9 +24,19 @@ import urllib3
 from questionary import print as pprint
 
 from . import questions
-from .config_model import CliReporterConfig, Configuration, ExecutionResultsImportOptions
+from .config_model import (
+    CliReporterConfig,
+    Configuration,
+    ExecutionResultsImportOptions,
+)
 from .log import logger
-from .util import AbstractAction, ImportConfig, XmlExportConfig, close_program, spin_spinner
+from .util import (
+    AbstractAction,
+    ImportConfig,
+    XmlExportConfig,
+    close_program,
+    spin_spinner,
+)
 
 
 class Connection:
@@ -76,7 +86,7 @@ class Connection:
         self.session.close()
 
     def export(self) -> Configuration:
-        basic_auth = base64.b64encode(f"{self.loginname}:{self.password}".encode("utf-8")).decode()
+        basic_auth = base64.b64encode(f"{self.loginname}:{self.password}".encode()).decode()
         return Configuration(
             server_url=self.server_url,
             verify=self.session.verify,
@@ -88,14 +98,11 @@ class Connection:
         self.action_log.append(action)
 
     def check_is_identical(self, other) -> bool:
-        if (
+        return bool(
             self.server_url == other.server_url
             and self.loginname == other.loginname
             and self.password == other.password
-        ):
-            return True
-        else:
-            return False
+        )
 
     def check_is_working(self) -> bool:
         response = self.session.get(
@@ -132,9 +139,7 @@ class Connection:
             filters = []
         job_id = self.trigger_xml_report_generation(tov_key, cycle_key, reportRootUID, filters)
         report_tmp_name = self.wait_for_tmp_xml_report_name(job_id)
-        report = self.get_xml_report_data(report_tmp_name)
-
-        return report
+        return self.get_xml_report_data(report_tmp_name)
 
     def trigger_xml_report_generation(
         self,
@@ -178,8 +183,7 @@ class Connection:
         result = report_generation_status["result"]
         if "Right" in result:
             return result["Right"]
-        else:
-            raise AssertionError(result)
+        raise AssertionError(result)
 
     def get_job_result(self, path: str, job_id: str):
         report_generation_status = self.session.get(
@@ -261,15 +265,14 @@ class Connection:
 
             if "Right" in result:
                 return result["Right"]
-            else:
-                raise AssertionError(result)
+            raise AssertionError(result)
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
             raise e
 
     def render_import_error(self, e):
         pprint("!!!ERROR DURING IMPORT!!!", style="#ff0e0e italic")
-        pprint(f"Report was NOT imported")
+        pprint("Report was NOT imported")
         pprint(f"Error Code {e.response.status_code}")
         pprint(f"Error Message {e.response.text}")
         pprint(f"URL: {e.response.url}")
@@ -281,8 +284,7 @@ class Connection:
         result = report_import_status["result"]
         if "Right" in result:
             return result["Right"]
-        else:
-            raise AssertionError(result)
+        raise AssertionError(result)
 
     def get_test_cycle_structure(self, cycle_key: str) -> List[dict]:
         test_cycle_structure = self.session.get(
@@ -337,7 +339,7 @@ class Connection:
         return exec_test_cases.json()
 
 
-def login(server="", login="", pwd="") -> Connection:
+def login(server="", login="", pwd="") -> Connection:  # noqa: C901, PLR0912
     if server and login and pwd:
         credentials = {
             "server_url": server,
@@ -412,14 +414,14 @@ class ConnectionLog:
         self.connections: List[Connection] = []
 
     @property
-    def len(self) -> int:
+    def len(self) -> int:  # noqa: A003
         return len(self.connections)
 
     @property
     def active_connection(self) -> Connection:
         return self.connections[-1]
 
-    def next(self):
+    def next(self):  # noqa: A003
         self.connections = self.connections[1:] + self.connections[:1]
 
     def remove(self, connection):
@@ -434,5 +436,5 @@ class ConnectionLog:
             configuration=[connection.export() for connection in self.connections]
         )
 
-        with open(output_file_path, "w") as output_file:
+        with Path(output_file_path).open("w") as output_file:
             json.dump(dataclasses.asdict(export_config), output_file, indent=2)

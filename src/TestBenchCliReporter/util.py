@@ -20,6 +20,7 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from pathlib import Path
 from re import fullmatch
 from typing import Any, Dict, Optional
 
@@ -176,9 +177,9 @@ def close_program():
 def get_configuration(config_file_path: str):
     logger.info("Trying to read config file")
     try:
-        with open(config_file_path, "r") as config_file:
+        with Path(config_file_path).open() as config_file:
             return CliReporterConfig.from_dict(json.load(config_file))
-    except IOError as e:
+    except OSError:
         logger.error("Could not open file")
         logger.debug(traceback.format_exc())
         close_program()
@@ -190,7 +191,7 @@ def get_configuration(config_file_path: str):
 
 def add_numbering_to_cycle(cycle_structure):
     root_key = 0
-    tse_dict = dict()
+    tse_dict = {}
     for test_structure_element in cycle_structure:
         if "TestTheme_structure" in test_structure_element:
             key = "TestTheme_structure"
@@ -207,7 +208,7 @@ def add_numbering_to_cycle(cycle_structure):
         tse_parent_serial = test_structure_element[key]["parentPK"]["serial"]
 
         if tse_serial not in tse_dict:
-            tse_dict[tse_serial] = {"tse": test_structure_element, "childs": dict()}
+            tse_dict[tse_serial] = {"tse": test_structure_element, "childs": {}}
         else:
             tse_dict[tse_serial]["tse"] = test_structure_element
 
@@ -246,8 +247,7 @@ def add_numbering_to_childs(child_list, parent_numbering):
 def rotate(li):
     if len(li) > 1:
         return li[1:] + li[:1]
-    else:
-        return li
+    return li
 
 
 def pretty_print(*print_statements: dict):
@@ -262,7 +262,7 @@ def pretty_print(*print_statements: dict):
         print("".join([statement["value"] for statement in print_statements]))
 
 
-def get_project_keys(
+def get_project_keys(  # noqa: C901
     projects: Dict,
     project_name: str,
     tov_name: str,
@@ -295,11 +295,11 @@ def get_project_keys(
             f"Cycle '{cycle_name}' not found in TOV '{tov_name}' in project '{project_name}'."
         )
     pretty_print(
-        {"value": f"PROJECT_KEY: ", "end": None},
+        {"value": "PROJECT_KEY: ", "end": None},
         {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
-        {"value": f", TOV_Key: ", "end": None},
+        {"value": ", TOV_Key: ", "end": None},
         {"value": f"{tov_key}", "style": BLUE_BOLD_ITALIC, "end": None},
-        {"value": f", CYCLE_KEY: ", "end": None},
+        {"value": ", CYCLE_KEY: ", "end": None},
         {"value": f"{cycle_key}", "style": BLUE_BOLD_ITALIC},
     )
     return project_key, tov_key, cycle_key
@@ -313,7 +313,7 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
             "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
-        {"value": f"  projectKey: ", "end": None},
+        {"value": "  projectKey: ", "end": None},
         {
             "value": f"{selected_project['key']['serial']: >15}",
             "style": BLUE_BOLD_ITALIC,
@@ -323,7 +323,7 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
             "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
-        {"value": f"  tovKey:     ", "end": None},
+        {"value": "  tovKey:     ", "end": None},
         {
             "value": f"{selected_tov['key']['serial']: >15}",
             "style": BLUE_BOLD_ITALIC,
@@ -336,7 +336,7 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
                 "style": BLUE_BOLD_ITALIC,
                 "end": None,
             },
-            {"value": f"  cycleKey:   ", "end": None},
+            {"value": "  cycleKey:   ", "end": None},
             {
                 "value": f"{selected_cycle['key']['serial']: >15}",
                 "style": BLUE_BOLD_ITALIC,
@@ -353,7 +353,7 @@ def pretty_print_test_cases(test_cases: Dict[str, Any]):
 
 
 def _pretty_print_test_cases_spec(test_cases):
-    print(f"    Specification:")
+    print("    Specification:")
     pretty_print(
         {
             "value": f"{' Nr.  ': >10}",
@@ -385,7 +385,7 @@ def _pretty_print_test_cases_spec(test_cases):
 
 
 def _pretty_print_test_cases_exec(test_cases):
-    print(f"    Execution:")
+    print("    Execution:")
     pretty_print(
         {
             "value": f"{' Nr.  ': >10}",
@@ -501,74 +501,72 @@ def resolve_server_name(server):
 
 def spinner():
     if os.name != "posix":
-        return ["_", "_", "_", "-", "`", "`", "'", "´", "-", "_", "_", "_"]
-    else:
-        return [
-            "⢀⠀",
-            "⡀⠀",
-            "⠄⠀",
-            "⢂⠀",
-            "⡂⠀",
-            "⠅⠀",
-            "⢃⠀",
-            "⡃⠀",
-            "⠍⠀",
-            "⢋⠀",
-            "⡋⠀",
-            "⠍⠁",
-            "⢋⠁",
-            "⡋⠁",
-            "⠍⠉",
-            "⠋⠉",
-            "⠋⠉",
-            "⠉⠙",
-            "⠉⠙",
-            "⠉⠩",
-            "⠈⢙",
-            "⠈⡙",
-            "⢈⠩",
-            "⡀⢙",
-            "⠄⡙",
-            "⢂⠩",
-            "⡂⢘",
-            "⠅⡘",
-            "⢃⠨",
-            "⡃⢐",
-            "⠍⡐",
-            "⢋⠠",
-            "⡋⢀",
-            "⠍⡁",
-            "⢋⠁",
-            "⡋⠁",
-            "⠍⠉",
-            "⠋⠉",
-            "⠋⠉",
-            "⠉⠙",
-            "⠉⠙",
-            "⠉⠩",
-            "⠈⢙",
-            "⠈⡙",
-            "⠈⠩",
-            "⠀⢙",
-            "⠀⡙",
-            "⠀⠩",
-            "⠀⢘",
-            "⠀⡘",
-            "⠀⠨",
-            "⠀⢐",
-            "⠀⡐",
-            "⠀⠠",
-            "⠀⢀",
-            "⠀⡀",
-            "⠀⠀",
-        ]
+        return ["_", "_", "_", "-", "`", "`", "'", "`", "-", "_", "_", "_"]
+    return [
+        "⢀⠀",
+        "⡀⠀",
+        "⠄⠀",
+        "⢂⠀",
+        "⡂⠀",
+        "⠅⠀",
+        "⢃⠀",
+        "⡃⠀",
+        "⠍⠀",
+        "⢋⠀",
+        "⡋⠀",
+        "⠍⠁",
+        "⢋⠁",
+        "⡋⠁",
+        "⠍⠉",
+        "⠋⠉",
+        "⠋⠉",
+        "⠉⠙",
+        "⠉⠙",
+        "⠉⠩",
+        "⠈⢙",
+        "⠈⡙",
+        "⢈⠩",
+        "⡀⢙",
+        "⠄⡙",
+        "⢂⠩",
+        "⡂⢘",
+        "⠅⡘",
+        "⢃⠨",
+        "⡃⢐",
+        "⠍⡐",
+        "⢋⠠",
+        "⡋⢀",
+        "⠍⡁",
+        "⢋⠁",
+        "⡋⠁",
+        "⠍⠉",
+        "⠋⠉",
+        "⠋⠉",
+        "⠉⠙",
+        "⠉⠙",
+        "⠉⠩",
+        "⠈⢙",
+        "⠈⡙",
+        "⠈⠩",
+        "⠀⢙",
+        "⠀⡙",
+        "⠀⠩",
+        "⠀⢘",
+        "⠀⡘",
+        "⠀⠨",
+        "⠀⢐",
+        "⠀⡐",
+        "⠀⠠",
+        "⠀⢀",
+        "⠀⡀",
+        "⠀⠀",
+    ]
 
 
 def delay():
     if os.name == "nt":
         return 0.1
-    else:
-        return 0.02
+    return 0.02
 
 
 def spin_spinner(message: str):

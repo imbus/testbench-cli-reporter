@@ -41,9 +41,9 @@ def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
                     active_connection.add_action(next_action)
             except KeyError as e:
                 logger.error(f"key {str(e)} not found")
-                logger.info(f"Aborted action")
+                logger.info("Aborted action")
 
-            except ValueError as e:
+            except ValueError:
                 logger.debug(traceback.format_exc())
                 logger.info("Aborted action")
 
@@ -124,9 +124,8 @@ def trigger_all_actions(connection_queue, raise_exceptions):
             except requests.exceptions.HTTPError as e:
                 if raise_exceptions:
                     raise e
-                else:
-                    logger.exception("Action trigger failed")
-                    logger.error(e.response.json())
+                logger.exception("Action trigger failed")
+                logger.error(e.response.json())
             finally:
                 connection_queue.active_connection.actions_to_trigger.remove(action_to_trigger)
             sleep(0.05)
@@ -147,9 +146,8 @@ def execute_actions_to_finish(active_connection, connection_queue, raise_excepti
             active_connection.actions_to_finish.remove(action_to_finish)
             if raise_exceptions:
                 raise e
-            else:
-                logger.exception("Action finish failed, skipping action.")
-                logger.error(e.response.json())
+            logger.exception("Action finish failed, skipping action.")
+            logger.error(e.response.json())
 
 
 def poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptions):
@@ -167,9 +165,8 @@ def poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptio
             active_connection.actions_to_wait_for.remove(action_to_wait_for)
             if raise_exceptions:
                 raise e
-            else:
-                logger.exception("Action poll failed, skipping action.")
-                logger.error(e.response.json())
+            logger.exception("Action poll failed, skipping action.")
+            logger.error(e.response.json())
 
 
 def active_connection_finished(active_connection):

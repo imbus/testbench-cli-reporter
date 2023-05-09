@@ -13,13 +13,12 @@
 #  limitations under the License.
 
 import os
-from os.path import abspath, dirname, isdir, isfile
+from pathlib import Path
 from re import fullmatch, sub
 from typing import Callable, Dict, List, Union
 
-from questionary import Choice, Style, checkbox, confirm
+from questionary import Choice, Style, checkbox, confirm, select, unsafe_prompt
 from questionary import print as pprint
-from questionary import select, unsafe_prompt
 
 from . import actions, util
 from .config_model import ExecutionResultsImportOptions
@@ -42,6 +41,22 @@ custom_style_fancy = Style(
 )
 
 
+def isfile(filepath: Union[str, Path]) -> bool:
+    return Path(filepath).is_file()
+
+
+def isdir(filepath: Union[str, Path]) -> bool:
+    return Path(filepath).is_dir()
+
+
+def dirname(filepath: Union[str, Path]) -> str:
+    return str(Path(filepath).parent)
+
+
+def abspath(filepath: Union[str, Path]) -> str:
+    return str(Path(filepath).resolve().absolute())
+
+
 def selection_prompt(
     message: str,
     choices: List[Choice],
@@ -57,8 +72,7 @@ def selection_prompt(
             style=style,
             default=default,
         ).unsafe_ask()
-    else:
-        raise ValueError(no_valid_option_message)
+    raise ValueError(no_valid_option_message)
 
 
 def confirm_prompt(
@@ -86,18 +100,17 @@ def checkbox_prompt(
             choices=choices,
             style=style,
         ).unsafe_ask()
-    else:
-        logger.info(no_valid_option_message)
-        return []
+    logger.info(no_valid_option_message)
+    return []
 
 
 def text_prompt(
     message: str,
-    type: str = "text",
-    validation: Callable[[str], bool] = lambda val: val != "",
+    type: str = "text",  # noqa: A002
+    validation: Callable[[str], bool] = lambda val: bool(val),
     style: Style = custom_style_fancy,
     default: str = "",
-    filter: Callable[[str], str] = lambda val: val,
+    filter: Callable[[str], str] = lambda val: val,  # noqa: A002
 ):
     question = [
         {
@@ -152,8 +165,7 @@ def ask_for_ssl_verification_option() -> Union[bool, str]:
 
     if verification_option == "path":
         return ask_for_certificate_path()
-    else:
-        return verification_option
+    return verification_option
 
 
 def ask_for_certificate_path() -> str:
@@ -215,13 +227,13 @@ def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
 
 def ask_to_select_filters(all_filters: List[dict]) -> List:
     if selection_prompt("Activate Filters:", choices=[Choice("No", False), Choice("Yes", True)]):
-        all_filters_sorted = sorted(all_filters, key=lambda filter: filter["name"].casefold())
+        all_filters_sorted = sorted(all_filters, key=lambda fltr: fltr["name"].casefold())
 
         return checkbox_prompt(
             message="Provide a set of filters.",
             choices=[
-                Choice(filter["name"], {"name": filter["name"], "type": filter["type"]})
-                for filter in all_filters_sorted
+                Choice(fltr["name"], {"name": fltr["name"], "type": fltr["type"]})
+                for fltr in all_filters_sorted
             ],
             no_valid_option_message="No filters available.",
         )
@@ -282,9 +294,9 @@ def ask_for_output_path(default: str = "report.zip") -> str:
         if ((isdir(path) or isfile(path)) and os.access(path, os.W_OK))
         or os.access(dirname(abspath(path)), os.W_OK)
         else f"Path '{path}' does not exist or is not writeable.",
-        filter=lambda path: os.path.join(path, default) if isdir(path or ".") else path,
+        filter=lambda path: str(Path(path) / default) if isdir(path or ".") else path,
     )
-    pprint(f"Output Path: ", end=None)
+    pprint("Output Path: ", end=None)
     pprint(f"{output_path}", style="#06c8ff bold italic")
     return abspath(output_path)
 
@@ -297,7 +309,7 @@ def ask_for_input_path() -> str:
         if (isfile(path) and os.access(path, os.R_OK))
         or (isfile("report.zip") and os.access("report.zip", os.R_OK))
         else f"'{path}' is not a file or not readable.",
-        filter=lambda path: "report.zip" if not path else path,
+        filter=lambda path: path if path else "report.zip",
     )
 
 
@@ -368,8 +380,7 @@ def ask_to_select_default_tester(all_testers: List[dict]) -> Dict[str, str]:
 
 def ask_to_select_report_root_uid(cycle_structure: List[dict]):
     cycle_structure_tree = util.add_numbering_to_cycle(cycle_structure)
-    selected_uid = navigate_in_cycle_stucture(cycle_structure_tree)
-    return selected_uid
+    return navigate_in_cycle_stucture(cycle_structure_tree)
 
 
 def navigate_in_cycle_stucture(theme_structure):
@@ -410,3 +421,4 @@ def navigate_in_cycle_stucture(theme_structure):
             selection = navigate_in_cycle_stucture(selection)
         if isinstance(selection, str) and selection != "BACK":
             return selection
+    return None
