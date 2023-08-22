@@ -72,15 +72,36 @@ class Connection:
 
     @property
     def session(self):
+        if self._session:
+            return self._session
         self._session = requests.Session()
-        self._session.auth = (self.loginname, self.password)
+        self._session.verify = self.verify_ssl
         self._session.headers.update(
-            {"Content-Type": "application/vnd.testbench+json; charset=utf-8"}
+            {
+                "accept": "application/vnd.testbench+json",
+                "Content-Type": "application/vnd.testbench+json; charset=utf-8"
+            }
         )
+        response=self._session.post(
+            f"https://localhost:9445/api/login/session/v1",
+            json={
+                "login": self.loginname,
+                "password": self.password,
+                "force": True
+            }
+        ).json()
+        if "9443" in self.server_url:
+            self.password = response['sessionToken']
+            self._session.auth = (self.loginname, self.password)
+        else:
+            self._session.headers.update(
+                {
+                    "Authorization": f"{response['sessionToken']}"
+                }
+            )
         self._session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}
         self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))
         self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))
-        self._session.verify = self.verify_ssl
         return self._session
 
     def close(self):
@@ -118,6 +139,13 @@ class Connection:
 
         return True
 
+    def get_all_projects_new_play(self) -> Dict:
+        all_projects = self.session.get(
+            f"{self.server_url}/api/projects/v1",
+            ).json()
+        all_projects.sort(key=lambda proj: proj["name"].casefold())
+        return all_projects
+
     def get_all_projects(self) -> Dict:
         all_projects = dict(
             self.session.get(
@@ -143,6 +171,39 @@ class Connection:
         job_id = self.trigger_xml_report_generation(tov_key, cycle_key, reportRootUID, filters)
         report_tmp_name = self.wait_for_tmp_xml_report_name(job_id)
         return self.get_xml_report_data(report_tmp_name)
+
+    def trigger_json_report_generation(
+        self,
+        project_key: str,
+        cycle_key: str,
+        reportRootUID: str,
+        filters=None,
+        report_config=None,
+    ) -> str:
+        if report_config is None:
+            raise NotImplementedError
+        if filters is None:
+            filters = []
+
+        if reportRootUID and reportRootUID != "ROOT":
+            report_config.reportRootUID = reportRootUID
+        report_config.filters = filters
+        if cycle_key and cycle_key != "0" and project_key and project_key != "0":
+            response = self.session.post(
+                f"{self.server_url}/api/projects/{project_key}/cycles/{cycle_key}/report/v1",
+                json=dataclasses.asdict(report_config),
+            ).json()
+        return response["jobID"]
+
+    def get_exp_json_job_result(self, project_key, job_id):
+        report_generation_status = self.session.get(
+            f"{self.server_url}/api/projects/{project_key}/report/job/{job_id}/v1",
+        ).json()
+        if report_generation_status["right"] is None and report_generation_status["left"] is None:
+            return None
+        if report_generation_status["right"]:
+            return report_generation_status["right"]
+        raise AssertionError(report_generation_status["left"])
 
     def trigger_xml_report_generation(
         self,
@@ -199,6 +260,12 @@ class Connection:
             f"{self.server_url}xmlReport/{report_tmp_name}",
         )
 
+        return report.content
+
+    def get_json_report_data(self, project_key: str, report_tmp_name: str) -> bytes:
+        report = self.session.get(
+            f"{self.server_url}/api/projects/{project_key}/report/{report_tmp_name}/v1",
+        )
         return report.content
 
     def get_all_testers_of_project(self, project_key: str) -> List[dict]:

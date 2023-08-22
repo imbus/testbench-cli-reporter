@@ -23,7 +23,7 @@ from xml.etree import ElementTree
 from zipfile import ZipFile
 
 from . import questions, testbench
-from .config_model import ExportParameters, ImportParameters
+from .config_model import ExportParameters, ImportParameters, ExportJsonParameters
 from .log import logger
 from .testbench import ConnectionLog
 from .util import (
@@ -32,6 +32,7 @@ from .util import (
     XmlExportConfig,
     close_program,
     get_project_keys,
+    get_project_keys_new_play,
     parser,
     pretty_print_project_selection,
     pretty_print_success_message,
@@ -126,6 +127,51 @@ class ExportXMLReport(AbstractAction):
 
     def finish(self, connection_log: ConnectionLog) -> bool:
         report = connection_log.active_connection.get_xml_report_data(self.report_tmp_name)
+        with Path(self.parameters.outputPath).open("wb") as output_file:
+            output_file.write(report)
+        pretty_print_success_message(
+            "Report", Path(self.parameters.outputPath).resolve(), "was generated"
+        )
+        return True
+
+class ExportJSONReport(AbstractAction):
+    def __init__(self, parameters: Union[ExportJsonParameters, Dict[str, Any]] = None):
+        if parameters and not isinstance(parameters, ExportJsonParameters):
+            parameters = parameters[0]
+        super().__init__()
+        self.parameters: ExportJsonParameters = parameters or ExportJsonParameters("json-report.zip")
+        self.filters = []
+
+    def prepare(self, connection_log: ConnectionLog) -> bool:
+        raise NotImplementedError
+
+    def trigger(self, connection_log: ConnectionLog) -> Union[bool, str]:
+        all_projects = connection_log.active_connection.get_all_projects_new_play()
+
+        self.project_key = get_project_keys_new_play(all_projects, *self.parameters.projectPath)
+        if not self.parameters.cycleKey:
+            raise NotImplementedError
+
+        self.job_id = connection_log.active_connection.trigger_json_report_generation(
+            self.project_key,
+            self.parameters.cycleKey,
+            self.parameters.report_config.treeRootUID,
+            self.parameters.filters or [],
+            self.parameters.report_config,
+        )
+        return self.job_id
+
+    def wait(self, connection_log: ConnectionLog) -> Union[bool, str]:
+        raise NotImplementedError
+
+    def poll(self, connection_log: ConnectionLog) -> bool:
+        result = connection_log.active_connection.get_exp_json_job_result(self.project_key, self.job_id)
+        if result is not None:
+            self.report_tmp_name = result.get("value")
+        return result
+
+    def finish(self, connection_log: ConnectionLog) -> bool:
+        report = connection_log.active_connection.get_json_report_data(self.project_key ,self.report_tmp_name)
         with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(report)
         pretty_print_success_message(
