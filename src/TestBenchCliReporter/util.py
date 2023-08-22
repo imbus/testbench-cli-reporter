@@ -32,6 +32,7 @@ from .config_model import (
     ExportAction,
     ImportAction,
     TestCycleXMLReportOptions,
+    TestCycleJsonReportOptions
 )
 from .log import logger
 
@@ -95,6 +96,7 @@ XmlExportConfig = {
     ),
     "<CUSTOM>": None,
 }
+
 
 
 parser = argparse.ArgumentParser()
@@ -263,6 +265,13 @@ def pretty_print(*print_statements: dict):
     except Exception:
         print("".join([statement["value"] for statement in print_statements]))
 
+def get_project_keys_new_play(  # noqa: C901
+    projects: Dict,
+    project_name: str,
+    tov_name: str,
+    cycle_name: Optional[str] = None,
+):
+    raise NotImplementedError
 
 def get_project_keys(  # noqa: C901
     projects: Dict,
@@ -306,6 +315,69 @@ def get_project_keys(  # noqa: C901
     )
     return project_key, tov_key, cycle_key
 
+def get_project_keys_new_play(  # noqa: C901
+    projects: Dict,
+    project_name: str,
+    tov_name: str,
+    cycle_name: Optional[str] = None,
+):
+    project_key = None
+    tov_key = None
+    cycle_key = None
+    for project in projects:
+        if project["name"] == project_name:
+            project_key = project["key"]
+            for tov in project["testObjectVersions"]:
+                if tov["name"] == tov_name:
+                    project["testObjectVersions"] = [tov]
+                    tov_key = tov["key"]["serial"]
+                    if cycle_name:
+                        for cycle in tov["testCycles"]:
+                            if cycle["name"] == cycle_name:
+                                project["testObjectVersions"][0]["testCycles"] = cycle
+                                cycle_key = cycle["key"]["serial"]
+                                break
+                        break
+            break
+    if not project_key:
+        raise ValueError(f"Project '{project_name}' not found.")
+    if not tov_key:
+        raise ValueError(f"TOV '{tov_name}' not found in project '{project_name}'.")
+    if not cycle_key and cycle_name:
+        raise ValueError(
+            f"Cycle '{cycle_name}' not found in TOV '{tov_name}' in project '{project_name}'."
+        )
+    pretty_print(
+        {"value": "PROJECT_KEY: ", "end": None},
+        {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
+        {"value": ", TOV_Key: ", "end": None},
+        {"value": f"{tov_key}", "style": BLUE_BOLD_ITALIC, "end": None},
+        {"value": ", CYCLE_KEY: ", "end": None},
+        {"value": f"{cycle_key}", "style": BLUE_BOLD_ITALIC},
+    )
+    return project_key, tov_key, cycle_key
+
+# def get_project_keys_new_play(  # noqa: C901
+#     projects: Dict,
+#     project_name: str,
+#     tov_name: str,
+#     cycle_name: Optional[str] = None,
+# ):
+#     project_key = None
+#     tov_key = None
+#     cycle_key = None
+#     for project in projects:
+#         if project["name"] == project_name:
+#             project_key = project["key"]
+#             break
+#     if not project_key:
+#         raise ValueError(f"Project '{project_name}' not found.")
+
+#     pretty_print(
+#         {"value": "PROJECT_KEY: ", "end": None},
+#         {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
+#     )
+#     return project_key
 
 def pretty_print_project_selection(selected_project, selected_tov, selected_cycle):
     print("  Selection:")

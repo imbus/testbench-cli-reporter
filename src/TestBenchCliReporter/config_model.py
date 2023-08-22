@@ -54,6 +54,41 @@ class TestCycleXMLReportOptions:
 
 
 @dataclass
+class TestCycleJsonReportOptions:
+    treeRootUID: Optional[str]
+    basedOnExecution: Optional[bool]
+    suppressFilteredData: Optional[bool]
+    suppressNotExecutable: Optional[bool]
+    suppressEmptyTestThemes: Optional[bool]
+    filters: Optional[List[FilterInfo]]
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            treeRootUID=dictionary.get("treeRootUID"),
+            basedOnExecution=dictionary.get("basedOnExecution"),
+            suppressFilteredData=dictionary.get("suppressFilteredData"),
+            suppressNotExecutable=dictionary.get("suppressNotExecutable"),
+            suppressEmptyTestThemes=dictionary.get("suppressEmptyTestThemes"),
+            filters=[FilterJsonInfo.from_dict(f) for f in dictionary.get("filters", [])],
+        )
+
+@dataclass
+class FilterJsonInfo:
+    name: str
+    type: FilterInfoType  # noqa: A003
+    testThemeUID: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            name=dictionary["name"],
+            filterType=FilterInfoType(dictionary["filterType"]),
+            testThemeUID=dictionary.get("testThemeUID"),
+        )
+
+
+@dataclass
 class ExportParameters:
     outputPath: str
     projectPath: Optional[List[str]] = None
@@ -77,15 +112,44 @@ class ExportParameters:
             filters=dictionary.get("filters", []),
         )
 
-
 @dataclass
-class ExportAction:
-    parameters: ExportParameters
-    type: str = "ExportXMLReport"  # noqa: A003
+class ExportJsonParameters:
+    outputPath: str
+    projectPath: Optional[List[str]] = None
+    tovKey: Optional[str] = None
+    cycleKey: Optional[str] = None
+    report_config: Optional[TestCycleJsonReportOptions] = None
+    filters: Optional[List[FilterInfo]] = None
 
     @classmethod
     def from_dict(cls, dictionary):
-        return cls(parameters=ExportParameters.from_dict(dictionary.get("parameters") or {}))
+        return cls(
+            outputPath=dictionary["outputPath"],
+            projectPath=dictionary.get("projectPath", []),
+            tovKey=dictionary.get("tovKey"),
+            cycleKey=dictionary.get("cycleKey"),
+            report_config=TestCycleJsonReportOptions.from_dict(dictionary.get("report_config") or {})
+            if dictionary.get("report_config")
+            else None,
+            filters=dictionary.get("filters", []),
+        )
+
+
+@dataclass
+class ExportAction:
+    parameters: Union[ExportParameters, ExportJsonParameters]
+    type: str
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            parameters=(
+                ExportParameters.from_dict(dictionary.get("parameters") or {})
+                if dictionary.get("type") == "ExportXMLReport"
+                else ExportJsonParameters.from_dict(dictionary.get("parameters") or {})
+            ),
+            type=dictionary.get("type", "ExportXMLReport")
+            )
 
 
 @dataclass
@@ -164,9 +228,9 @@ class Configuration:
             loginname=dictionary.get("loginname"),
             password=dictionary.get("password"),
             actions=[
-                ExportAction.from_dict(a)
-                if a["type"] == "ExportXMLReport"
-                else ImportAction.from_dict(a)
+                ImportAction.from_dict(a)
+                if a["type"] == "ImportExecutionResults"
+                else ExportAction.from_dict(a)
                 for a in dictionary["actions"]
             ],
         )
