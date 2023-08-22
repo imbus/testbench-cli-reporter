@@ -119,7 +119,7 @@ def trigger_all_actions(connection_queue, raise_exceptions):
             logger.debug(
                 f"Triggering action: {action.__class__.__name__}\n"
                 f"Parameters: {action.parameters}"
-                )
+            )
             try:
                 action.trigger(connection_queue)
                 connection_queue.active_connection.actions_to_wait_for.append(action)

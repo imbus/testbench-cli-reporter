@@ -32,7 +32,7 @@ from .config_model import (
     ExportAction,
     ImportAction,
     TestCycleXMLReportOptions,
-    TestCycleJsonReportOptions
+    TestCycleJsonReportOptions,
 )
 from .log import logger
 
@@ -96,7 +96,6 @@ XmlExportConfig = {
     ),
     "<CUSTOM>": None,
 }
-
 
 
 parser = argparse.ArgumentParser()
@@ -265,6 +264,7 @@ def pretty_print(*print_statements: dict):
     except Exception:
         print("".join([statement["value"] for statement in print_statements]))
 
+
 def get_project_keys_new_play(  # noqa: C901
     projects: Dict,
     project_name: str,
@@ -272,6 +272,7 @@ def get_project_keys_new_play(  # noqa: C901
     cycle_name: Optional[str] = None,
 ):
     raise NotImplementedError
+
 
 def get_project_keys(  # noqa: C901
     projects: Dict,
@@ -315,6 +316,7 @@ def get_project_keys(  # noqa: C901
     )
     return project_key, tov_key, cycle_key
 
+
 def get_project_keys_new_play(  # noqa: C901
     projects: Dict,
     project_name: str,
@@ -357,6 +359,7 @@ def get_project_keys_new_play(  # noqa: C901
     )
     return project_key, tov_key, cycle_key
 
+
 # def get_project_keys_new_play(  # noqa: C901
 #     projects: Dict,
 #     project_name: str,
@@ -378,6 +381,7 @@ def get_project_keys_new_play(  # noqa: C901
 #         {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
 #     )
 #     return project_key
+
 
 def pretty_print_project_selection(selected_project, selected_tov, selected_cycle):
     print("  Selection:")

@@ -134,12 +134,15 @@ class ExportXMLReport(AbstractAction):
         )
         return True
 
+
 class ExportJSONReport(AbstractAction):
     def __init__(self, parameters: Union[ExportJsonParameters, Dict[str, Any]] = None):
         if parameters and not isinstance(parameters, ExportJsonParameters):
             parameters = parameters[0]
         super().__init__()
-        self.parameters: ExportJsonParameters = parameters or ExportJsonParameters("json-report.zip")
+        self.parameters: ExportJsonParameters = parameters or ExportJsonParameters(
+            "json-report.zip"
+        )
         self.filters = []
 
     def prepare(self, connection_log: ConnectionLog) -> bool:
@@ -165,13 +168,17 @@ class ExportJSONReport(AbstractAction):
         raise NotImplementedError
 
     def poll(self, connection_log: ConnectionLog) -> bool:
-        result = connection_log.active_connection.get_exp_json_job_result(self.project_key, self.job_id)
+        result = connection_log.active_connection.get_exp_json_job_result(
+            self.project_key, self.job_id
+        )
         if result is not None:
             self.report_tmp_name = result.get("value")
         return result
 
     def finish(self, connection_log: ConnectionLog) -> bool:
-        report = connection_log.active_connection.get_json_report_data(self.project_key ,self.report_tmp_name)
+        report = connection_log.active_connection.get_json_report_data(
+            self.project_key, self.report_tmp_name
+        )
         with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(report)
         pretty_print_success_message(

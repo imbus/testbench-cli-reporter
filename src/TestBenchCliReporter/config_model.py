@@ -73,6 +73,7 @@ class TestCycleJsonReportOptions:
             filters=[FilterJsonInfo.from_dict(f) for f in dictionary.get("filters", [])],
         )
 
+
 @dataclass
 class FilterJsonInfo:
     name: str
@@ -112,6 +113,7 @@ class ExportParameters:
             filters=dictionary.get("filters", []),
         )
 
+
 @dataclass
 class ExportJsonParameters:
     outputPath: str
@@ -128,7 +130,9 @@ class ExportJsonParameters:
             projectPath=dictionary.get("projectPath", []),
             tovKey=dictionary.get("tovKey"),
             cycleKey=dictionary.get("cycleKey"),
-            report_config=TestCycleJsonReportOptions.from_dict(dictionary.get("report_config") or {})
+            report_config=TestCycleJsonReportOptions.from_dict(
+                dictionary.get("report_config") or {}
+            )
             if dictionary.get("report_config")
             else None,
             filters=dictionary.get("filters", []),
@@ -148,8 +152,8 @@ class ExportAction:
                 if dictionary.get("type") == "ExportXMLReport"
                 else ExportJsonParameters.from_dict(dictionary.get("parameters") or {})
             ),
-            type=dictionary.get("type", "ExportXMLReport")
-            )
+            type=dictionary.get("type", "ExportXMLReport"),
+        )
 
 
 @dataclass
@@ -325,6 +329,8 @@ class CliReporterConfig:
         return cls(
             configuration=[Configuration.from_dict(c) for c in dictionary.get("configuration", [])],
             loggingConfiguration=loggingConfig.from_dict(
-                dictionary.get("loggingConfiguration") or dictionary.get("logging_configuration") or {}
+                dictionary.get("loggingConfiguration")
+                or dictionary.get("logging_configuration")
+                or {}
             ),
         )
