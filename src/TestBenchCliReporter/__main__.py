@@ -20,12 +20,12 @@ from .config_model import (
     ExportParameters,
     ImportAction,
     ImportParameters,
-    loggingConfiguration,
+    loggingConfig,
 )
 from .execution import run_automatic_mode, run_manual_mode
 from .util import close_program, get_configuration, parser, resolve_server_name
 
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 
 
 def main():
@@ -53,7 +53,7 @@ def main():
                         actions=[],
                     )
                 ],
-                loggingConfiguration=loggingConfiguration.from_dict({}),
+                loggingConfiguration=loggingConfig.from_dict({}),
             )
             if arg.type == "e":
                 cli_config.configuration[0].actions.append(
@@ -95,7 +95,7 @@ def main():
                         actions=[],
                     )
                 ],
-                loggingConfiguration=loggingConfiguration.from_dict({}),
+                loggingConfiguration=loggingConfig.from_dict({}),
             )
             print("No config file given")
             run_manual_mode(cli_config)

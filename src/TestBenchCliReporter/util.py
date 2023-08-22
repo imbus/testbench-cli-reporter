@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from pathlib import Path
 from re import fullmatch
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from questionary import print as pprint
 
@@ -39,17 +39,19 @@ BLUE_ITALIC = "#06c8ff italic"
 
 BLUE_BOLD_ITALIC = "#06c8ff bold italic"
 
+TYPICAL_IMPORT_CONFIG: ExecutionResultsImportOptions = ExecutionResultsImportOptions(
+    fileName="",
+    reportRootUID=None,
+    ignoreNonExecutedTestCases=True,
+    defaultTester=None,
+    checkPaths=True,
+    filters=None,
+    discardTesterInformation=True,
+    useExistingDefect=True,
+)
+
 ImportConfig = {
-    "Typical": ExecutionResultsImportOptions(
-        fileName="",
-        reportRootUID=None,
-        ignoreNonExecutedTestCases=True,
-        defaultTester=None,
-        checkPaths=True,
-        filters=None,
-        discardTesterInformation=True,
-        useExistingDefect=True,
-    ),
+    "Typical": TYPICAL_IMPORT_CONFIG,
     "<CUSTOM>": False,
 }
 
@@ -254,7 +256,7 @@ def pretty_print(*print_statements: dict):
     try:
         for statement in print_statements:
             pprint(
-                statement.get("value"),
+                statement.get("value", ""),
                 style=statement.get("style", None),
                 end=statement.get("end", "\r\n"),
             )
@@ -587,7 +589,7 @@ ACTION_TYPES = {"ImportExecutionResults": ImportAction, "ExportXMLReport": Expor
 class AbstractAction(ABC):
     def __init__(self, parameters: Optional[dict] = None):
         self.parameters = parameters or {}
-        self.report_tmp_name = ""
+        self.report_tmp_name: Union[str, bool] = ""
         self.job_id = ""
 
     def prepare(self, connection_log) -> bool:

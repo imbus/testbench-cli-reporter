@@ -2,12 +2,12 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from .config_model import loggingConfiguration
+from .config_model import loggingConfig
 
 logger = logging.Logger("testbench-reporter", logging.DEBUG)
 
 
-def setup_logger(config: loggingConfiguration):
+def setup_logger(config: loggingConfig):
     console_handler = logging.StreamHandler()
     console_handler.setLevel(config.console.logLevel.value)
     console_handler.setFormatter(logging.Formatter(config.console.logFormat))

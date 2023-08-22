@@ -227,9 +227,15 @@ class FileLoggerConfig(ConsoleLoggerConfig):
 
 
 @dataclass
-class loggingConfiguration:  # noqa: N801
+class loggingConfig:  # noqa: N801
     console: Optional[ConsoleLoggerConfig] = None
     file: Optional[FileLoggerConfig] = None
+
+    def __post_init__(self):
+        if self.console is None:
+            self.console = ConsoleLoggerConfig.from_dict({})
+        if self.file is None:
+            self.file = FileLoggerConfig.from_dict({})
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -241,14 +247,20 @@ class loggingConfiguration:  # noqa: N801
 
 @dataclass
 class CliReporterConfig:
-    configuration: List[Configuration]
-    loggingConfiguration: loggingConfiguration
+    configuration: Optional[List[Configuration]] = None
+    loggingConfiguration: Optional[loggingConfig] = None
+
+    def __post_init__(self):
+        if self.configuration is None:
+            self.configuration = []
+        if self.loggingConfiguration is None:
+            self.loggingConfiguration = loggingConfig()
 
     @classmethod
     def from_dict(cls, dictionary):
         return cls(
             configuration=[Configuration.from_dict(c) for c in dictionary.get("configuration", [])],
-            loggingConfiguration=loggingConfiguration.from_dict(
-                dictionary.get("loggingConfiguration") or {}
+            loggingConfiguration=loggingConfig.from_dict(
+                dictionary.get("loggingConfiguration") or dictionary.get("logging_configuration") or {}
             ),
         )

@@ -14,10 +14,11 @@
 
 import base64
 import contextlib
+import re
 import sys
 import traceback
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Union
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
@@ -26,8 +27,8 @@ from .config_model import ExportParameters, ImportParameters
 from .log import logger
 from .testbench import ConnectionLog
 from .util import (
+    TYPICAL_IMPORT_CONFIG,
     AbstractAction,
-    ImportConfig,
     XmlExportConfig,
     close_program,
     get_project_keys,
@@ -45,11 +46,15 @@ class UnloggedAction(AbstractAction):
 
 
 class ExportXMLReport(AbstractAction):
-    def __init__(self, parameters: Union[ExportParameters, Dict[str, Any]] = None):
-        if parameters and not isinstance(parameters, ExportParameters):
-            parameters = ExportParameters.from_dict(parameters)
+    def __init__(self, parameters: Union[ExportParameters, Dict[str, Any], None] = None):
+        if parameters and isinstance(parameters, ExportParameters):
+            exp_parameters = parameters
+        elif parameters is None:
+            exp_parameters = ExportParameters("report.zip")
+        else:
+            exp_parameters = ExportParameters.from_dict(parameters or {})
         super().__init__()
-        self.parameters: ExportParameters = parameters or ExportParameters("report.zip")
+        self.parameters: ExportParameters = exp_parameters
         self.filters = []
 
     def prepare(self, connection_log: ConnectionLog) -> bool:
@@ -103,12 +108,12 @@ class ExportXMLReport(AbstractAction):
         )
         return self.job_id
 
-    def wait(self, connection_log: ConnectionLog) -> Union[bool, str]:
+    def wait(self, connection_log: ConnectionLog) -> bool:
         try:
             self.report_tmp_name = connection_log.active_connection.wait_for_tmp_xml_report_name(
                 self.job_id
             )
-            return self.report_tmp_name
+            return bool(self.report_tmp_name)
         except KeyError:
             logger.debug(traceback.format_exc())
             return False
@@ -117,7 +122,7 @@ class ExportXMLReport(AbstractAction):
         result = connection_log.active_connection.get_exp_job_result(self.job_id)
         if result is not None:
             self.report_tmp_name = result
-        return result
+        return bool(result)
 
     def finish(self, connection_log: ConnectionLog) -> bool:
         report = connection_log.active_connection.get_xml_report_data(self.report_tmp_name)
@@ -138,11 +143,15 @@ def Action(class_name: str, parameters: Dict[str, str]) -> AbstractAction:  # no
 
 
 class ImportExecutionResults(AbstractAction):
-    def __init__(self, parameters: Union[ImportParameters, Dict[str, Any]] = None):
-        if parameters and not isinstance(parameters, ImportParameters):
-            parameters = ImportParameters.from_dict(parameters)
+    def __init__(self, parameters: Union[ImportParameters, Dict[str, Any], None] = None):
+        if parameters and isinstance(parameters, ImportParameters):
+            imp_parameters = parameters
+        elif parameters is None:
+            imp_parameters = ImportParameters("result.zip")
+        else:
+            imp_parameters = ImportParameters.from_dict(parameters)
         super().__init__()
-        self.parameters: ImportParameters = parameters or ImportParameters("result.zip")
+        self.parameters: ImportParameters = imp_parameters
 
     def prepare(self, connection_log: ConnectionLog) -> bool:
         self.parameters.inputPath = questions.ask_for_input_path()
@@ -169,13 +178,16 @@ class ImportExecutionResults(AbstractAction):
         self.parameters.importConfig = questions.ask_to_config_import()
         return True
 
-    def get_project_path_from_report(self):
+    def get_project_path_from_report(self) -> List:
         with ZipFile(self.parameters.inputPath) as zip_file:
             xml = ElementTree.fromstring(zip_file.read("report.xml"))
-            project = xml.find("./header/project").get("name")
-            version = xml.find("./header/version").get("name")
-            cycle = xml.find("./header/cycle").get("name")
-            return project, version, cycle
+            project_element = xml.find("./header/project")
+            project = project_element.get("name") if project_element is not None else ""
+            version_element = xml.find("./header/version")
+            version = version_element.get("name") if version_element is not None else ""
+            cycle_element = xml.find("./header/cycle")
+            cycle = cycle_element.get("name") if cycle_element is not None else ""
+            return [project, version, cycle]
 
     def trigger(self, connection_log: ConnectionLog) -> bool:
         if not self.parameters.cycleKey:
@@ -189,6 +201,8 @@ class ImportExecutionResults(AbstractAction):
         serverside_file_name = connection_log.active_connection.upload_execution_results(
             execution_report_base64
         )
+        if not self.parameters.cycleKey:
+            raise ValueError("Invalid Config! 'cycleKey' missing.")
         if serverside_file_name:
             self.job_id = connection_log.active_connection.trigger_execution_results_import(
                 self.parameters.cycleKey,
@@ -196,18 +210,22 @@ class ImportExecutionResults(AbstractAction):
                 serverside_file_name,
                 self.parameters.defaultTester,
                 self.parameters.filters or [],
-                self.parameters.importConfig or ImportConfig["Typical"],
+                self.parameters.importConfig or TYPICAL_IMPORT_CONFIG,
             )
             return True
-        return None
+        return False
 
     def set_cycle_key_from_path(self, connection_log: ConnectionLog):
         all_projects = connection_log.active_connection.get_all_projects()
-        (
-            project_key,
-            tov_key,
-            self.parameters.cycleKey,
-        ) = get_project_keys(all_projects, *self.parameters.projectPath)
+        if (
+            isinstance(self.parameters.projectPath, list)
+            and len(self.parameters.projectPath) == 3  # noqa: PLR2004
+        ):
+            (
+                project_key,
+                tov_key,
+                self.parameters.cycleKey,
+            ) = get_project_keys(all_projects, *self.parameters.projectPath)
         if not self.parameters.cycleKey:
             raise ValueError("Invalid Config! 'cycleKey' missing.")
 
@@ -217,13 +235,13 @@ class ImportExecutionResults(AbstractAction):
                 self.job_id
             )
         )
-        return self.report_tmp_name
+        return bool(self.report_tmp_name)
 
     def poll(self, connection_log: ConnectionLog) -> bool:
         result = connection_log.active_connection.get_imp_job_result(self.job_id)
         if result is not None:
             self.report_tmp_name = result
-        return result
+        return bool(result)
 
     def finish(self, connection_log: ConnectionLog) -> bool:
         if self.report_tmp_name:
@@ -231,7 +249,7 @@ class ImportExecutionResults(AbstractAction):
                 "Report", Path(self.parameters.inputPath).resolve(), "was imported"
             )
             return True
-        return None
+        return False
 
 
 class BrowseProjects(UnloggedAction):
@@ -255,23 +273,19 @@ class BrowseProjects(UnloggedAction):
             )
         selected_uid = questions.ask_to_select_report_root_uid(tttree_structure)
         for tse in tttree_structure:
-            if tse.get("TestTheme_structure"):
-                info = tse.get("TestTheme_structure")
-                typ = "TestTheme"
-            elif tse.get("TestCaseSet_structure"):
-                info = tse.get("TestCaseSet_structure")
-                typ = "TestCaseSet"
-            elif tse.get("Root_structure"):
-                info = tse.get("Root_structure")
-                typ = "Root"
-            else:
-                raise ValueError(f"Unknown Element Type: {str(tse)}")
+            info, typ = self.get_test_structure_element_info(tse)
             if info.get("uniqueID") == selected_uid:
                 pretty_print_tse_information(tse, typ, info)
                 if typ == "TestCaseSet":
                     test_cases = connection_log.active_connection.get_test_cases(tse)
                     pretty_print_test_cases(test_cases)
         return True
+
+    def get_test_structure_element_info(self, tse):
+        for key, value in tse.items():
+            if re.match(r".*_structure$", key):
+                return value, re.sub(r"_structure$", "", key)
+        raise ValueError(f"Unknown Element Type: {str(tse)}")
 
     def trigger(self, connection_log: ConnectionLog) -> bool:
         return True

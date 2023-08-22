@@ -2,7 +2,7 @@ import traceback
 from time import sleep
 from typing import Any, Dict, Optional, Union
 
-import requests.exceptions
+import requests.exceptions  # type: ignore
 from requests import Timeout
 
 from . import questions
@@ -116,11 +116,15 @@ def trigger_all_actions(connection_queue, raise_exceptions):
         while connection_queue.active_connection.actions_to_trigger:
             action_to_trigger = connection_queue.active_connection.actions_to_trigger[0]
             action = Action(action_to_trigger.type, action_to_trigger.parameters)
-            logger.debug(f"Triggering action: {action}")
+            logger.debug(
+                f"Triggering action: {action.__class__.__name__}\n"
+                f"Parameters: {action.parameters}"
+                )
             try:
                 action.trigger(connection_queue)
                 connection_queue.active_connection.actions_to_wait_for.append(action)
                 job_counter += 1
+                logger.info(f"Job {action.__class__.__name__}: {action.job_id} started.")
             except requests.exceptions.HTTPError as e:
                 if raise_exceptions:
                     raise e

@@ -6,7 +6,8 @@ from setuptools import find_packages, setup
 CURDIR = Path(__file__).absolute().parent
 
 with (CURDIR / "src" / "TestBenchCliReporter" / "__main__.py").open(encoding="utf-8") as f:
-    VERSION = re.search('\n__version__ = "(.*)"', f.read()).group(1)
+    match = re.search('\n__version__ = "(.*)"', f.read())
+    VERSION = match.group(1) if match else "unknown"
 
 with Path("README.md").open() as fh:
     long_description = fh.read()

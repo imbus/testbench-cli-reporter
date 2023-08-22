@@ -19,7 +19,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-import requests
+import requests  # type: ignore
 import urllib3
 from questionary import print as pprint
 
@@ -28,11 +28,12 @@ from .config_model import (
     CliReporterConfig,
     Configuration,
     ExecutionResultsImportOptions,
+    FilterInfo,
 )
 from .log import logger
 from .util import (
+    TYPICAL_IMPORT_CONFIG,
     AbstractAction,
-    ImportConfig,
     XmlExportConfig,
     close_program,
     spin_spinner,
@@ -48,7 +49,7 @@ class Connection:
         loginname: Optional[str] = None,
         password: Optional[str] = None,
         job_timeout_sec: int = 4 * 60 * 60,
-        connection_timeout_sec: int = None,
+        connection_timeout_sec: Optional[int] = None,
         actions: Optional[List] = None,
         **kwargs,
     ):
@@ -58,8 +59,8 @@ class Connection:
             credentials = base64.b64decode(basicAuth.encode()).decode("utf-8")
             self.loginname, self.password = credentials.split(":", 1)
         else:
-            self.loginname = loginname
-            self.password = password
+            self.loginname = loginname or ""
+            self.password = password or ""
         self.job_timeout_sec = job_timeout_sec
         self.action_log: List[AbstractAction] = []
         self.actions_to_trigger: List[dict] = actions or []
@@ -118,10 +119,12 @@ class Connection:
         return True
 
     def get_all_projects(self) -> Dict:
-        all_projects = self.session.get(
-            f"{self.server_url}projects",
-            params={"includeTOVs": "true", "includeCycles": "true"},
-        ).json()
+        all_projects = dict(
+            self.session.get(
+                f"{self.server_url}projects",
+                params={"includeTOVs": "true", "includeCycles": "true"},
+            ).json()
+        )
         all_projects["projects"].sort(key=lambda proj: proj["name"].casefold())
         return all_projects
 
@@ -230,23 +233,25 @@ class Connection:
         report_root_uid: str,
         serverside_file_name: str,
         default_tester: str,
-        filters: List[Dict[str, str]],
+        filters: Union[List[FilterInfo], List[Dict[str, str]]],
         import_config: Optional[ExecutionResultsImportOptions] = None,
     ) -> str:
         if import_config is None:
-            import_config = ImportConfig["Typical"]
-        import_config.fileName = serverside_file_name
-        import_config.filters = filters
+            used_import_config = TYPICAL_IMPORT_CONFIG
+        else:
+            used_import_config = import_config
+        used_import_config.fileName = serverside_file_name
+        used_import_config.filters = filters
         if default_tester:
-            import_config.defaultTester = default_tester
+            used_import_config.defaultTester = default_tester
         if report_root_uid and report_root_uid != "ROOT":
-            import_config.reportRootUID = report_root_uid
+            used_import_config.reportRootUID = report_root_uid
 
         try:
             job_id = self.session.post(
                 f"{self.server_url}cycle/{cycle_key}/executionResultsImport",
                 headers={"Accept": "application/zip"},
-                json=dataclasses.asdict(import_config),
+                json=dataclasses.asdict(used_import_config),
             )
             return job_id.json()["jobID"]
         except requests.exceptions.HTTPError as e:
@@ -264,7 +269,7 @@ class Connection:
             result = import_status["result"]
 
             if "Right" in result:
-                return result["Right"]
+                return True
             raise AssertionError(result)
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
