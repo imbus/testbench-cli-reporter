@@ -79,26 +79,18 @@ class Connection:
         self._session.headers.update(
             {
                 "accept": "application/vnd.testbench+json",
-                "Content-Type": "application/vnd.testbench+json; charset=utf-8"
+                "Content-Type": "application/vnd.testbench+json; charset=utf-8",
             }
         )
-        response=self._session.post(
+        response = self._session.post(
             f"https://localhost:9445/api/login/session/v1",
-            json={
-                "login": self.loginname,
-                "password": self.password,
-                "force": True
-            }
+            json={"login": self.loginname, "password": self.password, "force": True},
         ).json()
         if "9443" in self.server_url:
             self.password = response['sessionToken']
             self._session.auth = (self.loginname, self.password)
         else:
-            self._session.headers.update(
-                {
-                    "Authorization": f"{response['sessionToken']}"
-                }
-            )
+            self._session.headers.update({"Authorization": f"{response['sessionToken']}"})
         self._session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}
         self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))
         self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))
@@ -142,7 +134,7 @@ class Connection:
     def get_all_projects_new_play(self) -> Dict:
         all_projects = self.session.get(
             f"{self.server_url}/api/projects/v1",
-            ).json()
+        ).json()
         all_projects.sort(key=lambda proj: proj["name"].casefold())
         return all_projects
 
