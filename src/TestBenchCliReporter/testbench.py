@@ -17,6 +17,7 @@ import dataclasses
 import json
 import traceback
 from pathlib import Path
+from re import fullmatch
 from typing import Any, Dict, List, Optional, Union
 
 import requests  # type: ignore
@@ -45,6 +46,7 @@ class Connection:
         self,
         server_url: str,
         verify: Union[bool, str],
+        sessionToken: Optional[str] = None,
         basicAuth: Optional[str] = None,
         loginname: Optional[str] = None,
         password: Optional[str] = None,
@@ -55,7 +57,19 @@ class Connection:
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.server_url = server_url
-        if basicAuth:
+        url_matcher = fullmatch(
+            r"(?P<protocol>https?)://(?P<host>[\w\-.]+):(?P<port>\d{1,5})/api/", server_url
+        )
+        self.server_protocol = url_matcher.group("protocol")
+        self.server_host = url_matcher.group("host")
+        self.server_port = url_matcher.group("port")
+        self._server_legacy_port = None
+        self.session_token = sessionToken
+
+        if sessionToken:
+            self.loginname = ""
+            self.password = sessionToken
+        elif basicAuth:
             credentials = base64.b64decode(basicAuth.encode()).decode("utf-8")
             self.loginname, self.password = credentials.split(":", 1)
         else:
@@ -69,12 +83,15 @@ class Connection:
         self.connection_timeout = connection_timeout_sec
         self.verify_ssl = verify
         self._session = None
+        self._legacy_session = None
 
     @property
     def session(self):
         if self._session:
             return self._session
+        logger.info("Initializing session")
         self._session = requests.Session()
+        logger.info("Session initialized")
         self._session.verify = self.verify_ssl
         self._session.headers.update(
             {
@@ -82,19 +99,63 @@ class Connection:
                 "Content-Type": "application/vnd.testbench+json; charset=utf-8",
             }
         )
-        response = self._session.post(
-            f"https://localhost:9445/api/login/session/v1",
-            json={"login": self.loginname, "password": self.password, "force": True},
-        ).json()
-        if "9443" in self.server_url:
-            self.password = response['sessionToken']
-            self._session.auth = (self.loginname, self.password)
-        else:
-            self._session.headers.update({"Authorization": f"{response['sessionToken']}"})
+        if not self.session_token:
+            self.authenticate(self._session)
+        self._session.headers.update({"Authorization": self.session_token})
         self._session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}
         self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))
         self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))
         return self._session
+
+    def authenticate(self, session: requests.Session):
+        response = session.post(
+            f"{self.server_url}login/session/v1",
+            json={"login": self.loginname, "password": self.password, "force": True},
+        )
+        resp_dict = response.json()
+        logger.info(f"Authenticated with session token: {resp_dict['sessionToken']}")
+        self.session_token = resp_dict["sessionToken"]
+
+    def get_loginname_from_server(self):
+        response = self.session.get(f"{self.server_url}login/session/v1").json()
+        self.loginname = response["login"]
+
+    @property
+    def server_legacy_port(self):
+        if self._server_legacy_port:
+            return self._server_legacy_port
+        response = self.session.get(f"{self.server_url}serverLocations/v1").json()
+        self._server_legacy_port = response["legacyPlayPort"]
+        return self._server_legacy_port
+
+    @property
+    def server_legacy_url(self):
+        return f"{self.server_protocol}://{self.server_host}:{self.server_legacy_port}/api/1/"
+
+    @property
+    def legacy_session(self):
+        if self._legacy_session:
+            return self._legacy_session
+        logger.info("Initializing legacy session")
+        if not self.session:
+            raise RuntimeError("Session not initialized")
+        self._legacy_session = requests.Session()
+        logger.info("Legacy session initialized")
+        self._legacy_session.verify = self.verify_ssl
+        self._legacy_session.headers.update(
+            {
+                "accept": "application/vnd.testbench+json",
+                "Content-Type": "application/vnd.testbench+json; charset=utf-8",
+            }
+        )
+        if not self.session_token:
+            self.authenticate(self._legacy_session)
+        self.get_loginname_from_server()
+        self._legacy_session.auth = (self.loginname, self.session_token)
+        self._legacy_session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}
+        self._legacy_session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))
+        self._legacy_session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))
+        return self._legacy_session
 
     def close(self):
         self.session.close()
@@ -119,29 +180,46 @@ class Connection:
         )
 
     def check_is_working(self) -> bool:
-        response = self.session.get(
-            f"{self.server_url}projects",
-            params={
-                "includeTOVs": "false",
-                "includeCycles": "false",
-            },
-        )
-
+        response = self.session.get(f"{self.server_url}login/session/v1")
         response.json()
-
+        legacy_response = self.legacy_session.get(f"{self.server_legacy_url}checkLogin")
+        legacy_response.json()
         return True
 
-    def get_all_projects_new_play(self) -> Dict:
-        all_projects = self.session.get(
-            f"{self.server_url}/api/projects/v1",
+    def get_project_key_new_play(self, project_name) -> str:
+        all_projects = self.session.get(f"{self.server_url}projects/v1").json()
+        for project in all_projects:
+            if project["name"] == project_name:
+                return project["key"]
+        raise ValueError(f"Project {project_name} not found")
+
+    def get_tov_key_new_play(self, project_key: str, tov_name: str) -> str:
+        all_tovs = self.session.get(
+            f"{self.server_url}projects/{project_key}/tovs/v1",
         ).json()
-        all_projects.sort(key=lambda proj: proj["name"].casefold())
-        return all_projects
+        for tov in all_tovs:
+            if tov["name"] == tov_name:
+                return tov["key"]
+        raise ValueError(f"TOV {tov_name} not found")
+
+    def get_cycle_key_new_play(self, project_key: str, tov_key: str, cycle_name: str) -> str:
+        all_cycles = self.session.get(
+            f"{self.server_url}projects/{project_key}/tovs/{tov_key}/cycles/v1",
+        ).json()
+        for cycle in all_cycles:
+            if cycle["name"] == cycle_name:
+                return cycle["key"]
+        raise ValueError(f"Cycle {cycle_name} not found")
+
+    def get_project_tree_new_play(self, project_key: str) -> dict:
+        return self.session.get(
+            f"{self.server_url}projects/{project_key}/tree/v1",
+        ).json()
 
     def get_all_projects(self) -> Dict:
         all_projects = dict(
-            self.session.get(
-                f"{self.server_url}projects",
+            self.legacy_session.get(
+                f"{self.server_legacy_url}projects",
                 params={"includeTOVs": "true", "includeCycles": "true"},
             ).json()
         )
@@ -149,8 +227,8 @@ class Connection:
         return all_projects
 
     def get_all_filters(self) -> List[dict]:
-        all_filters = self.session.get(
-            f"{self.server_url}filters",
+        all_filters = self.legacy_session.get(
+            f"{self.server_legacy_url}filters",
         )
 
         return all_filters.json()
@@ -167,8 +245,9 @@ class Connection:
     def trigger_json_report_generation(
         self,
         project_key: str,
-        cycle_key: str,
-        reportRootUID: str,
+        tov_key: Optional[str] = None,
+        cycle_key: Optional[str] = None,
+        reportRootUID: str = "ROOT",
         filters=None,
         report_config=None,
     ) -> str:
@@ -182,14 +261,21 @@ class Connection:
         report_config.filters = filters
         if cycle_key and cycle_key != "0" and project_key and project_key != "0":
             response = self.session.post(
-                f"{self.server_url}/api/projects/{project_key}/cycles/{cycle_key}/report/v1",
+                f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/report/v1",
                 json=dataclasses.asdict(report_config),
             ).json()
+        elif tov_key and tov_key != "0" and project_key and project_key != "0":
+            response = self.session.post(
+                f"{self.server_url}projects/{project_key}/tovs/{tov_key}/report/v1",
+                json=dataclasses.asdict(report_config),
+            ).json()
+        else:
+            raise ValueError("Either tov_key or cycle_key must be provided")
         return response["jobID"]
 
     def get_exp_json_job_result(self, project_key, job_id):
         report_generation_status = self.session.get(
-            f"{self.server_url}/api/projects/{project_key}/report/job/{job_id}/v1",
+            f"{self.server_url}projects/{project_key}/report/job/{job_id}/v1",
         ).json()
         if report_generation_status["right"] is None and report_generation_status["left"] is None:
             return None
@@ -214,13 +300,13 @@ class Connection:
             report_config.reportRootUID = reportRootUID
         report_config.filters = filters
         if cycle_key and cycle_key != "0":
-            response = self.session.post(
-                f"{self.server_url}cycle/{cycle_key}/xmlReport",
+            response = self.legacy_session.post(
+                f"{self.server_legacy_url}cycle/{cycle_key}/xmlReport",
                 json=dataclasses.asdict(report_config),
             )
         else:
-            response = self.session.post(
-                f"{self.server_url}tovs/{tov_key}/xmlReport",
+            response = self.legacy_session.post(
+                f"{self.server_legacy_url}tovs/{tov_key}/xmlReport",
                 json=dataclasses.asdict(report_config),
             )
         return response.json()["jobID"]
@@ -242,21 +328,21 @@ class Connection:
         raise AssertionError(result)
 
     def get_job_result(self, path: str, job_id: str):
-        report_generation_status = self.session.get(
-            f"{self.server_url}{path}{job_id}",
+        report_generation_status = self.legacy_session.get(
+            f"{self.server_legacy_url}{path}{job_id}",
         )
         return report_generation_status.json()["completion"]
 
     def get_xml_report_data(self, report_tmp_name: str) -> bytes:
-        report = self.session.get(
-            f"{self.server_url}xmlReport/{report_tmp_name}",
+        report = self.legacy_session.get(
+            f"{self.server_legacy_url}xmlReport/{report_tmp_name}",
         )
 
         return report.content
 
     def get_json_report_data(self, project_key: str, report_tmp_name: str) -> bytes:
         report = self.session.get(
-            f"{self.server_url}/api/projects/{project_key}/report/{report_tmp_name}/v1",
+            f"{self.server_url}projects/{project_key}/report/{report_tmp_name}/v1",
         )
         return report.content
 
@@ -268,16 +354,16 @@ class Connection:
         ]
 
     def get_all_members_of_project(self, project_key: str) -> List[dict]:
-        all_project_members = self.session.get(
-            f"{self.server_url}project/{project_key}/members",
+        all_project_members = self.legacy_session.get(
+            f"{self.server_legacy_url}project/{project_key}/members",
         )
 
         return all_project_members.json()
 
     def upload_execution_results(self, results_file_base64: str) -> str:
         try:
-            serverside_file_name = self.session.post(
-                f"{self.server_url}executionResultsUpload",
+            serverside_file_name = self.legacy_session.post(
+                f"{self.server_legacy_url}executionResultsUpload",
                 json={
                     "data": results_file_base64,
                 },
@@ -307,8 +393,8 @@ class Connection:
             used_import_config.reportRootUID = report_root_uid
 
         try:
-            job_id = self.session.post(
-                f"{self.server_url}cycle/{cycle_key}/executionResultsImport",
+            job_id = self.legacy_session.post(
+                f"{self.server_legacy_url}cycle/{cycle_key}/executionResultsImport",
                 headers={"Accept": "application/zip"},
                 json=dataclasses.asdict(used_import_config),
             )
@@ -351,14 +437,14 @@ class Connection:
         raise AssertionError(result)
 
     def get_test_cycle_structure(self, cycle_key: str) -> List[dict]:
-        test_cycle_structure = self.session.get(
-            f"{self.server_url}cycle/{cycle_key}/structure",
+        test_cycle_structure = self.legacy_session.get(
+            f"{self.server_legacy_url}cycle/{cycle_key}/structure",
         )
         return test_cycle_structure.json()
 
     def get_tov_structure(self, tovKey: str) -> List[dict]:
-        tov_structure = self.session.get(
-            f"{self.server_url}tov/{tovKey}/structure",
+        tov_structure = self.legacy_session.get(
+            f"{self.server_legacy_url}tov/{tovKey}/structure",
         )
         return tov_structure.json()
 
@@ -387,16 +473,16 @@ class Connection:
         }
 
     def get_spec_test_cases(self, testCaseSetKey: str, specificationKey: str) -> List[dict]:
-        spec_test_cases = self.session.get(
-            f"{self.server_url}testCaseSets/"
+        spec_test_cases = self.legacy_session.get(
+            f"{self.server_legacy_url}testCaseSets/"
             f"{testCaseSetKey}/specifications/"
             f"{specificationKey}/testCases",
         )
         return spec_test_cases.json()
 
     def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> List[dict]:
-        exec_test_cases = self.session.get(
-            f"{self.server_url}testCaseSets/"
+        exec_test_cases = self.legacy_session.get(
+            f"{self.server_legacy_url}testCaseSets/"
             f"{testCaseSetKey}/executions/"
             f"{executionKey}/testCases",
         )

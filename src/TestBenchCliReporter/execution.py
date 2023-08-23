@@ -40,7 +40,7 @@ def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
                 ):
                     active_connection.add_action(next_action)
             except KeyError as e:
-                logger.error(f"key {str(e)} not found")
+                logger.error(f"key {e!s} not found")
                 logger.info("Aborted action")
 
             except ValueError:
@@ -87,6 +87,7 @@ def fill_connection_queue(configuration, connection_queue, loginname, password):
         connection = Connection(
             server_url=connection_data.server_url,
             verify=connection_data.verify,
+            sessionToken=connection_data.sessionToken,
             basicAuth=connection_data.basicAuth,
             actions=connection_data.actions,
             loginname=loginname,

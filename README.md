@@ -158,7 +158,7 @@ If you didn't export nor import anything in the current session yet, at least th
 {
   "configuration": [
     {
-      "server_url": "https://localhost:9443/api/1/",
+      "server_url": "https://localhost:9445/api/",
       "verify": false,
       "basicAuth": "XXXXXXXXXXXX=",
       "actions": []
@@ -193,7 +193,7 @@ The attribute `projectPath` is not mandatory though. Only using projectKey, tovK
 {
   "configuration": [
     {
-      "server_url": "https://localhost:9443/api/1/",
+      "server_url": "https://localhost:9445/api/",
       "verify": false,
       "basicAuth": "XXXXXXXXXXXXX=",
       "actions": [
