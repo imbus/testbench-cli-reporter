@@ -15,7 +15,7 @@
 import os
 from pathlib import Path
 from re import fullmatch, sub
-from typing import Callable, Dict, List, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from questionary import Choice, Style, checkbox, confirm, select, unsafe_prompt
 from questionary import print as pprint
@@ -60,7 +60,7 @@ def abspath(filepath: Union[str, Path]) -> str:
 def selection_prompt(
     message: str,
     choices: List[Choice],
-    no_valid_option_message: str = None,
+    no_valid_option_message: Optional[str] = None,
     style: Style = custom_style_fancy,
     default=None,
 ):
@@ -90,7 +90,7 @@ def confirm_prompt(
 def checkbox_prompt(
     message: str,
     choices: List[Choice],
-    no_valid_option_message: str = None,
+    no_valid_option_message: Optional[str] = None,
     style: Style = custom_style_fancy,
 ):
     valid_choices = [choice for choice in choices if not choice.disabled]
@@ -140,13 +140,13 @@ def ask_for_test_bench_server_url(default="") -> str:
     server_url = text_prompt(
         message="Enter the TestBench server address and port <host:port>:",
         validation=lambda text: True
-        if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/)?", text)
+        if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/)?", text)
         else f"Server '{text}' is not valid! ",
         default=default,
         filter=lambda raw: sub(
-            r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/?)?$",
-            r"https://\2\3/api/1/",
-            sub(r"^([\w\-.\d]+)$", r"\1:9443", raw),
+            r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/?)?$",
+            r"https://\2\3/api/",
+            sub(r"^([\w\-.\d]+)$", r"\1:9445", raw),
         ),
     )
     print(server_url)

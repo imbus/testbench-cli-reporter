@@ -54,13 +54,28 @@ class TestCycleXMLReportOptions:
 
 
 @dataclass
+class FilterJsonInfo:
+    name: str
+    filterType: FilterInfoType
+    testThemeUID: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            name=dictionary["name"],
+            filterType=FilterInfoType(dictionary["filterType"]),
+            testThemeUID=dictionary.get("testThemeUID"),
+        )
+
+
+@dataclass
 class TestCycleJsonReportOptions:
     treeRootUID: Optional[str]
     basedOnExecution: Optional[bool]
     suppressFilteredData: Optional[bool]
     suppressNotExecutable: Optional[bool]
     suppressEmptyTestThemes: Optional[bool]
-    filters: Optional[List[FilterInfo]]
+    filters: Optional[List[FilterJsonInfo]]
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -71,21 +86,6 @@ class TestCycleJsonReportOptions:
             suppressNotExecutable=dictionary.get("suppressNotExecutable"),
             suppressEmptyTestThemes=dictionary.get("suppressEmptyTestThemes"),
             filters=[FilterJsonInfo.from_dict(f) for f in dictionary.get("filters", [])],
-        )
-
-
-@dataclass
-class FilterJsonInfo:
-    name: str
-    type: FilterInfoType  # noqa: A003
-    testThemeUID: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, dictionary):
-        return cls(
-            name=dictionary["name"],
-            filterType=FilterInfoType(dictionary["filterType"]),
-            testThemeUID=dictionary.get("testThemeUID"),
         )
 
 
@@ -110,7 +110,7 @@ class ExportParameters:
             report_config=TestCycleXMLReportOptions.from_dict(dictionary.get("report_config") or {})
             if dictionary.get("report_config")
             else None,
-            filters=dictionary.get("filters", []),
+            filters=[FilterInfo.from_dict(f) for f in dictionary.get("filters", [])],
         )
 
 
@@ -118,16 +118,18 @@ class ExportParameters:
 class ExportJsonParameters:
     outputPath: str
     projectPath: Optional[List[str]] = None
+    projectKey: Optional[str] = None
     tovKey: Optional[str] = None
     cycleKey: Optional[str] = None
     report_config: Optional[TestCycleJsonReportOptions] = None
-    filters: Optional[List[FilterInfo]] = None
+    filters: Optional[List[FilterJsonInfo]] = None
 
     @classmethod
     def from_dict(cls, dictionary):
         return cls(
             outputPath=dictionary["outputPath"],
             projectPath=dictionary.get("projectPath", []),
+            projectKey=dictionary.get("projectKey"),
             tovKey=dictionary.get("tovKey"),
             cycleKey=dictionary.get("cycleKey"),
             report_config=TestCycleJsonReportOptions.from_dict(
@@ -135,25 +137,28 @@ class ExportJsonParameters:
             )
             if dictionary.get("report_config")
             else None,
-            filters=dictionary.get("filters", []),
+            filters=[FilterJsonInfo.from_dict(f) for f in dictionary.get("filters", [])],
         )
 
 
 @dataclass
 class ExportAction:
-    parameters: Union[ExportParameters, ExportJsonParameters]
-    type: str
+    parameters: ExportParameters
+    type: str = "ExportXMLReport"  # noqa: A003
 
     @classmethod
     def from_dict(cls, dictionary):
-        return cls(
-            parameters=(
-                ExportParameters.from_dict(dictionary.get("parameters") or {})
-                if dictionary.get("type") == "ExportXMLReport"
-                else ExportJsonParameters.from_dict(dictionary.get("parameters") or {})
-            ),
-            type=dictionary.get("type", "ExportXMLReport"),
-        )
+        return cls(parameters=ExportParameters.from_dict(dictionary.get("parameters") or {}))
+
+
+@dataclass
+class ExportJsonAction:
+    parameters: ExportJsonParameters
+    type: str = "ExportJSONReport"  # noqa: A003
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(parameters=ExportJsonParameters.from_dict(dictionary.get("parameters") or {}))
 
 
 @dataclass
@@ -218,16 +223,18 @@ class ImportAction:
 class Configuration:
     server_url: Optional[str] = None
     verify: bool = True
+    sessionToken: Optional[str] = None
     basicAuth: Optional[str] = None
     loginname: Optional[str] = None
     password: Optional[str] = None
-    actions: Optional[List[Union[ExportAction, ImportAction]]] = None
+    actions: Optional[List[Union[ExportAction, ExportJsonAction, ImportAction]]] = None
 
     @classmethod
     def from_dict(cls, dictionary):
         return cls(
             server_url=dictionary["server_url"],
             verify=dictionary.get("verify", True),
+            sessionToken=dictionary.get("sessionToken"),
             basicAuth=dictionary.get("basicAuth"),
             loginname=dictionary.get("loginname"),
             password=dictionary.get("password"),
@@ -235,6 +242,8 @@ class Configuration:
                 ImportAction.from_dict(a)
                 if a["type"] == "ImportExecutionResults"
                 else ExportAction.from_dict(a)
+                if a["type"] == "ExportXMLReport"
+                else ExportJsonAction.from_dict(a)
                 for a in dictionary["actions"]
             ],
         )

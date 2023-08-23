@@ -32,7 +32,6 @@ from .config_model import (
     ExportAction,
     ImportAction,
     TestCycleXMLReportOptions,
-    TestCycleJsonReportOptions,
 )
 from .log import logger
 
@@ -265,90 +264,41 @@ def pretty_print(*print_statements: dict):
         print("".join([statement["value"] for statement in print_statements]))
 
 
-def get_project_keys_new_play(  # noqa: C901
-    projects: Dict,
-    project_name: str,
-    tov_name: str,
-    cycle_name: Optional[str] = None,
-):
-    raise NotImplementedError
-
-
-def get_project_keys(  # noqa: C901
-    projects: Dict,
-    project_name: str,
-    tov_name: str,
-    cycle_name: Optional[str] = None,
-):
-    project_key = None
-    tov_key = None
-    cycle_key = None
-    for project in projects["projects"]:
-        if project["name"] == project_name:
-            project_key = project["key"]["serial"]
-            for tov in project["testObjectVersions"]:
-                if tov["name"] == tov_name:
-                    project["testObjectVersions"] = [tov]
-                    tov_key = tov["key"]["serial"]
-                    if cycle_name:
-                        for cycle in tov["testCycles"]:
-                            if cycle["name"] == cycle_name:
-                                project["testObjectVersions"][0]["testCycles"] = cycle
-                                cycle_key = cycle["key"]["serial"]
-                                break
-                        break
-            break
-    if not project_key:
-        raise ValueError(f"Project '{project_name}' not found.")
-    if not tov_key:
-        raise ValueError(f"TOV '{tov_name}' not found in project '{project_name}'.")
-    if not cycle_key and cycle_name:
-        raise ValueError(
-            f"Cycle '{cycle_name}' not found in TOV '{tov_name}' in project '{project_name}'."
-        )
-    pretty_print(
-        {"value": "PROJECT_KEY: ", "end": None},
-        {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
-        {"value": ", TOV_Key: ", "end": None},
-        {"value": f"{tov_key}", "style": BLUE_BOLD_ITALIC, "end": None},
-        {"value": ", CYCLE_KEY: ", "end": None},
-        {"value": f"{cycle_key}", "style": BLUE_BOLD_ITALIC},
-    )
-    return project_key, tov_key, cycle_key
-
-
-def get_project_keys_new_play(  # noqa: C901
-    projects: Dict,
-    project_name: str,
-    tov_name: str,
-    cycle_name: Optional[str] = None,
-):
-    project_key = None
-    tov_key = None
-    cycle_key = None
+def get_project_by_name(projects, project_name):
     for project in projects:
         if project["name"] == project_name:
-            project_key = project["key"]
-            for tov in project["testObjectVersions"]:
-                if tov["name"] == tov_name:
-                    project["testObjectVersions"] = [tov]
-                    tov_key = tov["key"]["serial"]
-                    if cycle_name:
-                        for cycle in tov["testCycles"]:
-                            if cycle["name"] == cycle_name:
-                                project["testObjectVersions"][0]["testCycles"] = cycle
-                                cycle_key = cycle["key"]["serial"]
-                                break
-                        break
-            break
-    if not project_key:
-        raise ValueError(f"Project '{project_name}' not found.")
-    if not tov_key:
-        raise ValueError(f"TOV '{tov_name}' not found in project '{project_name}'.")
-    if not cycle_key and cycle_name:
-        raise ValueError(
-            f"Cycle '{cycle_name}' not found in TOV '{tov_name}' in project '{project_name}'."
-        )
+            return project
+    raise ValueError(f"Project '{project_name}' not found.")
+
+
+def get_tov_by_name(tovs, tov_name):
+    for tov in tovs:
+        if tov["name"] == tov_name:
+            return tov
+    raise ValueError(f"TOV '{tov_name}' not found.")
+
+
+def get_cycle_by_name(cycles, cycle_name):
+    for cycle in cycles:
+        if cycle["name"] == cycle_name:
+            return cycle
+    raise ValueError(f"Cycle '{cycle_name}' not found.")
+
+
+def get_project_keys(
+    projects: Dict,
+    project_name: str,
+    tov_name: str,
+    cycle_name: Optional[str] = None,
+):
+    cycle_key = None
+    project = get_project_by_name(projects["projects"], project_name)
+    project_key = project["key"]["serial"]
+    tov = get_tov_by_name(project["testObjectVersions"], tov_name)
+    tov_key = tov["key"]["serial"]
+    if cycle_name:
+        cycle = get_cycle_by_name(tov["testCycles"], cycle_name)
+        cycle_key = cycle["key"]["serial"]
     pretty_print(
         {"value": "PROJECT_KEY: ", "end": None},
         {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
@@ -358,29 +308,6 @@ def get_project_keys_new_play(  # noqa: C901
         {"value": f"{cycle_key}", "style": BLUE_BOLD_ITALIC},
     )
     return project_key, tov_key, cycle_key
-
-
-# def get_project_keys_new_play(  # noqa: C901
-#     projects: Dict,
-#     project_name: str,
-#     tov_name: str,
-#     cycle_name: Optional[str] = None,
-# ):
-#     project_key = None
-#     tov_key = None
-#     cycle_key = None
-#     for project in projects:
-#         if project["name"] == project_name:
-#             project_key = project["key"]
-#             break
-#     if not project_key:
-#         raise ValueError(f"Project '{project_name}' not found.")
-
-#     pretty_print(
-#         {"value": "PROJECT_KEY: ", "end": None},
-#         {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
-#     )
-#     return project_key
 
 
 def pretty_print_project_selection(selected_project, selected_tov, selected_cycle):
@@ -565,12 +492,12 @@ def pretty_print_success_message(prefix: str, value: Any, suffix: str):
     )
 
 
-def resolve_server_name(server):
-    if fullmatch(r"([\w\-.]+)(:\d{1,5})", server):
-        resolved_server = f"https://{server}/api/1/"
+def resolve_server_name(server: str) -> str:
+    if fullmatch(r"([\w\-.]+):(\d{1,5})", server):
+        resolved_server = f"https://{server}/api/"
     elif fullmatch(r"([\w\-.]+)", server):
-        resolved_server = f"https://{server}:9443/api/1/"
-    elif fullmatch(r"https?://([\w\-.]+)(:\d{1,5})/api/1/", server):
+        resolved_server = f"https://{server}:9445/api/"
+    elif fullmatch(r"https?://([\w\-.]+):(\d{1,5})/api/", server):
         resolved_server = server
     else:
         raise ValueError(f"Server name '{server}' is not valid.")
