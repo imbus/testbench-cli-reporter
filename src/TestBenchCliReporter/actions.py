@@ -25,7 +25,6 @@ from zipfile import ZipFile
 from . import questions, testbench
 from .config_model import ExportJsonParameters, ExportParameters, ImportParameters
 from .log import logger
-from .testbench import ConnectionLog
 from .util import (
     TYPICAL_IMPORT_CONFIG,
     AbstractAction,
@@ -57,7 +56,7 @@ class ExportXMLReport(AbstractAction):
         self.parameters: ExportParameters = exp_parameters
         self.filters = []
 
-    def prepare(self, connection_log: ConnectionLog) -> bool:
+    def prepare(self, connection_log: 'ConnectionLog') -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects)
         selected_tov = questions.ask_to_select_tov(selected_project)
@@ -88,7 +87,7 @@ class ExportXMLReport(AbstractAction):
 
         return True
 
-    def trigger(self, connection_log: ConnectionLog) -> Union[bool, str]:
+    def trigger(self, connection_log: 'ConnectionLog') -> Union[bool, str]:
         if (not self.parameters.cycleKey or self.parameters.cycleKey == "0") and (
             not self.parameters.tovKey and len(self.parameters.projectPath) >= 2  # noqa: PLR2004
         ):
@@ -108,7 +107,7 @@ class ExportXMLReport(AbstractAction):
         )
         return self.job_id
 
-    def wait(self, connection_log: ConnectionLog) -> bool:
+    def wait(self, connection_log: 'ConnectionLog') -> bool:
         try:
             self.report_tmp_name = connection_log.active_connection.wait_for_tmp_xml_report_name(
                 self.job_id
@@ -118,13 +117,13 @@ class ExportXMLReport(AbstractAction):
             logger.debug(traceback.format_exc())
             return False
 
-    def poll(self, connection_log: ConnectionLog) -> bool:
+    def poll(self, connection_log: 'ConnectionLog') -> bool:
         result = connection_log.active_connection.get_exp_job_result(self.job_id)
         if result is not None:
             self.report_tmp_name = result
         return bool(result)
 
-    def finish(self, connection_log: ConnectionLog) -> bool:
+    def finish(self, connection_log: 'ConnectionLog') -> bool:
         report = connection_log.active_connection.get_xml_report_data(self.report_tmp_name)
         with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(report)
@@ -146,10 +145,10 @@ class ExportJSONReport(AbstractAction):
         self.parameters: ExportJsonParameters = exp_parameters
         self.filters = []
 
-    def prepare(self, connection_log: ConnectionLog) -> bool:
+    def prepare(self, connection_log: 'ConnectionLog') -> bool:
         raise NotImplementedError
 
-    def trigger(self, connection_log: ConnectionLog) -> Union[bool, str]:
+    def trigger(self, connection_log: 'ConnectionLog') -> Union[bool, str]:
         if (
             not self.parameters.projectKey
             and self.parameters.projectPath
@@ -184,10 +183,10 @@ class ExportJSONReport(AbstractAction):
         )
         return self.job_id
 
-    def wait(self, connection_log: ConnectionLog) -> Union[bool, str]:
+    def wait(self, connection_log: 'ConnectionLog') -> Union[bool, str]:
         raise NotImplementedError
 
-    def poll(self, connection_log: ConnectionLog) -> bool:
+    def poll(self, connection_log: 'ConnectionLog') -> bool:
         result = connection_log.active_connection.get_exp_json_job_result(
             self.parameters.projectKey, self.job_id
         )
@@ -195,7 +194,7 @@ class ExportJSONReport(AbstractAction):
             self.report_tmp_name = result.get("value")
         return result
 
-    def finish(self, connection_log: ConnectionLog) -> bool:
+    def finish(self, connection_log: 'ConnectionLog') -> bool:
         report = connection_log.active_connection.get_json_report_data(
             self.parameters.projectKey, self.report_tmp_name
         )
@@ -226,7 +225,7 @@ class ImportExecutionResults(AbstractAction):
         super().__init__()
         self.parameters: ImportParameters = imp_parameters
 
-    def prepare(self, connection_log: ConnectionLog) -> bool:
+    def prepare(self, connection_log: 'ConnectionLog') -> bool:
         self.parameters.inputPath = questions.ask_for_input_path()
         project = version = cycle = None
         with contextlib.suppress(Exception):
@@ -262,7 +261,7 @@ class ImportExecutionResults(AbstractAction):
             cycle = cycle_element.get("name") if cycle_element is not None else ""
             return [project, version, cycle]
 
-    def trigger(self, connection_log: ConnectionLog) -> bool:
+    def trigger(self, connection_log: 'ConnectionLog') -> bool:
         if not self.parameters.cycleKey:
             if len(self.parameters.projectPath or []) != 3:  # noqa: PLR2004
                 self.parameters.projectPath = self.get_project_path_from_report()
@@ -288,7 +287,7 @@ class ImportExecutionResults(AbstractAction):
             return True
         return False
 
-    def set_cycle_key_from_path(self, connection_log: ConnectionLog):
+    def set_cycle_key_from_path(self, connection_log: 'ConnectionLog'):
         all_projects = connection_log.active_connection.get_all_projects()
         if (
             isinstance(self.parameters.projectPath, list)
@@ -302,7 +301,7 @@ class ImportExecutionResults(AbstractAction):
         if not self.parameters.cycleKey:
             raise ValueError("Invalid Config! 'cycleKey' missing.")
 
-    def wait(self, connection_log: ConnectionLog) -> bool:
+    def wait(self, connection_log: 'ConnectionLog') -> bool:
         self.report_tmp_name = (
             connection_log.active_connection.wait_for_execution_results_import_to_finish(
                 self.job_id
@@ -310,13 +309,13 @@ class ImportExecutionResults(AbstractAction):
         )
         return bool(self.report_tmp_name)
 
-    def poll(self, connection_log: ConnectionLog) -> bool:
+    def poll(self, connection_log: 'ConnectionLog') -> bool:
         result = connection_log.active_connection.get_imp_job_result(self.job_id)
         if result is not None:
             self.report_tmp_name = result
         return bool(result)
 
-    def finish(self, connection_log: ConnectionLog) -> bool:
+    def finish(self, connection_log: 'ConnectionLog') -> bool:
         if self.report_tmp_name:
             pretty_print_success_message(
                 "Report", Path(self.parameters.inputPath).resolve(), "was imported"
@@ -326,7 +325,7 @@ class ImportExecutionResults(AbstractAction):
 
 
 class BrowseProjects(UnloggedAction):
-    def prepare(self, connection_log: ConnectionLog) -> bool:
+    def prepare(self, connection_log: 'ConnectionLog') -> bool:
         arg = parser.parse_args()
         project = arg.project
         version = arg.version
@@ -360,16 +359,16 @@ class BrowseProjects(UnloggedAction):
                 return value, re.sub(r"_structure$", "", key)
         raise ValueError(f"Unknown Element Type: {tse!s}")
 
-    def trigger(self, connection_log: ConnectionLog) -> bool:
+    def trigger(self, connection_log: 'ConnectionLog') -> bool:
         return True
 
 
 class ExportActionLog(UnloggedAction):
-    def prepare(self, connection_log: ConnectionLog):
+    def prepare(self, connection_log: 'ConnectionLog'):
         self.parameters["outputPath"] = questions.ask_for_output_path("config.json")
         return True
 
-    def trigger(self, connection_log: ConnectionLog) -> bool:
+    def trigger(self, connection_log: 'ConnectionLog') -> bool:
         try:
             connection_log.export_as_json(self.parameters["outputPath"])
             pretty_print_success_message(
@@ -382,11 +381,11 @@ class ExportActionLog(UnloggedAction):
 
 
 class ChangeConnection(UnloggedAction):
-    def prepare(self, connection_log: ConnectionLog):
+    def prepare(self, connection_log: 'ConnectionLog'):
         self.parameters["newConnection"] = testbench.login()
         return True
 
-    def trigger(self, connection_log: ConnectionLog) -> bool:
+    def trigger(self, connection_log: 'ConnectionLog') -> bool:
         connection_log.active_connection.close()
         connection_log.add_connection(self.parameters["newConnection"])
         return True
