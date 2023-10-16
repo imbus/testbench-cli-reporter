@@ -78,7 +78,10 @@ def run_automatic_mode(
         logger.info("All jobs finished.")
     except requests.HTTPError as e:
         logger.debug(traceback.format_exc())
-        logger.error(e.response.json())
+        try:
+            logger.error(e.response.json())
+        except:
+            pass
         raise e
 
 

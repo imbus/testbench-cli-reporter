@@ -12,6 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+from __future__ import annotations
 import base64
 import dataclasses
 import json
@@ -113,7 +114,7 @@ class Connection:
             json={"login": self.loginname, "password": self.password, "force": True},
         )
         resp_dict = response.json()
-        logger.info(f"Authenticated with session token: {resp_dict['sessionToken']}")
+        logger.info(f"Authenticated with session token: {resp_dict.get('sessionToken')}")
         self.session_token = resp_dict["sessionToken"]
 
     def get_loginname_from_server(self):
@@ -333,6 +334,12 @@ class Connection:
         )
         return report_generation_status.json()["completion"]
 
+    #GET /testCaseSets/{testCaseSetKey}/specifications/{specificationKey}/testCases
+    def get_test_cases_of_specification(self, testcaseset_key: str, specification_key: str) -> List[dict]:
+        return self.legacy_session.get(
+            f"{self.server_legacy_url}testCaseSets/{testcaseset_key}/specifications/{specification_key}/testCases",
+        ).json()
+
     def get_xml_report_data(self, report_tmp_name: str) -> bytes:
         report = self.legacy_session.get(
             f"{self.server_legacy_url}xmlReport/{report_tmp_name}",
@@ -360,6 +367,81 @@ class Connection:
 
         return all_project_members.json()
 
+    #/api/projects/{projectKey}/cycles/{cycleKey}/structure/v1
+    def post_project_cycle_structure(self, project_key, cycle_key, root_uid=None):
+        return self.session.post(
+            f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/structure/v1",
+            json={
+                "treeRootUID": root_uid,
+                "basedOnExecution": True,
+                "suppressNotExecutable": True,
+                "suppressEmptyTestThemes": True,
+                "filters": [],
+            },
+        ).json()
+
+    #/api/projects/{projectKey}/testThemes/{testThemeKey}/v1
+    def get_project_test_theme(self, project_key, test_theme_key, specification_key=None, execution_key=None):
+        return self.session.get(
+            f"{self.server_url}projects/{project_key}/testThemes/{test_theme_key}/v1",
+            params={
+                "specificationKey": specification_key,
+                "executionKey": execution_key,
+            },
+        ).json()
+
+    #/api/projects/{projectKey}/udfs/v1
+    def get_project_udfs(self, project_key):
+        return self.session.get(
+            f"{self.server_url}projects/{project_key}/udfs/v1",
+        ).json()
+
+    #/api/projects/{projectKey}/cycles/{cycleKey}/requirements/v1
+    def post_project_cycle_requirements(self, project_key, cycle_key, root_uid=None):
+        return self.session.post(
+            f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/requirements/v1",
+            json={
+                "treeRootUID": root_uid,
+                "suppressNotExecutable": True,
+                "suppressEmptyTestThemes": True
+            },
+        ).json()
+
+    #/api/projects/{projectKey}/cycles/{cycleKey}/defects/v1
+    def post_project_cycle_defects(self, project_key, cycle_key, root_uid=None):
+        return self.session.post(
+            f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/defects/v1",
+            json={
+                "treeRootUID": root_uid
+            },
+        ).json()
+
+    #/api/projects/{projectKey}/v1
+    def get_project(self, project_key):
+        return self.session.get(
+            f"{self.server_url}projects/{project_key}/v1",
+        ).json()
+
+    # /api/projects/{projectKey}/testCaseSets/{testCaseSetKey}/v1:
+    def get_project_test_case_set(self, project_key, test_case_set_key, specification_key=None, execution_key=None):
+        return self.session.get(
+            f"{self.server_url}projects/{project_key}/testCaseSets/{test_case_set_key}/v1",
+            params={
+                "executionKey": execution_key,
+            },
+        ).json()
+
+
+    #     /api/projects/{projectKey}/testCaseSets/{testCaseSetKey}/testCases/{testCaseSpecificationKey}/v1:
+    def get_project_test_case(self, project_key, test_case_set_key, test_case_specification_key, execution_key=None):
+        return self.session.get(
+            f"{self.server_url}projects/{project_key}/testCaseSets/{test_case_set_key}/testCases/{test_case_specification_key}/v1",
+            params={
+                "executionKey": execution_key,
+            },
+        ).json()
+
+
     def upload_execution_results(self, results_file_base64: str) -> str:
         try:
             serverside_file_name = self.legacy_session.post(
@@ -368,6 +450,7 @@ class Connection:
                     "data": results_file_base64,
                 },
             )
+            logger.debug(serverside_file_name.json())
             return serverside_file_name.json()["fileName"]
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
