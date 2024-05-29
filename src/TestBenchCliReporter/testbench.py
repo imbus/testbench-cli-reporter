@@ -12,7 +12,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from __future__ import annotations
+# from __future__ import annotations
+
 import base64
 import dataclasses
 import json
@@ -113,8 +114,15 @@ class Connection:
             f"{self.server_url}login/session/v1",
             json={"login": self.loginname, "password": self.password, "force": True},
         )
-        resp_dict = response.json()
-        logger.info(f"Authenticated with session token: {resp_dict.get('sessionToken')}")
+        try:
+            resp_dict = response.json()
+            logger.info(f"Authenticated with session token: {resp_dict.get('sessionToken')}")
+        except json.JSONDecodeError as e:
+            raise requests.HTTPError(
+                "Authentication failed\n"
+                f"Status code: {response.status_code}\n"
+                f"Response: {response.text}"
+            ) from e
         self.session_token = resp_dict["sessionToken"]
 
     def get_loginname_from_server(self):
@@ -258,7 +266,7 @@ class Connection:
             filters = []
 
         if reportRootUID and reportRootUID != "ROOT":
-            report_config.reportRootUID = reportRootUID
+            report_config.treeRootUID = reportRootUID
         report_config.filters = filters
         if cycle_key and cycle_key != "0" and project_key and project_key != "0":
             response = self.session.post(
@@ -274,15 +282,23 @@ class Connection:
             raise ValueError("Either tov_key or cycle_key must be provided")
         return response["jobID"]
 
-    def get_exp_json_job_result(self, project_key, job_id):
+    def wait_for_tmp_json_report_name(self, project_key: str, job_id: str) -> str:
+        while True:
+            report_generation_result = self.get_exp_json_job_result(project_key, job_id)
+            if report_generation_result is not None:
+                return report_generation_result
+            spin_spinner("Waiting until creation of JSON report is complete")
+
+    def get_exp_json_job_result(self, project_key: str, job_id: str):
         report_generation_status = self.session.get(
             f"{self.server_url}projects/{project_key}/report/job/{job_id}/v1",
         ).json()
-        if report_generation_status["right"] is None and report_generation_status["left"] is None:
+        if not report_generation_status.get('completion'):
             return None
-        if report_generation_status["right"]:
-            return report_generation_status["right"]
-        raise AssertionError(report_generation_status["left"])
+        result = report_generation_status.get('completion').get('result')
+        if result.get('Success'):
+            return result.get('Success').get('reportName')
+        raise AssertionError(result.get('Failure').get('error'))
 
     def trigger_xml_report_generation(
         self,
@@ -334,8 +350,10 @@ class Connection:
         )
         return report_generation_status.json()["completion"]
 
-    #GET /testCaseSets/{testCaseSetKey}/specifications/{specificationKey}/testCases
-    def get_test_cases_of_specification(self, testcaseset_key: str, specification_key: str) -> List[dict]:
+    # GET /testCaseSets/{testCaseSetKey}/specifications/{specificationKey}/testCases
+    def get_test_cases_of_specification(
+        self, testcaseset_key: str, specification_key: str
+    ) -> List[dict]:
         return self.legacy_session.get(
             f"{self.server_legacy_url}testCaseSets/{testcaseset_key}/specifications/{specification_key}/testCases",
         ).json()
@@ -367,7 +385,7 @@ class Connection:
 
         return all_project_members.json()
 
-    #/api/projects/{projectKey}/cycles/{cycleKey}/structure/v1
+    # /api/projects/{projectKey}/cycles/{cycleKey}/structure/v1
     def post_project_cycle_structure(self, project_key, cycle_key, root_uid=None):
         return self.session.post(
             f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/structure/v1",
@@ -380,8 +398,10 @@ class Connection:
             },
         ).json()
 
-    #/api/projects/{projectKey}/testThemes/{testThemeKey}/v1
-    def get_project_test_theme(self, project_key, test_theme_key, specification_key=None, execution_key=None):
+    # /api/projects/{projectKey}/testThemes/{testThemeKey}/v1
+    def get_project_test_theme(
+        self, project_key, test_theme_key, specification_key=None, execution_key=None
+    ):
         return self.session.get(
             f"{self.server_url}projects/{project_key}/testThemes/{test_theme_key}/v1",
             params={
@@ -390,40 +410,40 @@ class Connection:
             },
         ).json()
 
-    #/api/projects/{projectKey}/udfs/v1
+    # /api/projects/{projectKey}/udfs/v1
     def get_project_udfs(self, project_key):
         return self.session.get(
             f"{self.server_url}projects/{project_key}/udfs/v1",
         ).json()
 
-    #/api/projects/{projectKey}/cycles/{cycleKey}/requirements/v1
+    # /api/projects/{projectKey}/cycles/{cycleKey}/requirements/v1
     def post_project_cycle_requirements(self, project_key, cycle_key, root_uid=None):
         return self.session.post(
             f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/requirements/v1",
             json={
                 "treeRootUID": root_uid,
                 "suppressNotExecutable": True,
-                "suppressEmptyTestThemes": True
+                "suppressEmptyTestThemes": True,
             },
         ).json()
 
-    #/api/projects/{projectKey}/cycles/{cycleKey}/defects/v1
+    # /api/projects/{projectKey}/cycles/{cycleKey}/defects/v1
     def post_project_cycle_defects(self, project_key, cycle_key, root_uid=None):
         return self.session.post(
             f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/defects/v1",
-            json={
-                "treeRootUID": root_uid
-            },
+            json={"treeRootUID": root_uid},
         ).json()
 
-    #/api/projects/{projectKey}/v1
+    # /api/projects/{projectKey}/v1
     def get_project(self, project_key):
         return self.session.get(
             f"{self.server_url}projects/{project_key}/v1",
         ).json()
 
     # /api/projects/{projectKey}/testCaseSets/{testCaseSetKey}/v1:
-    def get_project_test_case_set(self, project_key, test_case_set_key, specification_key=None, execution_key=None):
+    def get_project_test_case_set(
+        self, project_key, test_case_set_key, specification_key=None, execution_key=None
+    ):
         return self.session.get(
             f"{self.server_url}projects/{project_key}/testCaseSets/{test_case_set_key}/v1",
             params={
@@ -431,16 +451,16 @@ class Connection:
             },
         ).json()
 
-
     #     /api/projects/{projectKey}/testCaseSets/{testCaseSetKey}/testCases/{testCaseSpecificationKey}/v1:
-    def get_project_test_case(self, project_key, test_case_set_key, test_case_specification_key, execution_key=None):
+    def get_project_test_case(
+        self, project_key, test_case_set_key, test_case_specification_key, execution_key=None
+    ):
         return self.session.get(
             f"{self.server_url}projects/{project_key}/testCaseSets/{test_case_set_key}/testCases/{test_case_specification_key}/v1",
             params={
                 "executionKey": execution_key,
             },
         ).json()
-
 
     def upload_execution_results(self, results_file_base64: str) -> str:
         try:
@@ -647,14 +667,14 @@ class ConnectionLog:
         self.connections: List[Connection] = []
 
     @property
-    def len(self) -> int:  # noqa: A003
+    def len(self) -> int:
         return len(self.connections)
 
     @property
     def active_connection(self) -> Connection:
         return self.connections[-1]
 
-    def next(self):  # noqa: A003
+    def next(self):
         self.connections = self.connections[1:] + self.connections[:1]
 
     def remove(self, connection):

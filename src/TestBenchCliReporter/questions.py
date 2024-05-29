@@ -23,7 +23,7 @@ from questionary import print as pprint
 from . import actions, util
 from .config_model import ExecutionResultsImportOptions
 from .log import logger
-from .util import ImportConfig, XmlExportConfig
+from .util import ImportConfig, JsonExportConfig, XmlExportConfig
 
 custom_style_fancy = Style(
     [
@@ -139,9 +139,11 @@ def ask_for_test_bench_credentials(server="", login="", pwd="") -> dict:
 def ask_for_test_bench_server_url(default="") -> str:
     server_url = text_prompt(
         message="Enter the TestBench server address and port <host:port>:",
-        validation=lambda text: True
-        if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/)?", text)
-        else f"Server '{text}' is not valid! ",
+        validation=lambda text: (
+            True
+            if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/)?", text)
+            else f"Server '{text}' is not valid! "
+        ),
         default=default,
         filter=lambda raw: sub(
             r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/?)?$",
@@ -172,9 +174,11 @@ def ask_for_certificate_path() -> str:
     return text_prompt(
         message="Provide the path to the certificate.",
         type="path",
-        validation=lambda path: True
-        if isfile(path) and os.access(path, os.R_OK)
-        else f"Path '{path}' is not a file or not readable.",
+        validation=lambda path: (
+            True
+            if isfile(path) and os.access(path, os.R_OK)
+            else f"Path '{path}' is not a file or not readable."
+        ),
     )
 
 
@@ -263,6 +267,25 @@ def ask_to_config_report():
     return selection
 
 
+def ask_to_config_json_report():
+    selection = selection_prompt(
+        "Select Report Configuration:",
+        choices=[Choice(config_name, config) for config_name, config in JsonExportConfig.items()],
+    )
+    if not selection:
+        selection = {
+            "basedOnExecution": [Choice("True", True), Choice("False", False)],
+            "suppressFilteredData": [Choice("True", True), Choice("False", False)],
+            "suppressNotExecutable": [Choice("True", True), Choice("False", False)],
+            "suppressEmptyTestThemes": [Choice("True", True), Choice("False", False)],
+        }
+        pprint("  {", style="bold")
+        for key, value in selection.items():
+            selection[key] = selection_prompt(f'   "{key}": ', value)
+        pprint("  }", style="bold")
+    return selection
+
+
 def ask_to_config_import() -> ExecutionResultsImportOptions:
     selection = selection_prompt(
         "Select Import Configuration:",
@@ -290,10 +313,12 @@ def ask_for_output_path(default: str = "report.zip") -> str:
     output_path = text_prompt(
         message=f"Provide the output path [{default}]:",
         type="path",
-        validation=lambda path: True
-        if ((isdir(path) or isfile(path)) and os.access(path, os.W_OK))
-        or os.access(dirname(abspath(path)), os.W_OK)
-        else f"Path '{path}' does not exist or is not writeable.",
+        validation=lambda path: (
+            True
+            if ((isdir(path) or isfile(path)) and os.access(path, os.W_OK))
+            or os.access(dirname(abspath(path)), os.W_OK)
+            else f"Path '{path}' does not exist or is not writeable."
+        ),
         filter=lambda path: str(Path(path) / default) if isdir(path or ".") else path,
     )
     pprint("Output Path: ", end=None)
@@ -305,10 +330,12 @@ def ask_for_input_path() -> str:
     return text_prompt(
         message="Provide the input path [report.zip]:",
         type="path",
-        validation=lambda path: True
-        if (isfile(path) and os.access(path, os.R_OK))
-        or (isfile("report.zip") and os.access("report.zip", os.R_OK))
-        else f"'{path}' is not a file or not readable.",
+        validation=lambda path: (
+            True
+            if (isfile(path) and os.access(path, os.R_OK))
+            or (isfile("report.zip") and os.access("report.zip", os.R_OK))
+            else f"'{path}' is not a file or not readable."
+        ),
         filter=lambda path: path if path else "report.zip",
     )
 
@@ -353,6 +380,7 @@ def ask_for_next_action():
         message="What do you want to do?",
         choices=[
             Choice("Export XML Report", actions.ExportXMLReport()),
+            Choice("Export JSON Report", actions.ExportJSONReport()),
             Choice("Import execution results", actions.ImportExecutionResults()),
             Choice("Browser Projects", actions.BrowseProjects()),
             Choice("Write history to config file", actions.ExportActionLog()),
@@ -388,9 +416,11 @@ def navigate_in_cycle_stucture(theme_structure):
         choices = [Choice("<SELECT ALL>", "ROOT")]
     else:
         te = theme_structure["tse"][
-            "TestTheme_structure"
-            if "TestTheme_structure" in theme_structure["tse"]
-            else "TestCaseSet_structure"
+            (
+                "TestTheme_structure"
+                if "TestTheme_structure" in theme_structure["tse"]
+                else "TestCaseSet_structure"
+            )
         ]
         choices = [
             Choice(

@@ -44,5 +44,5 @@ setup(
         "urllib3",
         "typing-extensions >= 3.7.4.3",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.7",
 )
