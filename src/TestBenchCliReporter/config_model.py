@@ -12,7 +12,7 @@ class FilterInfoType(str, Enum):
 @dataclass
 class FilterInfo:
     name: str
-    type: FilterInfoType  # noqa: A003
+    type: FilterInfoType
     testThemeUID: Optional[str] = None
 
     @classmethod
@@ -20,6 +20,21 @@ class FilterInfo:
         return cls(
             name=dictionary["name"],
             type=FilterInfoType(dictionary["type"]),
+            testThemeUID=dictionary.get("testThemeUID"),
+        )
+
+
+@dataclass
+class FilterJsonInfo:
+    name: str
+    filterType: FilterInfoType
+    testThemeUID: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, dictionary):
+        return cls(
+            name=dictionary["name"],
+            filterType=FilterInfoType(dictionary["filterType"]),
             testThemeUID=dictionary.get("testThemeUID"),
         )
 
@@ -50,21 +65,6 @@ class TestCycleXMLReportOptions:
             exportExecutionProtocols=dictionary.get("exportExecutionProtocols"),
             exportDescriptionFields=dictionary.get("exportDescriptionFields"),
             outputFormattedText=dictionary.get("outputFormattedText"),
-        )
-
-
-@dataclass
-class FilterJsonInfo:
-    name: str
-    filterType: FilterInfoType
-    testThemeUID: Optional[str] = None
-
-    @classmethod
-    def from_dict(cls, dictionary):
-        return cls(
-            name=dictionary["name"],
-            filterType=FilterInfoType(dictionary["filterType"]),
-            testThemeUID=dictionary.get("testThemeUID"),
         )
 
 
@@ -107,9 +107,11 @@ class ExportParameters:
             tovKey=dictionary.get("tovKey"),
             cycleKey=dictionary.get("cycleKey"),
             reportRootUID=dictionary.get("reportRootUID"),
-            report_config=TestCycleXMLReportOptions.from_dict(dictionary.get("report_config") or {})
-            if dictionary.get("report_config")
-            else None,
+            report_config=(
+                TestCycleXMLReportOptions.from_dict(dictionary.get("report_config") or {})
+                if dictionary.get("report_config")
+                else None
+            ),
             filters=[FilterInfo.from_dict(f) for f in dictionary.get("filters", [])],
         )
 
@@ -132,11 +134,11 @@ class ExportJsonParameters:
             projectKey=dictionary.get("projectKey"),
             tovKey=dictionary.get("tovKey"),
             cycleKey=dictionary.get("cycleKey"),
-            report_config=TestCycleJsonReportOptions.from_dict(
-                dictionary.get("report_config") or {}
-            )
-            if dictionary.get("report_config")
-            else None,
+            report_config=(
+                TestCycleJsonReportOptions.from_dict(dictionary.get("report_config") or {})
+                if dictionary.get("report_config")
+                else None
+            ),
             filters=[FilterJsonInfo.from_dict(f) for f in dictionary.get("filters", [])],
         )
 
@@ -144,7 +146,7 @@ class ExportJsonParameters:
 @dataclass
 class ExportAction:
     parameters: ExportParameters
-    type: str = "ExportXMLReport"  # noqa: A003
+    type: str = "ExportXMLReport"
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -154,7 +156,7 @@ class ExportAction:
 @dataclass
 class ExportJsonAction:
     parameters: ExportJsonParameters
-    type: str = "ExportJSONReport"  # noqa: A003
+    type: str = "ExportJSONReport"
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -212,7 +214,7 @@ class ImportParameters:
 @dataclass
 class ImportAction:
     parameters: ImportParameters
-    type: str = "ImportExecutionResults"  # noqa: A003
+    type: str = "ImportExecutionResults"
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -239,11 +241,15 @@ class Configuration:
             loginname=dictionary.get("loginname"),
             password=dictionary.get("password"),
             actions=[
-                ImportAction.from_dict(a)
-                if a["type"] == "ImportExecutionResults"
-                else ExportAction.from_dict(a)
-                if a["type"] == "ExportXMLReport"
-                else ExportJsonAction.from_dict(a)
+                (
+                    ImportAction.from_dict(a)
+                    if a["type"] == "ImportExecutionResults"
+                    else (
+                        ExportAction.from_dict(a)
+                        if a["type"] == "ExportXMLReport"
+                        else ExportJsonAction.from_dict(a)
+                    )
+                )
                 for a in dictionary["actions"]
             ],
         )

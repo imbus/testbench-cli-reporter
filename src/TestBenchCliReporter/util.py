@@ -31,6 +31,7 @@ from .config_model import (
     ExecutionResultsImportOptions,
     ExportAction,
     ImportAction,
+    TestCycleJsonReportOptions,
     TestCycleXMLReportOptions,
 )
 from .log import logger
@@ -96,6 +97,17 @@ XmlExportConfig = {
     "<CUSTOM>": None,
 }
 
+JsonExportConfig = {
+    "iTorx Export (execution)": TestCycleJsonReportOptions(
+        treeRootUID=True,
+        basedOnExecution=True,
+        suppressFilteredData=True,
+        suppressNotExecutable=True,
+        suppressEmptyTestThemes=True,
+        filters=[],
+    ),
+    "<CUSTOM>": None,
+}
 
 parser = argparse.ArgumentParser()
 parser.add_argument(

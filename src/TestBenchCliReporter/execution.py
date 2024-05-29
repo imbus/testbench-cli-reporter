@@ -1,4 +1,5 @@
 import traceback
+from contextlib import suppress
 from time import sleep
 from typing import Any, Dict, Optional, Union
 
@@ -78,10 +79,8 @@ def run_automatic_mode(
         logger.info("All jobs finished.")
     except requests.HTTPError as e:
         logger.debug(traceback.format_exc())
-        try:
+        with suppress(Exception):
             logger.error(e.response.json())
-        except:
-            pass
         raise e
 
 
