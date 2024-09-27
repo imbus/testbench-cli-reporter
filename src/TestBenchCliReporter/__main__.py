@@ -25,7 +25,7 @@ from .config_model import (
 from .execution import run_automatic_mode, run_manual_mode
 from .util import close_program, get_configuration, parser, resolve_server_name
 
-__version__ = "2.0.0a2"
+__version__ = "2.0.0a3"
 
 
 def main():
@@ -92,6 +92,7 @@ def main():
                         verify=False,
                         loginname=arg.login,
                         password=arg.password,
+                        sessionToken=arg.session,
                         actions=[],
                     )
                 ],

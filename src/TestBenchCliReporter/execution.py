@@ -28,7 +28,9 @@ def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
 
     while True:
         config = cli_config.configuration[0] if len(cli_config.configuration) else Configuration("")
-        active_connection = login(config.server_url, config.loginname, config.password)
+        active_connection = login(
+            config.server_url, config.loginname, config.password, config.sessionToken
+        )
         connection_log.add_connection(active_connection)
         next_action = questions.ask_for_next_action()
         while next_action is not None:

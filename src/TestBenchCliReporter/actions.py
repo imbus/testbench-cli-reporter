@@ -18,8 +18,9 @@ import re
 import sys
 import traceback
 from pathlib import Path
+from time import monotonic
 from typing import Any, Dict, List, Union
-from xml.etree import ElementTree
+from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 from . import questions, testbench
@@ -55,6 +56,7 @@ class ExportXMLReport(AbstractAction):
         super().__init__()
         self.parameters: ExportParameters = exp_parameters
         self.filters = []
+        self.start_time = 0
 
     def prepare(self, connection_log) -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
@@ -105,6 +107,7 @@ class ExportXMLReport(AbstractAction):
             self.parameters.filters or [],
             self.parameters.report_config or XmlExportConfig["Itep Export"],
         )
+        self.start_time = monotonic()
         return self.job_id
 
     def wait(self, connection_log) -> bool:
@@ -130,6 +133,7 @@ class ExportXMLReport(AbstractAction):
         pretty_print_success_message(
             "Report", Path(self.parameters.outputPath).resolve(), "was generated"
         )
+        logger.info(f"Time elapsed: {monotonic() - self.start_time:.2f} seconds")
         return True
 
 
@@ -144,6 +148,7 @@ class ExportJSONReport(AbstractAction):
         super().__init__()
         self.parameters: ExportJsonParameters = exp_parameters
         self.filters = []
+        self.start_time = 0
 
     def prepare(self, connection_log) -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
@@ -168,9 +173,8 @@ class ExportJSONReport(AbstractAction):
                 self.parameters.cycleKey
             )
         self.parameters.reportRootUID = questions.ask_to_select_report_root_uid(tttree_structure)
-        # all_filters = connection_log.active_connection.get_all_filters()
-        # self.parameters.filters = questions.ask_to_select_filters(all_filters)
-        # self.filters = self.parameters.filters
+        self.parameters.filters = connection_log.active_connection.get_all_filters()
+        self.filters = self.parameters.filters
         self.parameters.report_config = questions.ask_to_config_json_report()
         self.parameters.outputPath = questions.ask_for_output_path()
 
@@ -205,11 +209,15 @@ class ExportJSONReport(AbstractAction):
             project_key=self.parameters.projectKey,
             tov_key=self.parameters.tovKey,
             cycle_key=self.parameters.cycleKey,
-            reportRootUID=self.parameters.reportRootUID
-            or self.parameters.report_config.treeRootUID,
+            reportRootUID=(
+                self.parameters.reportRootUID
+                if hasattr(self.parameters, "reportRootUID")
+                else self.parameters.report_config.treeRootUID
+            ),
             filters=self.parameters.filters or [],
             report_config=self.parameters.report_config,
         )
+        self.start_time = monotonic()
         return self.job_id
 
     def wait(self, connection_log) -> Union[bool, str]:
@@ -227,7 +235,7 @@ class ExportJSONReport(AbstractAction):
             self.parameters.projectKey, self.job_id
         )
         if result is not None:
-            self.report_tmp_name = result.get("value")
+            self.report_tmp_name = result
         return result
 
     def finish(self, connection_log) -> bool:
@@ -239,6 +247,7 @@ class ExportJSONReport(AbstractAction):
         pretty_print_success_message(
             "Report", Path(self.parameters.outputPath).resolve(), "was generated"
         )
+        logger.info(f"Time elapsed: {monotonic() - self.start_time:.2f} seconds")
         return True
 
 
@@ -288,7 +297,7 @@ class ImportExecutionResults(AbstractAction):
 
     def get_project_path_from_report(self) -> List:
         with ZipFile(self.parameters.inputPath) as zip_file:
-            xml = ElementTree.fromstring(zip_file.read("report.xml"))
+            xml = ET.fromstring(zip_file.read("report.xml"))
             project_element = xml.find("./header/project")
             project = project_element.get("name") if project_element is not None else ""
             version_element = xml.find("./header/version")
@@ -412,8 +421,10 @@ class ExportActionLog(UnloggedAction):
             )
             return True
         except KeyError as e:
-            print(f"{e!s}")
-            return False
+            print(f"KeyError {e!s}")
+        except Exception as e:
+            print(f"An error occurred: {e!s}")
+        return False
 
 
 class ChangeConnection(UnloggedAction):

@@ -296,6 +296,7 @@ class Connection:
         if not report_generation_status.get('completion'):
             return None
         result = report_generation_status.get('completion').get('result')
+        logger.debug(result)
         if result.get('Success'):
             return result.get('Success').get('reportName')
         raise AssertionError(result.get('Failure').get('error'))
@@ -341,6 +342,7 @@ class Connection:
             return None
         result = report_generation_status["result"]
         if "Right" in result:
+            logger.debug(result)
             return result["Right"]
         raise AssertionError(result)
 
@@ -592,13 +594,14 @@ class Connection:
         return exec_test_cases.json()
 
 
-def login(server="", login="", pwd="") -> Connection:  # noqa: C901, PLR0912
-    if server and login and pwd:
+def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901, PLR0912
+    if server and (login and pwd) or session:
         credentials = {
             "server_url": server,
             "verify": False,
             "loginname": login,
             "password": pwd,
+            "sessionToken": session,
         }
     else:
         credentials = questions.ask_for_test_bench_credentials(server, login, pwd)

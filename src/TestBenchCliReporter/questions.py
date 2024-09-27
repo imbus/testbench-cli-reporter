@@ -21,7 +21,11 @@ from questionary import Choice, Style, checkbox, confirm, select, unsafe_prompt
 from questionary import print as pprint
 
 from . import actions, util
-from .config_model import ExecutionResultsImportOptions
+from .config_model import (
+    ExecutionResultsImportOptions,
+    TestCycleJsonReportOptions,
+    TestCycleXMLReportOptions,
+)
 from .log import logger
 from .util import ImportConfig, JsonExportConfig, XmlExportConfig
 
@@ -250,7 +254,7 @@ def ask_to_config_report():
         choices=[Choice(config_name, config) for config_name, config in XmlExportConfig.items()],
     )
     if not selection:
-        selection = {
+        custom_choices = {
             "exportAttachments": [Choice("True", True), Choice("False", False)],
             "exportDesignData": [Choice("True", True), Choice("False", False)],
             "characterEncoding": [Choice("UTF-16", "utf-16"), Choice("UTF-8", "utf-8")],
@@ -261,9 +265,10 @@ def ask_to_config_report():
             "exportExecutionProtocols": [Choice("False", False), Choice("True", True)],
         }
         pprint("  {", style="bold")
-        for key, value in selection.items():
-            selection[key] = selection_prompt(f'   "{key}": ', value)
+        for key, value in custom_choices.items():
+            custom_choices[key] = selection_prompt(f'   "{key}": ', value)
         pprint("  }", style="bold")
+        selection = TestCycleXMLReportOptions(reportRootUID=None, filters=[], **custom_choices)
     return selection
 
 
@@ -273,16 +278,17 @@ def ask_to_config_json_report():
         choices=[Choice(config_name, config) for config_name, config in JsonExportConfig.items()],
     )
     if not selection:
-        selection = {
+        custom_choices = {
             "basedOnExecution": [Choice("True", True), Choice("False", False)],
             "suppressFilteredData": [Choice("True", True), Choice("False", False)],
             "suppressNotExecutable": [Choice("True", True), Choice("False", False)],
             "suppressEmptyTestThemes": [Choice("True", True), Choice("False", False)],
         }
         pprint("  {", style="bold")
-        for key, value in selection.items():
-            selection[key] = selection_prompt(f'   "{key}": ', value)
+        for key, value in custom_choices.items():
+            custom_choices[key] = selection_prompt(f'   "{key}": ', value)
         pprint("  }", style="bold")
+        selection = TestCycleJsonReportOptions(treeRootUID=None, filters=[], **custom_choices)
     return selection
 
 
