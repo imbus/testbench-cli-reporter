@@ -30,6 +30,7 @@ from .config_model import (
     CliReporterConfig,
     ExecutionResultsImportOptions,
     ExportAction,
+    ExportJsonAction,
     ImportAction,
     TestCycleJsonReportOptions,
     TestCycleXMLReportOptions,
@@ -94,19 +95,19 @@ XmlExportConfig = {
         filters=[],
         reportRootUID=None,
     ),
-    "<CUSTOM>": None,
+    "<CUSTOM>": False,
 }
 
 JsonExportConfig = {
     "iTorx Export (execution)": TestCycleJsonReportOptions(
-        treeRootUID=True,
+        treeRootUID=None,
         basedOnExecution=True,
         suppressFilteredData=True,
         suppressNotExecutable=True,
         suppressEmptyTestThemes=True,
         filters=[],
     ),
-    "<CUSTOM>": None,
+    "<CUSTOM>": False,
 }
 
 parser = argparse.ArgumentParser()
@@ -125,6 +126,7 @@ parser.add_argument(
 )
 parser.add_argument("--login", help="Users Login.", type=str, default="")
 parser.add_argument("--password", help="Users Password.", type=str, default="")
+parser.add_argument("--session", help="Session Token", type=str, default="")
 parser.add_argument(
     "-p",
     "--project",
@@ -232,9 +234,9 @@ def add_numbering_to_cycle(cycle_structure):
                 "childs": {int(test_structure_element[key]["orderPos"]): tse_dict[tse_serial]},
             }
         else:
-            tse_dict[tse_parent_serial]["childs"][
-                int(test_structure_element[key]["orderPos"])
-            ] = tse_dict[tse_serial]
+            tse_dict[tse_parent_serial]["childs"][int(test_structure_element[key]["orderPos"])] = (
+                tse_dict[tse_serial]
+            )
 
         tse_dict[tse_parent_serial]["childs"] = OrderedDict(
             sorted(tse_dict[tse_parent_serial]["childs"].items())
@@ -598,7 +600,11 @@ def spin_spinner(message: str):
         pass
 
 
-ACTION_TYPES = {"ImportExecutionResults": ImportAction, "ExportXMLReport": ExportAction}
+ACTION_TYPES = {
+    "ImportExecutionResults": ImportAction,
+    "ExportXMLReport": ExportAction,
+    "ExportJSONReport": ExportJsonAction,
+}
 
 
 class AbstractAction(ABC):
