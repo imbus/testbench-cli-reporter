@@ -16,7 +16,7 @@ Python 3.6 is required!
 `pip install testbench-cli-reporter`
 
 ## Manual mode
-Just execute in command line 
+Just execute in command line
 `testbench-cli-reporter` or `TestBenchCliReporter`
 
 ### **Connect to TestBench instance**
@@ -29,14 +29,14 @@ Starting manual mode
 ? Enter the TestBench server address and port <host:port>:
 ```
 
-In here enter the testbench server you want to interact with. 
+In here enter the testbench server you want to interact with.
 If you don't enter a port, the default TestBench port 9443 is used.
 
 If you don't know the server adress of your testbench instance you can find it inside your iTBClient intallation folder: bin/application.conf
 
 2. Enter Credential
 
-Next Step is providing login data the testbench-cli-reporter should use to connect with the TestBench. 
+Next Step is providing login data the testbench-cli-reporter should use to connect with the TestBench.
 
 Make sure the user has rights to access the test project you want to work with.
 
@@ -224,7 +224,7 @@ The attribute `projectPath` is not mandatory though. Only using projectKey, tovK
           }
         },
         {
-          "type": "ImportExecutionResults",
+          "type": "ImportXMLExecutionResults",
           "parameters": {
             "inputPath": "report.zip",
             "cycleKey": "8689450",

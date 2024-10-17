@@ -15,19 +15,20 @@
 import os
 from pathlib import Path
 from re import fullmatch, sub
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional, Union
 
 from questionary import Choice, Style, checkbox, confirm, select, unsafe_prompt
 from questionary import print as pprint
 
 from . import actions, util
 from .config_model import (
-    ExecutionResultsImportOptions,
+    ExecutionJsonResultsImportOptions,
+    ExecutionXmlResultsImportOptions,
     TestCycleJsonReportOptions,
     TestCycleXMLReportOptions,
 )
 from .log import logger
-from .util import ImportConfig, JsonExportConfig, XmlExportConfig
+from .util import JsonExportConfig, JsonImportConfig, XmlExportConfig, XmlImportConfig
 
 custom_style_fancy = Style(
     [
@@ -63,7 +64,7 @@ def abspath(filepath: Union[str, Path]) -> str:
 
 def selection_prompt(
     message: str,
-    choices: List[Choice],
+    choices: list[Choice],
     no_valid_option_message: Optional[str] = None,
     style: Style = custom_style_fancy,
     default=None,
@@ -93,7 +94,7 @@ def confirm_prompt(
 
 def checkbox_prompt(
     message: str,
-    choices: List[Choice],
+    choices: list[Choice],
     no_valid_option_message: Optional[str] = None,
     style: Style = custom_style_fancy,
 ):
@@ -233,14 +234,14 @@ def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
     )
 
 
-def ask_to_select_filters(all_filters: List[dict]) -> List:
+def ask_to_select_filters(all_filters: list[dict]) -> list:
     if selection_prompt("Activate Filters:", choices=[Choice("No", False), Choice("Yes", True)]):
         all_filters_sorted = sorted(all_filters, key=lambda fltr: fltr["name"].casefold())
 
         return checkbox_prompt(
             message="Provide a set of filters.",
             choices=[
-                Choice(fltr["name"], {"name": fltr["name"], "type": fltr["type"]})
+                Choice(fltr["name"], {"name": fltr["name"], "filterType": fltr["type"]})
                 for fltr in all_filters_sorted
             ],
             no_valid_option_message="No filters available.",
@@ -292,12 +293,12 @@ def ask_to_config_json_report():
     return selection
 
 
-def ask_to_config_import() -> ExecutionResultsImportOptions:
+def ask_to_config_import() -> ExecutionXmlResultsImportOptions:
     selection = selection_prompt(
         "Select Import Configuration:",
-        choices=[Choice(config_name, config) for config_name, config in ImportConfig.items()],
+        choices=[Choice(config_name, config) for config_name, config in XmlImportConfig.items()],
     )
-    if isinstance(selection, ExecutionResultsImportOptions):
+    if isinstance(selection, ExecutionXmlResultsImportOptions):
         return selection
     selection = {
         "ignoreNonExecutedTestCases": [
@@ -312,7 +313,27 @@ def ask_to_config_import() -> ExecutionResultsImportOptions:
     for key, value in selection.items():
         selection[key] = selection_prompt(f'   "{key}": ', value)
     pprint("  }", style="bold")
-    return ExecutionResultsImportOptions.from_dict(selection)
+    return ExecutionXmlResultsImportOptions.from_dict(selection)
+
+
+def ask_to_config_json_import() -> ExecutionJsonResultsImportOptions:
+    selection = selection_prompt(
+        "Select Import Configuration:",
+        choices=[Choice(config_name, config) for config_name, config in JsonImportConfig.items()],
+    )
+    if isinstance(selection, ExecutionJsonResultsImportOptions):
+        return selection
+    selection = {
+        "UseExistingDefect": [Choice("True", True), Choice("False", False)],
+        "IgnoreNonExecutedTestCases": [Choice("True", True), Choice("False", False)],
+        "CheckPaths": [Choice("True", True), Choice("False", False)],
+        "DiscardTesterInformation": [Choice("True", True), Choice("False", False)],
+    }
+    pprint("  {", style="bold")
+    for key, value in selection.items():
+        selection[key] = selection_prompt(f'   "{key}": ', value)
+    pprint("  }", style="bold")
+    return ExecutionJsonResultsImportOptions.from_dict(selection)
 
 
 def ask_for_output_path(default: str = "report.zip") -> str:
@@ -339,7 +360,7 @@ def ask_for_input_path() -> str:
         validation=lambda path: (
             True
             if (isfile(path) and os.access(path, os.R_OK))
-            or (isfile("report.zip") and os.access("report.zip", os.R_OK))
+            or (not path and isfile("report.zip") and os.access("report.zip", os.R_OK))
             else f"'{path}' is not a file or not readable."
         ),
         filter=lambda path: path if path else "report.zip",
@@ -387,8 +408,9 @@ def ask_for_next_action():
         choices=[
             Choice("Export XML Report", actions.ExportXMLReport()),
             Choice("Export JSON Report", actions.ExportJSONReport()),
-            Choice("Import execution results", actions.ImportExecutionResults()),
-            Choice("Browse Projects", actions.BrowseProjects()),
+            Choice("Import execution results", actions.ImportXMLExecutionResults()),
+            Choice("Import JSON execution results", actions.ImportJSONExecutionResults()),
+            Choice("Browser Projects", actions.BrowseProjects()),
             Choice("Write history to config file", actions.ExportActionLog()),
             Choice("Change connection", actions.ChangeConnection()),
             Choice("Quit", actions.Quit()),
@@ -396,7 +418,7 @@ def ask_for_next_action():
     )
 
 
-def ask_to_select_default_tester(all_testers: List[dict]) -> Dict[str, str]:
+def ask_to_select_default_tester(all_testers: list[dict]) -> dict[str, str]:
     all_testers_sorted = sorted(
         all_testers, key=lambda tester: tester["value"]["user-name"].casefold()
     )
@@ -412,7 +434,7 @@ def ask_to_select_default_tester(all_testers: List[dict]) -> Dict[str, str]:
     )
 
 
-def ask_to_select_report_root_uid(cycle_structure: List[dict]):
+def ask_to_select_report_root_uid(cycle_structure: list[dict]):
     cycle_structure_tree = util.add_numbering_to_cycle(cycle_structure)
     return navigate_in_cycle_stucture(cycle_structure_tree)
 

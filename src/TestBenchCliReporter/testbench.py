@@ -15,12 +15,14 @@
 # from __future__ import annotations
 
 import base64
-import dataclasses
 import json
+import time
 import traceback
+from dataclasses import asdict, dataclass
+from io import BufferedReader
 from pathlib import Path
 from re import fullmatch
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import requests  # type: ignore
 import urllib3
@@ -30,17 +32,29 @@ from . import questions
 from .config_model import (
     CliReporterConfig,
     Configuration,
-    ExecutionResultsImportOptions,
+    ExecutionJsonResultsImportOptions,
+    ExecutionXmlResultsImportOptions,
     FilterInfo,
 )
 from .log import logger
 from .util import (
-    TYPICAL_IMPORT_CONFIG,
+    TYPICAL_JSON_IMPORT_CONFIG,
+    TYPICAL_XML_IMPORT_CONFIG,
     AbstractAction,
     XmlExportConfig,
     close_program,
+    pretty_print_progress_bar,
     spin_spinner,
 )
+
+
+@dataclass
+class JobProgress:
+    completion: bool
+    percentage: Optional[int] = None
+    total_items: Optional[int] = None
+    handled_items: Optional[int] = None
+    report_name: Optional[str] = None
 
 
 class Connection:
@@ -54,7 +68,7 @@ class Connection:
         password: Optional[str] = None,
         job_timeout_sec: int = 4 * 60 * 60,
         connection_timeout_sec: Optional[int] = None,
-        actions: Optional[List] = None,
+        actions: Optional[list] = None,
         **kwargs,
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -78,10 +92,10 @@ class Connection:
             self.loginname = loginname or ""
             self.password = password or ""
         self.job_timeout_sec = job_timeout_sec
-        self.action_log: List[AbstractAction] = []
-        self.actions_to_trigger: List[dict] = actions or []
-        self.actions_to_wait_for: List[AbstractAction] = []
-        self.actions_to_finish: List[AbstractAction] = []
+        self.action_log: list[AbstractAction] = []
+        self.actions_to_trigger: list[dict] = actions or []
+        self.actions_to_wait_for: list[AbstractAction] = []
+        self.actions_to_finish: list[AbstractAction] = []
         self.connection_timeout = connection_timeout_sec
         self.verify_ssl = verify
         self._session = None
@@ -170,11 +184,16 @@ class Connection:
         self.session.close()
 
     def export(self) -> Configuration:
-        basic_auth = base64.b64encode(f"{self.loginname}:{self.password}".encode()).decode()
+        basic_auth = (
+            base64.b64encode(f"{self.loginname}:{self.password}".encode()).decode()
+            if self.loginname and self.password
+            else None
+        )
         return Configuration(
             server_url=self.server_url,
             verify=self.session.verify,
             basicAuth=basic_auth,
+            sessionToken=self.session_token,
             actions=[action.export() for action in self.action_log if action.export() is not None],
         )
 
@@ -225,7 +244,7 @@ class Connection:
             f"{self.server_url}projects/{project_key}/tree/v1",
         ).json()
 
-    def get_all_projects(self) -> Dict:
+    def get_all_projects(self) -> dict:
         all_projects = dict(
             self.legacy_session.get(
                 f"{self.server_legacy_url}projects",
@@ -235,7 +254,7 @@ class Connection:
         all_projects["projects"].sort(key=lambda proj: proj["name"].casefold())
         return all_projects
 
-    def get_all_filters(self) -> List[dict]:
+    def get_all_filters(self) -> list[dict]:
         all_filters = self.legacy_session.get(
             f"{self.server_legacy_url}filters",
         )
@@ -271,12 +290,12 @@ class Connection:
         if cycle_key and cycle_key != "0" and project_key and project_key != "0":
             response = self.session.post(
                 f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/report/v1",
-                json=dataclasses.asdict(report_config),
+                json=asdict(report_config),
             ).json()
         elif tov_key and tov_key != "0" and project_key and project_key != "0":
             response = self.session.post(
                 f"{self.server_url}projects/{project_key}/tovs/{tov_key}/report/v1",
-                json=dataclasses.asdict(report_config),
+                json=asdict(report_config),
             ).json()
         else:
             raise ValueError("Either tov_key or cycle_key must be provided")
@@ -285,21 +304,94 @@ class Connection:
     def wait_for_tmp_json_report_name(self, project_key: str, job_id: str) -> str:
         while True:
             report_generation_result = self.get_exp_json_job_result(project_key, job_id)
-            if report_generation_result is not None:
-                return report_generation_result
-            spin_spinner("Waiting until creation of JSON report is complete")
+            if report_generation_result.completion:
+                print(" " * 80, end="\r")
+                return report_generation_result.report_name
+            if report_generation_result.percentage:
+                pretty_print_progress_bar(
+                    mode="Exporting",
+                    handled=report_generation_result.handled_items,
+                    total=report_generation_result.total_items,
+                    percentage=report_generation_result.percentage,
+                )
+                time.sleep(0.1)
+            else:
+                spin_spinner("Waiting until creation of JSON report is complete")
 
-    def get_exp_json_job_result(self, project_key: str, job_id: str):
+    def get_exp_json_job_result(self, project_key: str, job_id: str) -> JobProgress:
         report_generation_status = self.session.get(
             f"{self.server_url}projects/{project_key}/report/job/{job_id}/v1",
         ).json()
-        if not report_generation_status.get('completion'):
-            return None
+        progress = report_generation_status.get('progress')
+        completion = report_generation_status.get('completion')
+        if not completion:
+            if not progress:
+                return JobProgress(completion=False)
+            total_items = progress.get('totalItemsCount')
+            handled_items = progress.get('handledItemsCount')
+            percentage = round(((handled_items / total_items) * 100) / 2) * 2
+            return JobProgress(
+                completion=False,
+                percentage=percentage,
+                total_items=total_items,
+                handled_items=handled_items,
+            )
         result = report_generation_status.get('completion').get('result')
         logger.debug(result)
-        if result.get('Success'):
-            return result.get('Success').get('reportName')
-        raise AssertionError(result.get('Failure').get('error'))
+        if result.get('ReportingSuccess', result.get('Success')):
+            return JobProgress(
+                completion=True,
+                report_name=result.get('ReportingSuccess', result.get('Success')).get('reportName'),
+            )
+        raise AssertionError(result.get('ReportingFailure', result.get('Failure')).get('error'))
+
+    # GET /api/projects/{projectKey}/import/job/{jobId}/v1
+    def wait_for_execution_json_results_import_to_finish(
+        self, project_key: str, job_id: str
+    ) -> bool:
+        try:
+            while True:
+                import_status = self.get_imp_json_job_result(project_key, job_id)
+                if import_status.completion:
+                    print(" " * 80, end="\r")
+                    return import_status.completion
+                if import_status.percentage:
+                    pretty_print_progress_bar(
+                        mode="Importing",
+                        handled=import_status.handled_items,
+                        total=import_status.total_items,
+                        percentage=import_status.percentage,
+                    )
+                    time.sleep(0.1)
+                else:
+                    spin_spinner("Waiting until creation of JSON report is complete")
+        except requests.exceptions.RequestException as e:
+            self.render_import_error(e)
+            raise e
+
+    # GET /api/projects/{projectKey}/import/job/{jobId}/v1
+    def get_imp_json_job_result(self, project_key: str, job_id: str):
+        report_import_status = self.session.get(
+            f"{self.server_url}projects/{project_key}/import/job/{job_id}/v1",
+        ).json()
+        progress = report_import_status.get('progress')
+        completion = report_import_status.get('completion')
+        if not completion:
+            if not progress:
+                return JobProgress(completion=False)
+            total_items = progress.get('totalItemsCount')
+            handled_items = progress.get('handledItemsCount')
+            percentage = round(((handled_items / total_items) * 100) / 2) * 2
+            return JobProgress(
+                completion=False,
+                percentage=percentage,
+                total_items=total_items,
+                handled_items=handled_items,
+            )
+        result = report_import_status.get('completion').get('result')
+        if result.get('ExecutionImportingSuccess'):
+            return JobProgress(completion=True)
+        raise AssertionError(result.get('ExecutionImportingFailure'))
 
     def trigger_xml_report_generation(
         self,
@@ -320,12 +412,12 @@ class Connection:
         if cycle_key and cycle_key != "0":
             response = self.legacy_session.post(
                 f"{self.server_legacy_url}cycle/{cycle_key}/xmlReport",
-                json=dataclasses.asdict(report_config),
+                json=asdict(report_config),
             )
         else:
             response = self.legacy_session.post(
                 f"{self.server_legacy_url}tovs/{tov_key}/xmlReport",
-                json=dataclasses.asdict(report_config),
+                json=asdict(report_config),
             )
         return response.json()["jobID"]
 
@@ -355,7 +447,7 @@ class Connection:
     # GET /testCaseSets/{testCaseSetKey}/specifications/{specificationKey}/testCases
     def get_test_cases_of_specification(
         self, testcaseset_key: str, specification_key: str
-    ) -> List[dict]:
+    ) -> list[dict]:
         return self.legacy_session.get(
             f"{self.server_legacy_url}testCaseSets/{testcaseset_key}/specifications/{specification_key}/testCases",
         ).json()
@@ -373,14 +465,14 @@ class Connection:
         )
         return report.content
 
-    def get_all_testers_of_project(self, project_key: str) -> List[dict]:
+    def get_all_testers_of_project(self, project_key: str) -> list[dict]:
         return [
             member
             for member in self.get_all_members_of_project(project_key)
             if "Tester" in member["value"]["membership"]["roles"]
         ]
 
-    def get_all_members_of_project(self, project_key: str) -> List[dict]:
+    def get_all_members_of_project(self, project_key: str) -> list[dict]:
         all_project_members = self.legacy_session.get(
             f"{self.server_legacy_url}project/{project_key}/members",
         )
@@ -464,7 +556,8 @@ class Connection:
             },
         ).json()
 
-    def upload_execution_results(self, results_file_base64: str) -> str:
+    # post /executionResultsUpload
+    def upload_execution_xml_results(self, results_file_base64: str) -> str:
         try:
             serverside_file_name = self.legacy_session.post(
                 f"{self.server_legacy_url}executionResultsUpload",
@@ -477,17 +570,33 @@ class Connection:
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
 
-    def trigger_execution_results_import(
+    # POST /api/projects/{projectKey}/executionResults/v1
+    def upload_execution_json_results(
+        self,
+        project_key: str,
+        results_file: BufferedReader,
+    ) -> str:
+        try:
+            serverside_file_name = self.session.post(
+                f"{self.server_url}projects/{project_key}/executionResults/v1",
+                data=results_file,
+            )
+            return serverside_file_name.json()["fileName"]
+        except requests.exceptions.RequestException as e:
+            self.render_import_error(e)
+            raise e
+
+    def trigger_execution_xml_results_import(
         self,
         cycle_key: str,
         report_root_uid: str,
         serverside_file_name: str,
         default_tester: str,
-        filters: Union[List[FilterInfo], List[Dict[str, str]]],
-        import_config: Optional[ExecutionResultsImportOptions] = None,
+        filters: Union[list[FilterInfo], list[dict[str, str]]],
+        import_config: Optional[ExecutionXmlResultsImportOptions] = None,
     ) -> str:
         if import_config is None:
-            used_import_config = TYPICAL_IMPORT_CONFIG
+            used_import_config = TYPICAL_XML_IMPORT_CONFIG
         else:
             used_import_config = import_config
         used_import_config.fileName = serverside_file_name
@@ -498,17 +607,49 @@ class Connection:
             used_import_config.reportRootUID = report_root_uid
 
         try:
-            job_id = self.legacy_session.post(
+            response = self.legacy_session.post(
                 f"{self.server_legacy_url}cycle/{cycle_key}/executionResultsImport",
                 headers={"Accept": "application/zip"},
-                json=dataclasses.asdict(used_import_config),
-            )
-            return job_id.json()["jobID"]
+                json=asdict(used_import_config),
+            ).json()
+            return response["jobID"]
         except requests.exceptions.HTTPError as e:
             self.render_import_error(e)
             raise e
 
-    def wait_for_execution_results_import_to_finish(self, job_id: str) -> bool:
+    # POST /api/projects/{projectKey}/cycles/{cycleKey}/import/v1
+    def trigger_execution_json_results_import(
+        self,
+        project_key: str,
+        cycle_key: str,
+        report_root_uid: str,
+        serverside_file_name: str,
+        default_tester: str,
+        filters: Union[list[FilterInfo], list[dict[str, str]]],
+        import_config: Optional[ExecutionJsonResultsImportOptions] = None,
+    ) -> str:
+        if import_config is None:
+            used_import_config = TYPICAL_JSON_IMPORT_CONFIG
+        else:
+            used_import_config = import_config
+        used_import_config.fileName = serverside_file_name
+        used_import_config.filters = filters
+        if default_tester:
+            used_import_config.defaultTester = default_tester
+        if report_root_uid and report_root_uid != "ROOT":
+            used_import_config.reportRootUID = report_root_uid
+
+        try:
+            response = self.session.post(
+                f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/import/v1",
+                json=asdict(used_import_config),
+            ).json()
+            return response["jobID"]
+        except requests.exceptions.HTTPError as e:
+            self.render_import_error(e)
+            raise e
+
+    def wait_for_execution_xml_results_import_to_finish(self, job_id: str) -> bool:
         try:
             while True:
                 import_status = self.get_job_result("executionResultsImporterJob/", job_id)
@@ -541,19 +682,19 @@ class Connection:
             return result["Right"]
         raise AssertionError(result)
 
-    def get_test_cycle_structure(self, cycle_key: str) -> List[dict]:
+    def get_test_cycle_structure(self, cycle_key: str) -> list[dict]:
         test_cycle_structure = self.legacy_session.get(
             f"{self.server_legacy_url}cycle/{cycle_key}/structure",
         )
         return test_cycle_structure.json()
 
-    def get_tov_structure(self, tovKey: str) -> List[dict]:
+    def get_tov_structure(self, tovKey: str) -> list[dict]:
         tov_structure = self.legacy_session.get(
             f"{self.server_legacy_url}tov/{tovKey}/structure",
         )
         return tov_structure.json()
 
-    def get_test_cases(self, test_case_set_structure: Dict[str, Any]) -> Dict[str, Dict]:
+    def get_test_cases(self, test_case_set_structure: dict[str, Any]) -> dict[str, dict]:
         spec_test_cases = self.get_spec_test_cases(
             test_case_set_structure["TestCaseSet_structure"]["key"]["serial"],
             test_case_set_structure["spec"]["Specification_key"]["serial"],
@@ -577,7 +718,7 @@ class Connection:
             "equal_lists": equal_lists,
         }
 
-    def get_spec_test_cases(self, testCaseSetKey: str, specificationKey: str) -> List[dict]:
+    def get_spec_test_cases(self, testCaseSetKey: str, specificationKey: str) -> list[dict]:
         spec_test_cases = self.legacy_session.get(
             f"{self.server_legacy_url}testCaseSets/"
             f"{testCaseSetKey}/specifications/"
@@ -585,7 +726,7 @@ class Connection:
         )
         return spec_test_cases.json()
 
-    def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> List[dict]:
+    def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> list[dict]:
         exec_test_cases = self.legacy_session.get(
             f"{self.server_legacy_url}testCaseSets/"
             f"{testCaseSetKey}/executions/"
@@ -667,7 +808,7 @@ class JobTimeout(requests.exceptions.Timeout):
 
 class ConnectionLog:
     def __init__(self):
-        self.connections: List[Connection] = []
+        self.connections: list[Connection] = []
 
     @property
     def len(self) -> int:
@@ -693,4 +834,4 @@ class ConnectionLog:
         )
 
         with Path(output_file_path).open("w") as output_file:
-            json.dump(dataclasses.asdict(export_config), output_file, indent=2)
+            json.dump(asdict(export_config), output_file, indent=2)

@@ -41,7 +41,7 @@ disable = '''
 max-nested-blocks = 3
 
 [tool.mypy]
-python_version = "3.7"
+python_version = "3.9"
 ignore_missing_imports = true
 no_implicit_optional = true
 strict_optional = true
@@ -51,7 +51,7 @@ warn_unreachable = true
 pretty = true
 
 [tool.black]
-target-version = ['py37']
+target-version = ['py39']
 line-length = 100
 skip-string-normalization = true
 
@@ -72,7 +72,7 @@ lint.ignore = [
   "PLR0913",  # too many arguments
   "T201",  # Print statements
 ]
-target-version = "py37"
+target-version = "py39"
 lint.select = [
   "E",
   "F",
