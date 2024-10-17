@@ -1,7 +1,7 @@
 import traceback
 from contextlib import suppress
 from time import sleep
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 import requests.exceptions  # type: ignore
 from requests import Timeout
@@ -61,9 +61,10 @@ def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
 
 
 def run_automatic_mode(
-    configuration: Union[CliReporterConfig, Dict[str, Any]],
+    configuration: Union[CliReporterConfig, dict[str, Any]],
     loginname: Optional[str] = None,
     password: Optional[str] = None,
+    sessionToken: Optional[str] = None,
     raise_exceptions: bool = False,
 ):
     config = (
@@ -75,7 +76,7 @@ def run_automatic_mode(
     logger.info("Run Automatic Mode")
     connection_queue = ConnectionLog()
     try:
-        fill_connection_queue(config, connection_queue, loginname, password)
+        fill_connection_queue(config, connection_queue, loginname, password, sessionToken)
         trigger_all_actions(connection_queue, raise_exceptions)
         poll_and_finish_actions(connection_queue, raise_exceptions)
         logger.info("All jobs finished.")
@@ -86,12 +87,12 @@ def run_automatic_mode(
         raise e
 
 
-def fill_connection_queue(configuration, connection_queue, loginname, password):
+def fill_connection_queue(configuration, connection_queue, loginname, password, sessionToken):
     for connection_data in configuration.configuration:
         connection = Connection(
             server_url=connection_data.server_url,
             verify=connection_data.verify,
-            sessionToken=connection_data.sessionToken,
+            sessionToken=sessionToken or connection_data.sessionToken,
             basicAuth=connection_data.basicAuth,
             actions=connection_data.actions,
             loginname=loginname,
@@ -115,7 +116,7 @@ def poll_and_finish_actions(connection_queue, raise_exceptions):
             break
 
 
-def trigger_all_actions(connection_queue, raise_exceptions):
+def trigger_all_actions(connection_queue: ConnectionLog, raise_exceptions):
     job_counter = 0
     for _ in range(len(connection_queue.connections)):
         while connection_queue.active_connection.actions_to_trigger:

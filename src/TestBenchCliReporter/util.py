@@ -22,16 +22,18 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from pathlib import Path
 from re import fullmatch
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 from questionary import print as pprint
 
 from .config_model import (
     CliReporterConfig,
-    ExecutionResultsImportOptions,
+    ExecutionJsonResultsImportOptions,
+    ExecutionXmlResultsImportOptions,
     ExportAction,
     ExportJsonAction,
-    ImportAction,
+    ImportJSONAction,
+    ImportXMLAction,
     TestCycleJsonReportOptions,
     TestCycleXMLReportOptions,
 )
@@ -41,7 +43,46 @@ BLUE_ITALIC = "#06c8ff italic"
 
 BLUE_BOLD_ITALIC = "#06c8ff bold italic"
 
-TYPICAL_IMPORT_CONFIG: ExecutionResultsImportOptions = ExecutionResultsImportOptions(
+
+class Colors:
+    """ANSI color codes"""
+
+    BLACK = "\033[0;30m"
+    RED = "\033[0;31m"
+    GREEN = "\033[0;32m"
+    BROWN = "\033[0;33m"
+    BLUE = "\033[0;34m"
+    PURPLE = "\033[0;35m"
+    CYAN = "\033[0;36m"
+    LIGHT_GRAY = "\033[0;37m"
+    DARK_GRAY = "\033[1;30m"
+    LIGHT_RED = "\033[1;31m"
+    LIGHT_GREEN = "\033[1;32m"
+    YELLOW = "\033[1;33m"
+    LIGHT_BLUE = "\033[1;34m"
+    LIGHT_PURPLE = "\033[1;35m"
+    LIGHT_CYAN = "\033[1;36m"
+    LIGHT_WHITE = "\033[1;37m"
+    BOLD = "\033[1m"
+    FAINT = "\033[2m"
+    ITALIC = "\033[3m"
+    UNDERLINE = "\033[4m"
+    BLINK = "\033[5m"
+    NEGATIVE = "\033[7m"
+    CROSSED = "\033[9m"
+    END = "\033[0m"
+    # cancel SGR codes if we don't write to a terminal
+    if not __import__("sys").stdout.isatty():
+        for _ in dir():
+            if isinstance(_, str) and _[0] != "_":
+                locals()[_] = ""
+    elif __import__("platform").system() == "Windows":
+        kernel32 = __import__("ctypes").windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+        del kernel32
+
+
+TYPICAL_XML_IMPORT_CONFIG: ExecutionXmlResultsImportOptions = ExecutionXmlResultsImportOptions(
     fileName="",
     reportRootUID=None,
     ignoreNonExecutedTestCases=True,
@@ -52,8 +93,24 @@ TYPICAL_IMPORT_CONFIG: ExecutionResultsImportOptions = ExecutionResultsImportOpt
     useExistingDefect=True,
 )
 
-ImportConfig = {
-    "Typical": TYPICAL_IMPORT_CONFIG,
+XmlImportConfig = {
+    "Typical": TYPICAL_XML_IMPORT_CONFIG,
+    "<CUSTOM>": False,
+}
+
+TYPICAL_JSON_IMPORT_CONFIG: ExecutionJsonResultsImportOptions = ExecutionJsonResultsImportOptions(
+    fileName="",
+    reportRootUID=None,
+    useExistingDefect=True,
+    ignoreNonExecutedTestCases=True,
+    checkPaths=True,
+    discardTesterInformation=True,
+    defaultTester=None,
+    filters=None,
+)
+
+JsonImportConfig = {
+    "Typical": TYPICAL_JSON_IMPORT_CONFIG,
     "<CUSTOM>": False,
 }
 
@@ -300,7 +357,7 @@ def get_cycle_by_name(cycles, cycle_name):
 
 
 def get_project_keys(
-    projects: Dict,
+    projects: dict,
     project_name: str,
     tov_name: str,
     cycle_name: Optional[str] = None,
@@ -363,7 +420,7 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
         )
 
 
-def pretty_print_test_cases(test_cases: Dict[str, Any]):
+def pretty_print_test_cases(test_cases: dict[str, Any]):
     print("   Test Cases:")
     if not test_cases.get('equal_lists'):
         _pretty_print_test_cases_spec(test_cases)
@@ -506,6 +563,16 @@ def pretty_print_success_message(prefix: str, value: Any, suffix: str):
     )
 
 
+def pretty_print_progress_bar(mode: str, handled: int, total: int, percentage: int):
+    if total is not None and handled is not None:
+        completed_length = int(percentage / 2)  # Each 2% is one character
+        bar = "#" * completed_length + "-" * (50 - completed_length)
+        print(
+            f"{mode}: {Colors.BLUE}[{bar}]{Colors.END} {handled}/{total} {Colors.DARK_GRAY}({percentage}%){Colors.END}",
+            end="\r",
+        )
+
+
 def resolve_server_name(server: str) -> str:
     if fullmatch(r"([\w\-.]+):(\d{1,5})", server):
         resolved_server = f"https://{server}/api/"
@@ -601,8 +668,9 @@ def spin_spinner(message: str):
 
 
 ACTION_TYPES = {
-    "ImportExecutionResults": ImportAction,
+    "ImportXMLExecutionResults": ImportXMLAction,
     "ExportXMLReport": ExportAction,
+    "ImportJSONExecutionResults": ImportJSONAction,
     "ExportJSONReport": ExportJsonAction,
 }
 
