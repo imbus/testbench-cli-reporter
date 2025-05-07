@@ -311,7 +311,7 @@ def add_numbering_to_childs(child_list, parent_numbering):
             key = "TestTheme_structure"
         else:
             key = "TestCaseSet_structure"
-        current_numbering = f"{parent_numbering}{index+1}"
+        current_numbering = f"{parent_numbering}{index + 1}"
         test_structure_element[key]["numbering"] = current_numbering
         if len(child["childs"]) > 0:
             add_numbering_to_childs(child["childs"].values(), current_numbering)
@@ -422,7 +422,7 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
 
 def pretty_print_test_cases(test_cases: dict[str, Any]):
     print("   Test Cases:")
-    if not test_cases.get('equal_lists'):
+    if not test_cases.get("equal_lists"):
         _pretty_print_test_cases_spec(test_cases)
     _pretty_print_test_cases_exec(test_cases)
     print()
@@ -439,9 +439,9 @@ def _pretty_print_test_cases_spec(test_cases):
             "value": f"{'UniqueID': <35}",
             "end": None,
         },
-        {"value": f"{'testCaseSpecificationKey' : >25}"},
+        {"value": f"{'testCaseSpecificationKey': >25}"},
     )
-    for index, (uid, tc) in enumerate(test_cases['spec'].items()):
+    for index, (uid, tc) in enumerate(test_cases["spec"].items()):
         pretty_print(
             {
                 "value": f"{str(index + 1) + '  ': >10}",
@@ -454,7 +454,7 @@ def _pretty_print_test_cases_spec(test_cases):
                 "end": None,
             },
             {
-                "value": f"{tc['testCaseSpecificationKey']['serial'] : >25}",
+                "value": f"{tc['testCaseSpecificationKey']['serial']: >25}",
                 "style": BLUE_BOLD_ITALIC,
             },
         )
@@ -472,12 +472,12 @@ def _pretty_print_test_cases_exec(test_cases):
             "end": None,
         },
         {
-            "value": f"{'testCaseSpecificationKey' : >25}",
+            "value": f"{'testCaseSpecificationKey': >25}",
             "end": None,
         },
-        {"value": f"{'testCaseExecutionKey' : >25}"},
+        {"value": f"{'testCaseExecutionKey': >25}"},
     )
-    for index, (uid, tc) in enumerate(test_cases['exec'].items()):
+    for index, (uid, tc) in enumerate(test_cases["exec"].items()):
         pretty_print(
             {
                 "value": f"{str(index + 1) + '  ': >10}",
@@ -490,12 +490,12 @@ def _pretty_print_test_cases_exec(test_cases):
                 "end": None,
             },
             {
-                "value": f"{tc['paramCombPK']['serial'] : >25}",
+                "value": f"{tc['paramCombPK']['serial']: >25}",
                 "style": BLUE_BOLD_ITALIC,
                 "end": None,
             },
             {
-                "value": f"{tc['testCaseExecutionKey']['serial'] : >25}",
+                "value": f"{tc['testCaseExecutionKey']['serial']: >25}",
                 "style": BLUE_BOLD_ITALIC,
             },
         )
@@ -509,7 +509,7 @@ def pretty_print_tse_information(tse, typ, info):
             "style": BLUE_BOLD_ITALIC,
             "end": None,
         },
-        {"value": f"{typ + 'Key:' : <18}", "end": None},
+        {"value": f"{typ + 'Key:': <18}", "end": None},
         {
             "value": f"{info['key']['serial']: >21}",
             "style": BLUE_BOLD_ITALIC,

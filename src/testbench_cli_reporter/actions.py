@@ -342,8 +342,7 @@ class ImportXMLExecutionResults(AbstractAction):
     def set_cycle_key_from_path(self, connection_log):
         all_projects = connection_log.active_connection.get_all_projects()
         if (
-            isinstance(self.parameters.projectPath, list)
-            and len(self.parameters.projectPath) == 3  # noqa: PLR2004
+            isinstance(self.parameters.projectPath, list) and len(self.parameters.projectPath) == 3  # noqa: PLR2004
         ):
             (
                 project_key,

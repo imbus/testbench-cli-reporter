@@ -18,14 +18,12 @@ from .config_model import (
     Configuration,
     ExportAction,
     ExportParameters,
+    ImportAction,
     ImportParameters,
-    ImportXMLAction,
     loggingConfig,
 )
 from .execution import run_automatic_mode, run_manual_mode
 from .util import close_program, get_configuration, parser, resolve_server_name
-
-__version__ = "2.0.0a4"
 
 
 def main():
@@ -34,30 +32,25 @@ def main():
         if arg.config:
             cli_config = get_configuration(arg.config)
             print("Config file found")
-            run_automatic_mode(
-                cli_config, loginname=arg.login, password=arg.password, sessionToken=arg.session
-            )
+            run_automatic_mode(cli_config, loginname=arg.login, password=arg.password)
         elif (
             arg.server
-            and ((arg.login and arg.password) or arg.session)
+            and arg.login
+            and arg.password
             and ((arg.project and arg.version) or arg.tovKey or arg.cycleKey or arg.type == "i")
             and not arg.manual
         ):
             server = resolve_server_name(arg.server)
-            config = Configuration(
-                server_url=server,
-                verify=False,
-                basicAuth=(
-                    base64.b64encode(f"{arg.login}:{arg.password}".encode()).decode()
-                    if arg.login and arg.password
-                    else None
-                ),
-                sessionToken=arg.session,
-                actions=[],
-            )
 
             cli_config = CliReporterConfig(
-                configuration=[config],
+                configuration=[
+                    Configuration(
+                        server_url=server,
+                        verify=False,
+                        basicAuth=base64.b64encode(f"{arg.login}:{arg.password}".encode()).decode(),
+                        actions=[],
+                    )
+                ],
                 loggingConfiguration=loggingConfig.from_dict({}),
             )
             if arg.type == "e":
@@ -75,7 +68,7 @@ def main():
                 )
             else:
                 cli_config.configuration[0].actions.append(
-                    ImportXMLAction(
+                    ImportAction(
                         ImportParameters(
                             inputPath=arg.path,
                             projectPath=[e for e in [arg.project, arg.version, arg.cycle] if e],
@@ -97,7 +90,6 @@ def main():
                         verify=False,
                         loginname=arg.login,
                         password=arg.password,
-                        sessionToken=arg.session,
                         actions=[],
                     )
                 ],
