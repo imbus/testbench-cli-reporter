@@ -708,8 +708,8 @@ class Connection:
         )
         test_cases_execs = {tc["uniqueID"]: tc for tc in exec_test_cases}
         equal_lists = False not in [
-            test_cases.get(uid, {}).get('testCaseSpecificationKey')['serial']
-            == tc['paramCombPK']['serial']
+            test_cases.get(uid, {}).get("testCaseSpecificationKey")["serial"]
+            == tc["paramCombPK"]["serial"]
             for uid, tc in test_cases_execs.items()
         ]
         return {

@@ -12,4 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from TestBenchCliReporter.testbench import Connection  # noqa: F401
+from testbench_cli_reporter.testbench import Connection  # noqa: F401
+
+
+__version__ = "2.0.0a4"
