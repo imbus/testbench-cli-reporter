@@ -1,47 +1,48 @@
-[tool.pylint.FORMAT]
-max-line-length = 100
-max-module-lines = 1000
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
 
-[tool.pylint.MASTER]
-ignore = "tests"
-max-complexity = 15
+[project]
+name = "testbench-cli-reporter"
+description="CLI Tool to Export XML-Full-Reports from TestBench"
+authors = [{name = "imbus AG | Zacharias Daum & René Rohner", email = "rene.rohner@imbus.de"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+dynamic = ["version"]
+classifiers= [
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: Apache Software License",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Software Development :: Testing :: Acceptance",
+]
+requires-python = ">=3.10"
+dependencies = [
+  "questionary>=2.1.0,<3.0.0",
+  "requests>=2.32.3,<3.0.0",
+  "urllib3>=2.4.0,<3.0.0",
+]
 
-[tool.pylint.BASIC]
-argument-naming-style = 'snake_case'
-attr-naming-style = 'snake_case'
-class-naming-style = 'PascalCase'
-const-naming-style = 'UPPER_CASE'
-function-naming-style = 'snake_case'
-method-naming-style = 'snake_case'
-module-naming-style = 'snake_case'
-variable-naming-style = 'snake_case'
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.11.8",
+  "pre-commit>=4.2.0",
+  "mypy>=1.15.0",
+  "flit>=3.12",
+  "wheel>=0.45.1",
+]
 
-[tool.pylint.DESIGN]
-# Maximum number of arguments for function / method.
-max-args = 5
-# Maximum number of statements in function / method body.
-max-statements = 50
+[project.urls]
+Homepage = "https://github.com/imbus/testbench-cli-reporter"
 
-[tool.pylint."MESSAGES CONTROL"]
-disable = '''
-    logging-fstring-interpolation,
-    fixme,
-    import-error,
-    missing-module-docstring,
-    missing-class-docstring,
-    missing-function-docstring,
-    too-many-instance-attributes,
-    too-few-public-methods,
-    wrong-import-order,
-    broad-except,
-'''
-
-[tool.pylint.REFACTORING]
-# Maximum number of nested blocks for function / method body
-max-nested-blocks = 3
+[project.scripts]
+testbench-cli-reporter = "testbench_cli_reporter.__main__:main"
+TestBenchCliReporter = "testbench_cli_reporter.__main__:main"
 
 [tool.mypy]
-python_version = "3.7"
+python_version = "3.10"
 ignore_missing_imports = true
 no_implicit_optional = true
 strict_optional = true
@@ -50,17 +51,21 @@ warn_no_return = true
 warn_unreachable = true
 pretty = true
 
-[tool.black]
-target-version = ['py37']
-line-length = 100
-include_trailing_comma = false
-skip-string-normalization = true
-
 [tool.ruff]
-unfixable = []
+fix = false
+target-version = "py310"
+line-length = 100
 exclude = [
   "__pycache__",
+  ".venv",
+  "tools",
+  "model",
 ]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
 ignore = [
   "B008",  # do not perform function calls in argument defaults
   # "B904",  # TODO only temporary. should be fixed.
@@ -73,7 +78,6 @@ ignore = [
   "PLR0913",  # too many arguments
   "T201",  # Print statements
 ]
-target-version = "py37"
 select = [
   "E",
   "F",

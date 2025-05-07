@@ -25,8 +25,6 @@ from .config_model import (
 from .execution import run_automatic_mode, run_manual_mode
 from .util import close_program, get_configuration, parser, resolve_server_name
 
-__version__ = "1.2.4"
-
 
 def main():
     arg = parser.parse_args()

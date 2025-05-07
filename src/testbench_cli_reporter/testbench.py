@@ -317,8 +317,8 @@ class Connection:
         )
         test_cases_execs = {tc["uniqueID"]: tc for tc in exec_test_cases}
         equal_lists = False not in [
-            test_cases.get(uid, {}).get('testCaseSpecificationKey')['serial']
-            == tc['paramCombPK']['serial']
+            test_cases.get(uid, {}).get("testCaseSpecificationKey")["serial"]
+            == tc["paramCombPK"]["serial"]
             for uid, tc in test_cases_execs.items()
         ]
         return {
@@ -337,9 +337,7 @@ class Connection:
 
     def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> List[dict]:
         exec_test_cases = self.session.get(
-            f"{self.server_url}testCaseSets/"
-            f"{testCaseSetKey}/executions/"
-            f"{executionKey}/testCases",
+            f"{self.server_url}testCaseSets/{testCaseSetKey}/executions/{executionKey}/testCases",
         )
         return exec_test_cases.json()
 

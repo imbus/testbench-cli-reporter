@@ -261,6 +261,8 @@ class CliReporterConfig:
         return cls(
             configuration=[Configuration.from_dict(c) for c in dictionary.get("configuration", [])],
             loggingConfiguration=loggingConfig.from_dict(
-                dictionary.get("loggingConfiguration") or dictionary.get("logging_configuration") or {}
+                dictionary.get("loggingConfiguration")
+                or dictionary.get("logging_configuration")
+                or {}
             ),
         )

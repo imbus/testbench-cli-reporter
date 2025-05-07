@@ -117,9 +117,8 @@ def trigger_all_actions(connection_queue, raise_exceptions):
             action_to_trigger = connection_queue.active_connection.actions_to_trigger[0]
             action = Action(action_to_trigger.type, action_to_trigger.parameters)
             logger.debug(
-                f"Triggering action: {action.__class__.__name__}\n"
-                f"Parameters: {action.parameters}"
-                )
+                f"Triggering action: {action.__class__.__name__}\nParameters: {action.parameters}"
+            )
             try:
                 action.trigger(connection_queue)
                 connection_queue.active_connection.actions_to_wait_for.append(action)
