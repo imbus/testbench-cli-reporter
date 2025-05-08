@@ -1,7 +1,7 @@
 import traceback
 from contextlib import suppress
 from time import sleep
-from typing import Any, Optional, Union
+from typing import Any
 
 import requests.exceptions  # type: ignore
 from requests import Timeout
@@ -14,7 +14,7 @@ from .testbench import Connection, ConnectionLog, login
 from .util import rotate, spin_spinner
 
 
-def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
+def run_manual_mode(configuration: CliReporterConfig | None = None):
     cli_config: CliReporterConfig = (
         CliReporterConfig(configuration=[]) if configuration is None else configuration
     )
@@ -61,10 +61,10 @@ def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
 
 
 def run_automatic_mode(
-    configuration: Union[CliReporterConfig, dict[str, Any]],
-    loginname: Optional[str] = None,
-    password: Optional[str] = None,
-    sessionToken: Optional[str] = None,
+    configuration: CliReporterConfig | dict[str, Any],
+    loginname: str | None = None,
+    password: str | None = None,
+    sessionToken: str | None = None,
     raise_exceptions: bool = False,
 ):
     config = (

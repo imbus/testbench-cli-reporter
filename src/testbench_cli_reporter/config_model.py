@@ -1,6 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Union
 
 
 class FilterInfoType(str, Enum):
@@ -13,7 +12,7 @@ class FilterInfoType(str, Enum):
 class FilterInfo:
     name: str
     filterType: FilterInfoType
-    testThemeUID: Optional[str] = None
+    testThemeUID: str | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -28,7 +27,7 @@ class FilterInfo:
 class FilterJsonInfo:
     name: str
     filterType: FilterInfoType
-    testThemeUID: Optional[str] = None
+    testThemeUID: str | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -41,16 +40,16 @@ class FilterJsonInfo:
 
 @dataclass
 class TestCycleXMLReportOptions:
-    exportAttachments: Optional[bool]
-    exportDesignData: Optional[bool]
-    reportRootUID: Optional[str]
-    suppressFilteredData: Optional[bool]
-    characterEncoding: Optional[str]
-    exportExpandedData: Optional[bool]
-    filters: Optional[list[FilterInfo]]
-    exportExecutionProtocols: Optional[bool]
-    exportDescriptionFields: Optional[bool]
-    outputFormattedText: Optional[bool]
+    exportAttachments: bool | None
+    exportDesignData: bool | None
+    reportRootUID: str | None
+    suppressFilteredData: bool | None
+    characterEncoding: str | None
+    exportExpandedData: bool | None
+    filters: list[FilterInfo] | None
+    exportExecutionProtocols: bool | None
+    exportDescriptionFields: bool | None
+    outputFormattedText: bool | None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -70,12 +69,12 @@ class TestCycleXMLReportOptions:
 
 @dataclass
 class TestCycleJsonReportOptions:
-    treeRootUID: Optional[str]
-    basedOnExecution: Optional[bool]
-    suppressFilteredData: Optional[bool]
-    suppressNotExecutable: Optional[bool]
-    suppressEmptyTestThemes: Optional[bool]
-    filters: Optional[list[FilterJsonInfo]]
+    treeRootUID: str | None
+    basedOnExecution: bool | None
+    suppressFilteredData: bool | None
+    suppressNotExecutable: bool | None
+    suppressEmptyTestThemes: bool | None
+    filters: list[FilterJsonInfo] | None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -92,12 +91,12 @@ class TestCycleJsonReportOptions:
 @dataclass
 class ExportParameters:
     outputPath: str
-    projectPath: Optional[list[str]] = None
-    tovKey: Optional[str] = None
-    cycleKey: Optional[str] = None
-    reportRootUID: Optional[str] = None
-    report_config: Optional[TestCycleXMLReportOptions] = None
-    filters: Optional[list[FilterInfo]] = None
+    projectPath: list[str] | None = None
+    tovKey: str | None = None
+    cycleKey: str | None = None
+    reportRootUID: str | None = None
+    report_config: TestCycleXMLReportOptions | None = None
+    filters: list[FilterInfo] | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -119,12 +118,12 @@ class ExportParameters:
 @dataclass
 class ExportJsonParameters:
     outputPath: str
-    projectPath: Optional[list[str]] = None
-    projectKey: Optional[str] = None
-    tovKey: Optional[str] = None
-    cycleKey: Optional[str] = None
-    report_config: Optional[TestCycleJsonReportOptions] = None
-    filters: Optional[list[FilterJsonInfo]] = None
+    projectPath: list[str] | None = None
+    projectKey: str | None = None
+    tovKey: str | None = None
+    cycleKey: str | None = None
+    report_config: TestCycleJsonReportOptions | None = None
+    filters: list[FilterJsonInfo] | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -166,16 +165,16 @@ class ExportJsonAction:
 @dataclass
 class ExecutionXmlResultsImportOptions:
     fileName: str
-    reportRootUID: Optional[str]
-    ignoreNonExecutedTestCases: Optional[bool]
-    defaultTester: Optional[str]
-    checkPaths: Optional[bool]
-    filters: Optional[list[FilterInfo]]
-    discardTesterInformation: Optional[bool]
-    useExistingDefect: Optional[bool]
+    reportRootUID: str | None
+    ignoreNonExecutedTestCases: bool | None
+    defaultTester: str | None
+    checkPaths: bool | None
+    filters: list[FilterInfo] | None
+    discardTesterInformation: bool | None
+    useExistingDefect: bool | None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary) -> "ExecutionXmlResultsImportOptions":
         return cls(
             fileName=dictionary.get("fileName", "result.zip"),
             reportRootUID=dictionary.get("reportRootUID"),
@@ -191,16 +190,16 @@ class ExecutionXmlResultsImportOptions:
 @dataclass
 class ExecutionJsonResultsImportOptions:
     fileName: str
-    reportRootUID: Optional[str]
-    ignoreNonExecutedTestCases: Optional[bool]
-    defaultTester: Optional[str]
-    checkPaths: Optional[bool]
-    filters: Optional[list[FilterInfo]]
-    discardTesterInformation: Optional[bool]
-    useExistingDefect: Optional[bool]
+    reportRootUID: str | None
+    ignoreNonExecutedTestCases: bool | None
+    defaultTester: str | None
+    checkPaths: bool | None
+    filters: list[FilterInfo] | None
+    discardTesterInformation: bool | None
+    useExistingDefect: bool | None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary) -> "ExecutionJsonResultsImportOptions":
         return cls(
             fileName=dictionary.get("fileName", "result.zip"),
             reportRootUID=dictionary.get("reportRootUID"),
@@ -216,12 +215,12 @@ class ExecutionJsonResultsImportOptions:
 @dataclass
 class ImportParameters:
     inputPath: str
-    cycleKey: Optional[str] = None
-    projectPath: Optional[list[str]] = None
-    reportRootUID: Optional[str] = None
-    defaultTester: Optional[str] = None
-    filters: Optional[list[FilterInfo]] = None
-    importConfig: Optional[ExecutionXmlResultsImportOptions] = None
+    cycleKey: str | None = None
+    projectPath:list[str] | None = None
+    reportRootUID: str | None = None
+    defaultTester: str | None = None
+    filters: list[FilterInfo] | None = None
+    importConfig: ExecutionXmlResultsImportOptions | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -239,13 +238,13 @@ class ImportParameters:
 @dataclass
 class ImportJsonParameters:
     inputPath: str
-    projectKey: Optional[str] = None
-    cycleKey: Optional[str] = None
-    projectPath: Optional[list[str]] = None
-    reportRootUID: Optional[str] = None
-    defaultTester: Optional[str] = None
-    filters: Optional[list[FilterInfo]] = None
-    importConfig: Optional[ExecutionJsonResultsImportOptions] = None
+    projectKey: str | None = None
+    cycleKey: str | None = None
+    projectPath: list[str] | None = None
+    reportRootUID: str | None = None
+    defaultTester: str | None = None
+    filters: list[FilterInfo] | None = None
+    importConfig: ExecutionJsonResultsImportOptions | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -282,15 +281,13 @@ class ImportJSONAction:
 
 @dataclass
 class Configuration:
-    server_url: Optional[str] = None
+    server_url: str | None = None
     verify: bool = True
-    sessionToken: Optional[str] = None
-    basicAuth: Optional[str] = None
-    loginname: Optional[str] = None
-    password: Optional[str] = None
-    actions: Optional[
-        list[Union[ExportAction, ExportJsonAction, ImportXMLAction, ImportJSONAction]]
-    ] = None
+    sessionToken: str | None = None
+    basicAuth: str | None = None
+    loginname: str | None = None
+    password: str | None = None
+    actions: list[ExportAction | ExportJsonAction | ImportXMLAction | ImportJSONAction] | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -370,14 +367,8 @@ class FileLoggerConfig(ConsoleLoggerConfig):
 
 @dataclass
 class loggingConfig:  # noqa: N801
-    console: Optional[ConsoleLoggerConfig] = None
-    file: Optional[FileLoggerConfig] = None
-
-    def __post_init__(self):
-        if self.console is None:
-            self.console = ConsoleLoggerConfig.from_dict({})
-        if self.file is None:
-            self.file = FileLoggerConfig.from_dict({})
+    console: ConsoleLoggerConfig = field(default_factory=lambda: ConsoleLoggerConfig.from_dict({}))
+    file: FileLoggerConfig = field(default_factory=lambda: FileLoggerConfig.from_dict({}))
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -389,14 +380,8 @@ class loggingConfig:  # noqa: N801
 
 @dataclass
 class CliReporterConfig:
-    configuration: Optional[list[Configuration]] = None
-    loggingConfiguration: Optional[loggingConfig] = None
-
-    def __post_init__(self):
-        if self.configuration is None:
-            self.configuration = []
-        if self.loggingConfiguration is None:
-            self.loggingConfiguration = loggingConfig()
+    configuration: list[Configuration] = field(default_factory=list)
+    loggingConfiguration: loggingConfig = field(default_factory=loggingConfig)
 
     @classmethod
     def from_dict(cls, dictionary):

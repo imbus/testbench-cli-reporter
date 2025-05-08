@@ -20,7 +20,7 @@ import sys
 import traceback
 from pathlib import Path
 from time import monotonic
-from typing import Any, Union
+from typing import Any
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
@@ -53,7 +53,7 @@ class UnloggedAction(AbstractAction):
 
 
 class ExportXMLReport(AbstractAction):
-    def __init__(self, parameters: Union[ExportParameters, dict[str, Any], None] = None):
+    def __init__(self, parameters: ExportParameters | dict[str, Any] | None = None):
         if parameters and isinstance(parameters, ExportParameters):
             exp_parameters = parameters
         elif parameters is None:
@@ -62,14 +62,14 @@ class ExportXMLReport(AbstractAction):
             exp_parameters = ExportParameters.from_dict(parameters or {})
         super().__init__()
         self.parameters: ExportParameters = exp_parameters
-        self.filters = []
+        self.filters: list = []
         self.start_time = 0
 
     def prepare(self, connection_log) -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects)
         selected_tov = questions.ask_to_select_tov(selected_project)
-        self.parameters.tovKey = selected_tov["key"]["serial"]
+        self.parameters.tovKey = str(selected_tov["key"]["serial"])
         self.parameters.projectPath = [
             selected_project["name"],
             selected_tov["name"],
@@ -82,7 +82,7 @@ class ExportXMLReport(AbstractAction):
                 self.parameters.tovKey
             )
         else:
-            self.parameters.cycleKey = selected_cycle["key"]["serial"]
+            self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
             self.parameters.projectPath.append(selected_cycle["name"])
             tttree_structure = connection_log.active_connection.get_test_cycle_structure(
                 self.parameters.cycleKey
@@ -96,9 +96,11 @@ class ExportXMLReport(AbstractAction):
 
         return True
 
-    def trigger(self, connection_log) -> Union[bool, str]:
+    def trigger(self, connection_log) -> bool:
         if (not self.parameters.cycleKey or self.parameters.cycleKey == "0") and (
-            not self.parameters.tovKey and len(self.parameters.projectPath) >= 2  # noqa: PLR2004
+            not self.parameters.tovKey
+            and self.parameters.projectPath is not None
+            and len(self.parameters.projectPath) >= 2  # noqa: PLR2004
         ):
             all_projects = connection_log.active_connection.get_all_projects()
             (
@@ -108,14 +110,14 @@ class ExportXMLReport(AbstractAction):
             ) = get_project_keys(all_projects, *self.parameters.projectPath)
 
         self.job_id = connection_log.active_connection.trigger_xml_report_generation(
-            self.parameters.tovKey,
-            self.parameters.cycleKey,
+            self.parameters.tovKey or "",
+            self.parameters.cycleKey or "",
             self.parameters.reportRootUID or "ROOT",
             self.parameters.filters or [],
             self.parameters.report_config or XmlExportConfig["Itep Export"],
         )
         self.start_time = monotonic()
-        return self.job_id
+        return bool(self.job_id)
 
     def wait(self, connection_log) -> bool:
         try:
@@ -134,7 +136,7 @@ class ExportXMLReport(AbstractAction):
         return bool(result)
 
     def finish(self, connection_log) -> bool:
-        report = connection_log.active_connection.get_xml_report_data(self.report_tmp_name)
+        report = connection_log.active_connection.get_xml_report_data(str(self.report_tmp_name))
         with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(report)
         pretty_print_success_message(
@@ -145,7 +147,7 @@ class ExportXMLReport(AbstractAction):
 
 
 class ExportJSONReport(AbstractAction):
-    def __init__(self, parameters: Union[ExportJsonParameters, dict[str, Any]] = None):
+    def __init__(self, parameters: ExportJsonParameters | dict[str, Any] = None):
         if parameters and isinstance(parameters, ExportJsonParameters):
             exp_parameters = parameters
         elif parameters is None:
@@ -188,7 +190,7 @@ class ExportJSONReport(AbstractAction):
 
         return True
 
-    def trigger(self, connection_log) -> Union[bool, str]:
+    def trigger(self, connection_log) -> bool | str:
         if (
             not self.parameters.projectKey
             and self.parameters.projectPath
@@ -228,7 +230,7 @@ class ExportJSONReport(AbstractAction):
         self.start_time = monotonic()
         return self.job_id
 
-    def wait(self, connection_log) -> Union[bool, str]:
+    def wait(self, connection_log) -> bool | str:
         try:
             self.report_tmp_name = connection_log.active_connection.wait_for_tmp_json_report_name(
                 self.parameters.projectKey, self.job_id
@@ -258,17 +260,9 @@ class ExportJSONReport(AbstractAction):
         return True
 
 
-def Action(class_name: str, parameters: dict[str, str]) -> AbstractAction:  # noqa: N802
-    try:
-        return globals()[class_name](parameters)
-    except AttributeError:
-        logger.error(f"Failed to create class {class_name}")
-        close_program()
-
-
 class ImportXMLExecutionResults(AbstractAction):
-    def __init__(self, parameters: Union[ImportParameters, dict[str, Any], None] = None):
-        if parameters and isinstance(parameters, ImportParameters):
+    def __init__(self, parameters: ImportParameters | dict[str, Any] | None = None):
+        if isinstance(parameters, ImportParameters):
             imp_parameters = parameters
         elif parameters is None:
             imp_parameters = ImportParameters("result.zip")
@@ -288,7 +282,7 @@ class ImportXMLExecutionResults(AbstractAction):
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
         selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle)
         pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
-        self.parameters.cycleKey = selected_cycle["key"]["serial"]
+        self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
         cycle_structure = connection_log.active_connection.get_test_cycle_structure(
             self.parameters.cycleKey
         )
@@ -376,7 +370,7 @@ class ImportXMLExecutionResults(AbstractAction):
 
 
 class ImportJSONExecutionResults(AbstractAction):
-    def __init__(self, parameters: Union[ImportJsonParameters, dict[str, Any], None] = None):
+    def __init__(self, parameters: ImportJsonParameters | dict[str, Any] | None = None):
         if parameters and isinstance(parameters, ImportJsonParameters):
             imp_parameters = parameters
         elif parameters is None:
@@ -559,3 +553,24 @@ class Quit(UnloggedAction):
     def trigger(self, connection_log=None):
         print("Closing program.")
         sys.exit(0)
+
+
+ACTION_CLASSES: dict[str, type[AbstractAction]] = {
+    "ExportXMLReport": ExportXMLReport,
+    "ExportJSONReport": ExportJSONReport,
+    "ImportXMLExecutionResults": ImportXMLExecutionResults,
+    "ImportJSONExecutionResults": ImportJSONExecutionResults,
+    "BrowseProjects": BrowseProjects,
+    "ExportActionLog": ExportActionLog,
+    "ChangeConnection": ChangeConnection,
+    "Quit": Quit,
+}
+
+
+def Action(class_name: str, parameters: dict[str, str]) -> AbstractAction:  # noqa: N802
+    try:
+        action_class = ACTION_CLASSES[class_name]
+    except KeyError:
+        logger.error(f"Unknown action class: {class_name}")
+        close_program()
+    return action_class(parameters)

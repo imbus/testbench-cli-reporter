@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from pathlib import Path
 from re import fullmatch
-from typing import Any, Optional, Union
+from typing import Any
 
 from questionary import print as pprint
 
@@ -360,7 +360,7 @@ def get_project_keys(
     projects: dict,
     project_name: str,
     tov_name: str,
-    cycle_name: Optional[str] = None,
+    cycle_name: str | None = None,
 ):
     cycle_key = None
     project = get_project_by_name(projects["projects"], project_name)
@@ -676,9 +676,9 @@ ACTION_TYPES = {
 
 
 class AbstractAction(ABC):
-    def __init__(self, parameters: Optional[dict] = None):
+    def __init__(self, parameters: Any = None):
         self.parameters = parameters or {}
-        self.report_tmp_name: Union[str, bool] = ""
+        self.report_tmp_name: str | bool = ""
         self.job_id = ""
 
     def prepare(self, connection_log) -> bool:

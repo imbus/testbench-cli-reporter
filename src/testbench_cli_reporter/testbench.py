@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass
 from io import BufferedReader
 from pathlib import Path
 from re import fullmatch
-from typing import Any, Optional, Union
+from typing import Any
 
 import requests  # type: ignore
 import urllib3
@@ -51,24 +51,24 @@ from .util import (
 @dataclass
 class JobProgress:
     completion: bool
-    percentage: Optional[int] = None
-    total_items: Optional[int] = None
-    handled_items: Optional[int] = None
-    report_name: Optional[str] = None
+    percentage: int | None = None
+    total_items: int | None = None
+    handled_items: int | None = None
+    report_name: str | None = None
 
 
 class Connection:
     def __init__(
         self,
         server_url: str,
-        verify: Union[bool, str],
-        sessionToken: Optional[str] = None,
-        basicAuth: Optional[str] = None,
-        loginname: Optional[str] = None,
-        password: Optional[str] = None,
+        verify: bool | str,
+        sessionToken: str | None = None,
+        basicAuth: str | None = None,
+        loginname: str | None = None,
+        password: str | None = None,
         job_timeout_sec: int = 4 * 60 * 60,
-        connection_timeout_sec: Optional[int] = None,
-        actions: Optional[list] = None,
+        connection_timeout_sec: int | None = None,
+        actions: list | None = None,
         **kwargs,
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -273,8 +273,8 @@ class Connection:
     def trigger_json_report_generation(
         self,
         project_key: str,
-        tov_key: Optional[str] = None,
-        cycle_key: Optional[str] = None,
+        tov_key: str | None = None,
+        cycle_key: str | None = None,
         reportRootUID: str = "ROOT",
         filters=None,
         report_config=None,
@@ -419,7 +419,11 @@ class Connection:
                 f"{self.server_legacy_url}tovs/{tov_key}/xmlReport",
                 json=asdict(report_config),
             )
-        return response.json()["jobID"]
+        data = response.json()
+        job_id = data.get("jobID")
+        if not isinstance(job_id, str):
+            raise ValueError("jobID is missing or not a string")
+        return job_id
 
     def wait_for_tmp_xml_report_name(self, job_id: str) -> str:
         while True:
@@ -428,7 +432,7 @@ class Connection:
                 return report_generation_result
             spin_spinner("Waiting until creation of XML report is complete")
 
-    def get_exp_job_result(self, job_id):
+    def get_exp_job_result(self, job_id: str) -> str | None:
         report_generation_status = self.get_job_result("job/", job_id)
         if report_generation_status is None:
             return None
@@ -456,8 +460,10 @@ class Connection:
         report = self.legacy_session.get(
             f"{self.server_legacy_url}xmlReport/{report_tmp_name}",
         )
-
-        return report.content
+        content = report.content
+        if not isinstance(content, bytes):
+            raise TypeError("Expected bytes from response.content")
+        return content
 
     def get_json_report_data(self, project_key: str, report_tmp_name: str) -> bytes:
         report = self.session.get(
@@ -569,6 +575,7 @@ class Connection:
             return serverside_file_name.json()["fileName"]
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
+            raise e
 
     # POST /api/projects/{projectKey}/executionResults/v1
     def upload_execution_json_results(
@@ -592,13 +599,10 @@ class Connection:
         report_root_uid: str,
         serverside_file_name: str,
         default_tester: str,
-        filters: Union[list[FilterInfo], list[dict[str, str]]],
-        import_config: Optional[ExecutionXmlResultsImportOptions] = None,
+        filters: list[FilterInfo] | list[dict[str, str]],
+        import_config: ExecutionXmlResultsImportOptions | None = None,
     ) -> str:
-        if import_config is None:
-            used_import_config = TYPICAL_XML_IMPORT_CONFIG
-        else:
-            used_import_config = import_config
+        used_import_config = TYPICAL_XML_IMPORT_CONFIG if import_config is None else import_config
         used_import_config.fileName = serverside_file_name
         used_import_config.filters = filters
         if default_tester:
@@ -625,8 +629,8 @@ class Connection:
         report_root_uid: str,
         serverside_file_name: str,
         default_tester: str,
-        filters: Union[list[FilterInfo], list[dict[str, str]]],
-        import_config: Optional[ExecutionJsonResultsImportOptions] = None,
+        filters: list[FilterInfo] | list[dict[str, str]],
+        import_config: ExecutionJsonResultsImportOptions | None = None,
     ) -> str:
         if import_config is None:
             used_import_config = TYPICAL_JSON_IMPORT_CONFIG
@@ -708,7 +712,7 @@ class Connection:
         )
         test_cases_execs = {tc["uniqueID"]: tc for tc in exec_test_cases}
         equal_lists = False not in [
-            test_cases.get(uid, {}).get("testCaseSpecificationKey")["serial"]
+            test_cases.get(uid, {}).get("testCaseSpecificationKey", {}).get("serial")
             == tc["paramCombPK"]["serial"]
             for uid, tc in test_cases_execs.items()
         ]
@@ -723,8 +727,12 @@ class Connection:
             f"{self.server_legacy_url}testCaseSets/"
             f"{testCaseSetKey}/specifications/"
             f"{specificationKey}/testCases",
-        )
-        return spec_test_cases.json()
+        ).json()
+        if not isinstance(spec_test_cases, list) or not all(
+            isinstance(item, dict) for item in spec_test_cases
+        ):
+            raise ValueError("spec_test_cases not in expected format")
+        return spec_test_cases
 
     def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> list[dict]:
         exec_test_cases = self.legacy_session.get(
@@ -793,7 +801,7 @@ def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901,
 
 
 class TimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
-    def __init__(self, timeout: Optional[int] = 60, *args, **kwargs):
+    def __init__(self, timeout: int | None = 60, *args, **kwargs):
         self.timeout = timeout
         super().__init__(*args, **kwargs)
 
