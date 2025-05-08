@@ -22,19 +22,15 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from pathlib import Path
 from re import fullmatch
-from typing import Any, Optional, Union
+from typing import Any
 
 from questionary import print as pprint
 
 from .config_model import (
     CliReporterConfig,
-    ExecutionJsonResultsImportOptions,
-    ExecutionXmlResultsImportOptions,
+    ExecutionResultsImportOptions,
     ExportAction,
-    ExportJsonAction,
-    ImportJSONAction,
-    ImportXMLAction,
-    TestCycleJsonReportOptions,
+    ImportAction,
     TestCycleXMLReportOptions,
 )
 from .log import logger
@@ -43,46 +39,7 @@ BLUE_ITALIC = "#06c8ff italic"
 
 BLUE_BOLD_ITALIC = "#06c8ff bold italic"
 
-
-class Colors:
-    """ANSI color codes"""
-
-    BLACK = "\033[0;30m"
-    RED = "\033[0;31m"
-    GREEN = "\033[0;32m"
-    BROWN = "\033[0;33m"
-    BLUE = "\033[0;34m"
-    PURPLE = "\033[0;35m"
-    CYAN = "\033[0;36m"
-    LIGHT_GRAY = "\033[0;37m"
-    DARK_GRAY = "\033[1;30m"
-    LIGHT_RED = "\033[1;31m"
-    LIGHT_GREEN = "\033[1;32m"
-    YELLOW = "\033[1;33m"
-    LIGHT_BLUE = "\033[1;34m"
-    LIGHT_PURPLE = "\033[1;35m"
-    LIGHT_CYAN = "\033[1;36m"
-    LIGHT_WHITE = "\033[1;37m"
-    BOLD = "\033[1m"
-    FAINT = "\033[2m"
-    ITALIC = "\033[3m"
-    UNDERLINE = "\033[4m"
-    BLINK = "\033[5m"
-    NEGATIVE = "\033[7m"
-    CROSSED = "\033[9m"
-    END = "\033[0m"
-    # cancel SGR codes if we don't write to a terminal
-    if not __import__("sys").stdout.isatty():
-        for _ in dir():
-            if isinstance(_, str) and _[0] != "_":
-                locals()[_] = ""
-    elif __import__("platform").system() == "Windows":
-        kernel32 = __import__("ctypes").windll.kernel32
-        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
-        del kernel32
-
-
-TYPICAL_XML_IMPORT_CONFIG: ExecutionXmlResultsImportOptions = ExecutionXmlResultsImportOptions(
+TYPICAL_IMPORT_CONFIG: ExecutionResultsImportOptions = ExecutionResultsImportOptions(
     fileName="",
     reportRootUID=None,
     ignoreNonExecutedTestCases=True,
@@ -93,24 +50,8 @@ TYPICAL_XML_IMPORT_CONFIG: ExecutionXmlResultsImportOptions = ExecutionXmlResult
     useExistingDefect=True,
 )
 
-XmlImportConfig = {
-    "Typical": TYPICAL_XML_IMPORT_CONFIG,
-    "<CUSTOM>": False,
-}
-
-TYPICAL_JSON_IMPORT_CONFIG: ExecutionJsonResultsImportOptions = ExecutionJsonResultsImportOptions(
-    fileName="",
-    reportRootUID=None,
-    useExistingDefect=True,
-    ignoreNonExecutedTestCases=True,
-    checkPaths=True,
-    discardTesterInformation=True,
-    defaultTester=None,
-    filters=None,
-)
-
-JsonImportConfig = {
-    "Typical": TYPICAL_JSON_IMPORT_CONFIG,
+ImportConfig = {
+    "Typical": TYPICAL_IMPORT_CONFIG,
     "<CUSTOM>": False,
 }
 
@@ -152,20 +93,9 @@ XmlExportConfig = {
         filters=[],
         reportRootUID=None,
     ),
-    "<CUSTOM>": False,
+    "<CUSTOM>": None,
 }
 
-JsonExportConfig = {
-    "iTorx Export (execution)": TestCycleJsonReportOptions(
-        treeRootUID=None,
-        basedOnExecution=True,
-        suppressFilteredData=True,
-        suppressNotExecutable=True,
-        suppressEmptyTestThemes=True,
-        filters=[],
-    ),
-    "<CUSTOM>": False,
-}
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -183,7 +113,6 @@ parser.add_argument(
 )
 parser.add_argument("--login", help="Users Login.", type=str, default="")
 parser.add_argument("--password", help="Users Password.", type=str, default="")
-parser.add_argument("--session", help="Session Token", type=str, default="")
 parser.add_argument(
     "-p",
     "--project",
@@ -335,41 +264,38 @@ def pretty_print(*print_statements: dict):
         print("".join([statement["value"] for statement in print_statements]))
 
 
-def get_project_by_name(projects, project_name):
-    for project in projects:
-        if project["name"] == project_name:
-            return project
-    raise ValueError(f"Project '{project_name}' not found.")
-
-
-def get_tov_by_name(tovs, tov_name):
-    for tov in tovs:
-        if tov["name"] == tov_name:
-            return tov
-    raise ValueError(f"TOV '{tov_name}' not found.")
-
-
-def get_cycle_by_name(cycles, cycle_name):
-    for cycle in cycles:
-        if cycle["name"] == cycle_name:
-            return cycle
-    raise ValueError(f"Cycle '{cycle_name}' not found.")
-
-
-def get_project_keys(
+def get_project_keys(  # noqa: C901
     projects: dict,
     project_name: str,
     tov_name: str,
-    cycle_name: Optional[str] = None,
+    cycle_name: str | None = None,
 ):
+    project_key = None
+    tov_key = None
     cycle_key = None
-    project = get_project_by_name(projects["projects"], project_name)
-    project_key = project["key"]["serial"]
-    tov = get_tov_by_name(project["testObjectVersions"], tov_name)
-    tov_key = tov["key"]["serial"]
-    if cycle_name:
-        cycle = get_cycle_by_name(tov["testCycles"], cycle_name)
-        cycle_key = cycle["key"]["serial"]
+    for project in projects["projects"]:
+        if project["name"] == project_name:
+            project_key = project["key"]["serial"]
+            for tov in project["testObjectVersions"]:
+                if tov["name"] == tov_name:
+                    project["testObjectVersions"] = [tov]
+                    tov_key = tov["key"]["serial"]
+                    if cycle_name:
+                        for cycle in tov["testCycles"]:
+                            if cycle["name"] == cycle_name:
+                                project["testObjectVersions"][0]["testCycles"] = cycle
+                                cycle_key = cycle["key"]["serial"]
+                                break
+                        break
+            break
+    if not project_key:
+        raise ValueError(f"Project '{project_name}' not found.")
+    if not tov_key:
+        raise ValueError(f"TOV '{tov_name}' not found in project '{project_name}'.")
+    if not cycle_key and cycle_name:
+        raise ValueError(
+            f"Cycle '{cycle_name}' not found in TOV '{tov_name}' in project '{project_name}'."
+        )
     pretty_print(
         {"value": "PROJECT_KEY: ", "end": None},
         {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
@@ -563,22 +489,12 @@ def pretty_print_success_message(prefix: str, value: Any, suffix: str):
     )
 
 
-def pretty_print_progress_bar(mode: str, handled: int, total: int, percentage: int):
-    if total is not None and handled is not None:
-        completed_length = int(percentage / 2)  # Each 2% is one character
-        bar = "#" * completed_length + "-" * (50 - completed_length)
-        print(
-            f"{mode}: {Colors.BLUE}[{bar}]{Colors.END} {handled}/{total} {Colors.DARK_GRAY}({percentage}%){Colors.END}",
-            end="\r",
-        )
-
-
-def resolve_server_name(server: str) -> str:
-    if fullmatch(r"([\w\-.]+):(\d{1,5})", server):
-        resolved_server = f"https://{server}/api/"
+def resolve_server_name(server):
+    if fullmatch(r"([\w\-.]+)(:\d{1,5})", server):
+        resolved_server = f"https://{server}/api/1/"
     elif fullmatch(r"([\w\-.]+)", server):
-        resolved_server = f"https://{server}:9445/api/"
-    elif fullmatch(r"https?://([\w\-.]+):(\d{1,5})/api/", server):
+        resolved_server = f"https://{server}:9443/api/1/"
+    elif fullmatch(r"https?://([\w\-.]+)(:\d{1,5})/api/1/", server):
         resolved_server = server
     else:
         raise ValueError(f"Server name '{server}' is not valid.")
@@ -667,18 +583,13 @@ def spin_spinner(message: str):
         pass
 
 
-ACTION_TYPES = {
-    "ImportXMLExecutionResults": ImportXMLAction,
-    "ExportXMLReport": ExportAction,
-    "ImportJSONExecutionResults": ImportJSONAction,
-    "ExportJSONReport": ExportJsonAction,
-}
+ACTION_TYPES = {"ImportExecutionResults": ImportAction, "ExportXMLReport": ExportAction}
 
 
 class AbstractAction(ABC):
-    def __init__(self, parameters: Optional[dict] = None):
+    def __init__(self, parameters: Any = None):
         self.parameters = parameters or {}
-        self.report_tmp_name: Union[str, bool] = ""
+        self.report_tmp_name: str | bool = ""
         self.job_id = ""
 
     def prepare(self, connection_log) -> bool:

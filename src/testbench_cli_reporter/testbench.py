@@ -17,7 +17,7 @@ import dataclasses
 import json
 import traceback
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import requests  # type: ignore
 import urllib3
@@ -44,13 +44,13 @@ class Connection:
     def __init__(
         self,
         server_url: str,
-        verify: Union[bool, str],
-        basicAuth: Optional[str] = None,
-        loginname: Optional[str] = None,
-        password: Optional[str] = None,
+        verify: bool | str,
+        basicAuth: str | None = None,
+        loginname: str | None = None,
+        password: str | None = None,
         job_timeout_sec: int = 4 * 60 * 60,
-        connection_timeout_sec: Optional[int] = None,
-        actions: Optional[List] = None,
+        connection_timeout_sec: int | None = None,
+        actions: list | None = None,
         **kwargs,
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -62,10 +62,10 @@ class Connection:
             self.loginname = loginname or ""
             self.password = password or ""
         self.job_timeout_sec = job_timeout_sec
-        self.action_log: List[AbstractAction] = []
-        self.actions_to_trigger: List[dict] = actions or []
-        self.actions_to_wait_for: List[AbstractAction] = []
-        self.actions_to_finish: List[AbstractAction] = []
+        self.action_log: list[AbstractAction] = []
+        self.actions_to_trigger: list[dict] = actions or []
+        self.actions_to_wait_for: list[AbstractAction] = []
+        self.actions_to_finish: list[AbstractAction] = []
         self.connection_timeout = connection_timeout_sec
         self.verify_ssl = verify
         self._session = None
@@ -118,7 +118,7 @@ class Connection:
 
         return True
 
-    def get_all_projects(self) -> Dict:
+    def get_all_projects(self) -> dict:
         all_projects = dict(
             self.session.get(
                 f"{self.server_url}projects",
@@ -128,12 +128,13 @@ class Connection:
         all_projects["projects"].sort(key=lambda proj: proj["name"].casefold())
         return all_projects
 
-    def get_all_filters(self) -> List[dict]:
-        all_filters = self.session.get(
-            f"{self.server_url}filters",
-        )
-
-        return all_filters.json()
+    def get_all_filters(self) -> list[dict]:
+        all_filters = self.session.get(f"{self.server_url}filters").json()
+        if not isinstance(all_filters, list) or not all(
+            isinstance(item, dict) for item in all_filters
+        ):
+            raise ValueError("filters not in expected format")
+        return all_filters
 
     def get_xml_report(
         self, tov_key: str, cycle_key: str, reportRootUID: str, filters=None
@@ -170,7 +171,11 @@ class Connection:
                 f"{self.server_url}tovs/{tov_key}/xmlReport",
                 json=dataclasses.asdict(report_config),
             )
-        return response.json()["jobID"]
+        data = response.json()
+        job_id = data.get("jobID")
+        if not isinstance(job_id, str):
+            raise ValueError("jobID is missing or not a string")
+        return job_id
 
     def wait_for_tmp_xml_report_name(self, job_id: str) -> str:
         while True:
@@ -179,14 +184,15 @@ class Connection:
                 return report_generation_result
             spin_spinner("Waiting until creation of XML report is complete")
 
-    def get_exp_job_result(self, job_id):
+    def get_exp_job_result(self, job_id: str) -> str | None:
         report_generation_status = self.get_job_result("job/", job_id)
         if report_generation_status is None:
             return None
         result = report_generation_status["result"]
-        if "Right" in result:
-            return result["Right"]
-        raise AssertionError(result)
+        value = result.get("Right")
+        if isinstance(value, str):
+            return value
+        return None
 
     def get_job_result(self, path: str, job_id: str):
         report_generation_status = self.session.get(
@@ -198,48 +204,52 @@ class Connection:
         report = self.session.get(
             f"{self.server_url}xmlReport/{report_tmp_name}",
         )
+        content = report.content
+        if not isinstance(content, bytes):
+            raise TypeError("Expected bytes from response.content")
+        return content
 
-        return report.content
-
-    def get_all_testers_of_project(self, project_key: str) -> List[dict]:
+    def get_all_testers_of_project(self, project_key: str) -> list[dict]:
         return [
             member
             for member in self.get_all_members_of_project(project_key)
             if "Tester" in member["value"]["membership"]["roles"]
         ]
 
-    def get_all_members_of_project(self, project_key: str) -> List[dict]:
+    def get_all_members_of_project(self, project_key: str) -> list[dict]:
         all_project_members = self.session.get(
             f"{self.server_url}project/{project_key}/members",
-        )
-
-        return all_project_members.json()
+        ).json()
+        if not isinstance(all_project_members, list) or not all(
+            isinstance(item, dict) for item in all_project_members
+        ):
+            raise ValueError("project members not in expected format")
+        return all_project_members
 
     def upload_execution_results(self, results_file_base64: str) -> str:
         try:
-            serverside_file_name = self.session.post(
+            response_json = self.session.post(
                 f"{self.server_url}executionResultsUpload",
-                json={
-                    "data": results_file_base64,
-                },
-            )
-            return serverside_file_name.json()["fileName"]
+                json={"data": results_file_base64},
+            ).json()
+            serverside_file_name = response_json.get("fileName")
+            if not isinstance(serverside_file_name, str):
+                raise ValueError("fileName missing or not a string")
+            return serverside_file_name
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
+            raise e
 
     def trigger_execution_results_import(
         self,
         cycle_key: str,
         report_root_uid: str,
         serverside_file_name: str,
-        default_tester: str,
-        filters: Union[List[FilterInfo], List[Dict[str, str]]],
-        import_config: Optional[ExecutionResultsImportOptions] = None,
+        default_tester: str | None,
+        filters: list[FilterInfo] | None,
+        import_config: ExecutionResultsImportOptions | None = None,
     ) -> str:
-        if import_config is None:
-            used_import_config = TYPICAL_IMPORT_CONFIG
-        else:
-            used_import_config = import_config
+        used_import_config = TYPICAL_IMPORT_CONFIG if import_config is None else import_config
         used_import_config.fileName = serverside_file_name
         used_import_config.filters = filters
         if default_tester:
@@ -248,12 +258,15 @@ class Connection:
             used_import_config.reportRootUID = report_root_uid
 
         try:
-            job_id = self.session.post(
+            response_json = self.session.post(
                 f"{self.server_url}cycle/{cycle_key}/executionResultsImport",
                 headers={"Accept": "application/zip"},
                 json=dataclasses.asdict(used_import_config),
-            )
-            return job_id.json()["jobID"]
+            ).json()
+            job_id = response_json.get("jobID")
+            if not isinstance(job_id, str):
+                raise ValueError("jobID missing or not a string")
+            return job_id
         except requests.exceptions.HTTPError as e:
             self.render_import_error(e)
             raise e
@@ -291,19 +304,27 @@ class Connection:
             return result["Right"]
         raise AssertionError(result)
 
-    def get_test_cycle_structure(self, cycle_key: str) -> List[dict]:
+    def get_test_cycle_structure(self, cycle_key: str) -> list[dict]:
         test_cycle_structure = self.session.get(
             f"{self.server_url}cycle/{cycle_key}/structure",
-        )
-        return test_cycle_structure.json()
+        ).json()
+        if not isinstance(test_cycle_structure, list) or not all(
+            isinstance(item, dict) for item in test_cycle_structure
+        ):
+            raise ValueError("test_cycle_structure not in expected format")
+        return test_cycle_structure
 
-    def get_tov_structure(self, tovKey: str) -> List[dict]:
+    def get_tov_structure(self, tovKey: str) -> list[dict]:
         tov_structure = self.session.get(
             f"{self.server_url}tov/{tovKey}/structure",
-        )
-        return tov_structure.json()
+        ).json()
+        if not isinstance(tov_structure, list) or not all(
+            isinstance(item, dict) for item in tov_structure
+        ):
+            raise ValueError("tov_structure not in expected format")
+        return tov_structure
 
-    def get_test_cases(self, test_case_set_structure: Dict[str, Any]) -> Dict[str, Dict]:
+    def get_test_cases(self, test_case_set_structure: dict[str, Any]) -> dict[str, Any]:
         spec_test_cases = self.get_spec_test_cases(
             test_case_set_structure["TestCaseSet_structure"]["key"]["serial"],
             test_case_set_structure["spec"]["Specification_key"]["serial"],
@@ -317,7 +338,7 @@ class Connection:
         )
         test_cases_execs = {tc["uniqueID"]: tc for tc in exec_test_cases}
         equal_lists = False not in [
-            test_cases.get(uid, {}).get("testCaseSpecificationKey")["serial"]
+            test_cases.get(uid, {}).get("testCaseSpecificationKey", {}).get("serial")
             == tc["paramCombPK"]["serial"]
             for uid, tc in test_cases_execs.items()
         ]
@@ -327,19 +348,27 @@ class Connection:
             "equal_lists": equal_lists,
         }
 
-    def get_spec_test_cases(self, testCaseSetKey: str, specificationKey: str) -> List[dict]:
+    def get_spec_test_cases(self, testCaseSetKey: str, specificationKey: str) -> list[dict]:
         spec_test_cases = self.session.get(
             f"{self.server_url}testCaseSets/"
             f"{testCaseSetKey}/specifications/"
             f"{specificationKey}/testCases",
-        )
-        return spec_test_cases.json()
+        ).json()
+        if not isinstance(spec_test_cases, list) or not all(
+            isinstance(item, dict) for item in spec_test_cases
+        ):
+            raise ValueError("spec_test_cases not in expected format")
+        return spec_test_cases
 
-    def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> List[dict]:
+    def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> list[dict]:
         exec_test_cases = self.session.get(
             f"{self.server_url}testCaseSets/{testCaseSetKey}/executions/{executionKey}/testCases",
-        )
-        return exec_test_cases.json()
+        ).json()
+        if not isinstance(exec_test_cases, list) or not all(
+            isinstance(item, dict) for item in exec_test_cases
+        ):
+            raise ValueError("exec_test_cases not in expected format")
+        return exec_test_cases
 
 
 def login(server="", login="", pwd="") -> Connection:  # noqa: C901, PLR0912
@@ -399,7 +428,7 @@ def login(server="", login="", pwd="") -> Connection:  # noqa: C901, PLR0912
 
 
 class TimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
-    def __init__(self, timeout: Optional[int] = 60, *args, **kwargs):
+    def __init__(self, timeout: int | None = 60, *args, **kwargs):
         self.timeout = timeout
         super().__init__(*args, **kwargs)
 
@@ -414,17 +443,17 @@ class JobTimeout(requests.exceptions.Timeout):
 
 class ConnectionLog:
     def __init__(self):
-        self.connections: List[Connection] = []
+        self.connections: list[Connection] = []
 
     @property
-    def len(self) -> int:  # noqa: A003
+    def len(self) -> int:
         return len(self.connections)
 
     @property
     def active_connection(self) -> Connection:
         return self.connections[-1]
 
-    def next(self):  # noqa: A003
+    def next(self):
         self.connections = self.connections[1:] + self.connections[:1]
 
     def remove(self, connection):

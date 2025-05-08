@@ -1,6 +1,6 @@
 import traceback
 from time import sleep
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import requests.exceptions  # type: ignore
 from requests import Timeout
@@ -13,7 +13,7 @@ from .testbench import Connection, ConnectionLog, login
 from .util import rotate, spin_spinner
 
 
-def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
+def run_manual_mode(configuration: CliReporterConfig | None = None):
     cli_config: CliReporterConfig = (
         CliReporterConfig(configuration=[]) if configuration is None else configuration
     )
@@ -40,7 +40,7 @@ def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
                 ):
                     active_connection.add_action(next_action)
             except KeyError as e:
-                logger.error(f"key {str(e)} not found")
+                logger.error(f"key {e!s} not found")
                 logger.info("Aborted action")
 
             except ValueError:
@@ -58,9 +58,9 @@ def run_manual_mode(configuration: Optional[CliReporterConfig] = None):
 
 
 def run_automatic_mode(
-    configuration: Union[CliReporterConfig, Dict[str, Any]],
-    loginname: Optional[str] = None,
-    password: Optional[str] = None,
+    configuration: CliReporterConfig | dict[str, Any],
+    loginname: str | None = None,
+    password: str | None = None,
     raise_exceptions: bool = False,
 ):
     config = (
