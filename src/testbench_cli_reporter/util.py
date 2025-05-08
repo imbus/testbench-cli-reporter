@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from pathlib import Path
 from re import fullmatch
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from questionary import print as pprint
 
@@ -265,10 +265,10 @@ def pretty_print(*print_statements: dict):
 
 
 def get_project_keys(  # noqa: C901
-    projects: Dict,
+    projects: dict,
     project_name: str,
     tov_name: str,
-    cycle_name: Optional[str] = None,
+    cycle_name: str | None = None,
 ):
     project_key = None
     tov_key = None
@@ -346,7 +346,7 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
         )
 
 
-def pretty_print_test_cases(test_cases: Dict[str, Any]):
+def pretty_print_test_cases(test_cases: dict[str, Any]):
     print("   Test Cases:")
     if not test_cases.get("equal_lists"):
         _pretty_print_test_cases_spec(test_cases)
@@ -587,9 +587,9 @@ ACTION_TYPES = {"ImportExecutionResults": ImportAction, "ExportXMLReport": Expor
 
 
 class AbstractAction(ABC):
-    def __init__(self, parameters: Optional[dict] = None):
+    def __init__(self, parameters: Any = None):
         self.parameters = parameters or {}
-        self.report_tmp_name: Union[str, bool] = ""
+        self.report_tmp_name: str | bool = ""
         self.job_id = ""
 
     def prepare(self, connection_log) -> bool:

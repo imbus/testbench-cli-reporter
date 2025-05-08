@@ -13,9 +13,9 @@
 #  limitations under the License.
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 from re import fullmatch, sub
-from typing import Callable, Dict, List, Union
 
 from questionary import Choice, Style, checkbox, confirm, select, unsafe_prompt
 from questionary import print as pprint
@@ -41,26 +41,26 @@ custom_style_fancy = Style(
 )
 
 
-def isfile(filepath: Union[str, Path]) -> bool:
+def isfile(filepath: str | Path) -> bool:
     return Path(filepath).is_file()
 
 
-def isdir(filepath: Union[str, Path]) -> bool:
+def isdir(filepath: str | Path) -> bool:
     return Path(filepath).is_dir()
 
 
-def dirname(filepath: Union[str, Path]) -> str:
+def dirname(filepath: str | Path) -> str:
     return str(Path(filepath).parent)
 
 
-def abspath(filepath: Union[str, Path]) -> str:
+def abspath(filepath: str | Path) -> str:
     return str(Path(filepath).resolve().absolute())
 
 
 def selection_prompt(
     message: str,
-    choices: List[Choice],
-    no_valid_option_message: str = None,
+    choices: list[Choice],
+    no_valid_option_message: str | None = None,
     style: Style = custom_style_fancy,
     default=None,
 ):
@@ -89,8 +89,8 @@ def confirm_prompt(
 
 def checkbox_prompt(
     message: str,
-    choices: List[Choice],
-    no_valid_option_message: str = None,
+    choices: list[Choice],
+    no_valid_option_message: str | None = None,
     style: Style = custom_style_fancy,
 ):
     valid_choices = [choice for choice in choices if not choice.disabled]
@@ -107,7 +107,7 @@ def checkbox_prompt(
 def text_prompt(
     message: str,
     type: str = "text",  # noqa: A002
-    validation: Callable[[str], bool] = lambda val: bool(val),
+    validation: Callable[[str], bool | str] | None = lambda val: bool(val),
     style: Style = custom_style_fancy,
     default: str = "",
     filter: Callable[[str], str] = lambda val: val,  # noqa: A002
@@ -137,24 +137,26 @@ def ask_for_test_bench_credentials(server="", login="", pwd="") -> dict:
 
 
 def ask_for_test_bench_server_url(default="") -> str:
-    server_url = text_prompt(
-        message="Enter the TestBench server address and port <host:port>:",
-        validation=lambda text: True
-        if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/)?", text)
-        else f"Server '{text}' is not valid! ",
-        default=default,
-        filter=lambda raw: sub(
-            r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/?)?$",
-            r"https://\2\3/api/1/",
-            sub(r"^([\w\-.\d]+)$", r"\1:9443", raw),
-        ),
+    server_url = str(
+        text_prompt(
+            message="Enter the TestBench server address and port <host:port>:",
+            validation=lambda text: True
+            if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/)?", text)
+            else f"Server '{text}' is not valid! ",
+            default=default,
+            filter=lambda raw: sub(
+                r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/?)?$",
+                r"https://\2\3/api/1/",
+                sub(r"^([\w\-.\d]+)$", r"\1:9443", raw),
+            ),
+        )
     )
     print(server_url)
     return server_url
 
 
-def ask_for_ssl_verification_option() -> Union[bool, str]:
-    verification_option = selection_prompt(
+def ask_for_ssl_verification_option() -> bool | str:
+    verification_option: bool | str = selection_prompt(
         message="Select how the certificate of the TestBench server should be verified.",
         choices=[
             Choice("Do not verify the certificate at all.", False),
@@ -169,67 +171,79 @@ def ask_for_ssl_verification_option() -> Union[bool, str]:
 
 
 def ask_for_certificate_path() -> str:
-    return text_prompt(
+    certificate_path = text_prompt(
         message="Provide the path to the certificate.",
         type="path",
         validation=lambda path: True
         if isfile(path) and os.access(path, os.R_OK)
         else f"Path '{path}' is not a file or not readable.",
     )
+    if not isinstance(certificate_path, str):
+        raise ValueError("Unexpected text_prompt result.")
+    return certificate_path
 
 
 def ask_for_testbench_loginname(default="") -> str:
-    return text_prompt(
+    loginname = text_prompt(
         message="Enter your login name:",
         default=default,
     )
+    if not isinstance(loginname, str):
+        raise ValueError("Unexpected text_prompt result.")
+    return loginname
 
 
 def ask_for_testbench_password(default="") -> str:
-    return text_prompt(
+    password = text_prompt(
         message="Enter your password:",
         type="password",
         validation=None,
         default=default,
     )
+    if not isinstance(password, str):
+        raise ValueError("Unexpected text_prompt result.")
+    return password
 
 
 def ask_to_select_project(all_projects: dict, default=None) -> dict:
     choices = [Choice(project["name"], project) for project in all_projects["projects"]]
-    return selection_prompt(
+    project: dict = selection_prompt(
         message="Select a project.",
         choices=choices,
         no_valid_option_message="No project available.",
         default=next((x for x in choices if x.title == default), None),
     )
+    return project
 
 
 def ask_to_select_tov(project: dict, default=None) -> dict:
     choices = [Choice(tov["name"], tov) for tov in project["testObjectVersions"]]
-    return selection_prompt(
+    tov: dict = selection_prompt(
         message="Select a test object version.",
         choices=choices,
         no_valid_option_message="No test object version available.",
         default=next((x for x in choices if x.title == default), None),
     )
+    return tov
 
 
 def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
     choices = [Choice("<NO TEST CYCLE>", "NO_EXEC")] if export else []
     choices.extend([Choice(cycle["name"], cycle) for cycle in tov["testCycles"]])
-    return selection_prompt(
+    test_cycle: dict = selection_prompt(
         message="Select a test cycle.",
         choices=choices,
         no_valid_option_message="No test cycle available.",
         default=next((x for x in choices if x.title == default), None),
     )
+    return test_cycle
 
 
-def ask_to_select_filters(all_filters: List[dict]) -> List:
+def ask_to_select_filters(all_filters: list[dict]) -> list:
     if selection_prompt("Activate Filters:", choices=[Choice("No", False), Choice("Yes", True)]):
         all_filters_sorted = sorted(all_filters, key=lambda fltr: fltr["name"].casefold())
 
-        return checkbox_prompt(
+        filters: list = checkbox_prompt(
             message="Provide a set of filters.",
             choices=[
                 Choice(fltr["name"], {"name": fltr["name"], "type": fltr["type"]})
@@ -237,6 +251,7 @@ def ask_to_select_filters(all_filters: List[dict]) -> List:
             ],
             no_valid_option_message="No filters available.",
         )
+        return filters
     return []
 
 
@@ -302,7 +317,7 @@ def ask_for_output_path(default: str = "report.zip") -> str:
 
 
 def ask_for_input_path() -> str:
-    return text_prompt(
+    input_path = text_prompt(
         message="Provide the input path [report.zip]:",
         type="path",
         validation=lambda path: True
@@ -311,10 +326,13 @@ def ask_for_input_path() -> str:
         else f"'{path}' is not a file or not readable.",
         filter=lambda path: path if path else "report.zip",
     )
+    if not isinstance(input_path, str):
+        return "report.zip"
+    return input_path
 
 
 def ask_for_action_after_failed_login() -> str:
-    return selection_prompt(
+    action = selection_prompt(
         message="What do you want to do?",
         choices=[
             Choice("Retry password entry.", "retry_password"),
@@ -323,10 +341,13 @@ def ask_for_action_after_failed_login() -> str:
             Choice("Quit.", "quit"),
         ],
     )
+    if not isinstance(action, str):
+        raise ValueError("Unexpected selection_prompt result")
+    return action
 
 
 def ask_for_action_after_failed_server_connection() -> str:
-    return selection_prompt(
+    action = selection_prompt(
         message="What do you want to do?",
         choices=[
             Choice("Try same credentials using different server URL.", "retry_server"),
@@ -334,10 +355,13 @@ def ask_for_action_after_failed_server_connection() -> str:
             Choice("Quit.", "quit"),
         ],
     )
+    if not isinstance(action, str):
+        raise ValueError("Unexpected selection_prompt result")
+    return action
 
 
 def ask_for_action_after_login_timeout() -> str:
-    return selection_prompt(
+    action = selection_prompt(
         message="What do you want to do?",
         choices=[
             Choice("Try again.", "retry"),
@@ -346,6 +370,9 @@ def ask_for_action_after_login_timeout() -> str:
             Choice("Quit.", "quit"),
         ],
     )
+    if not isinstance(action, str):
+        raise ValueError("Unexpected selection_prompt result")
+    return action
 
 
 def ask_for_next_action():
@@ -362,23 +389,32 @@ def ask_for_next_action():
     )
 
 
-def ask_to_select_default_tester(all_testers: List[dict]) -> Dict[str, str]:
+def ask_to_select_default_tester(all_testers: list[dict]) -> str | None:
     all_testers_sorted = sorted(
         all_testers, key=lambda tester: tester["value"]["user-name"].casefold()
     )
 
-    return selection_prompt(
+    choices = [Choice("<No Tester>", False)] + [
+        Choice(tester["value"]["user-name"], tester["value"]["user-login"])
+        for tester in all_testers_sorted
+    ]
+
+    default_tester = selection_prompt(
         message="What do you want to do?",
-        choices=[Choice("<No Tester>", False)]
-        + [
-            Choice(tester["value"]["user-name"], tester["value"]["user-login"])
-            for tester in all_testers_sorted
-        ],
+        choices=choices,
         no_valid_option_message="No tester available.",
     )
 
+    if default_tester is False:
+        return None
 
-def ask_to_select_report_root_uid(cycle_structure: List[dict]):
+    if not isinstance(default_tester, str):
+        raise ValueError("Unexpected selection_prompt result")
+
+    return default_tester
+
+
+def ask_to_select_report_root_uid(cycle_structure: list[dict]):
     cycle_structure_tree = util.add_numbering_to_cycle(cycle_structure)
     return navigate_in_cycle_stucture(cycle_structure_tree)
 

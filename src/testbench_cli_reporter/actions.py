@@ -17,9 +17,9 @@ import contextlib
 import re
 import sys
 import traceback
+import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Dict, List, Union
-from xml.etree import ElementTree
+from typing import Any
 from zipfile import ZipFile
 
 from . import questions, testbench
@@ -46,7 +46,7 @@ class UnloggedAction(AbstractAction):
 
 
 class ExportXMLReport(AbstractAction):
-    def __init__(self, parameters: Union[ExportParameters, Dict[str, Any], None] = None):
+    def __init__(self, parameters: ExportParameters | dict[str, Any] | None = None):
         if parameters and isinstance(parameters, ExportParameters):
             exp_parameters = parameters
         elif parameters is None:
@@ -55,13 +55,13 @@ class ExportXMLReport(AbstractAction):
             exp_parameters = ExportParameters.from_dict(parameters or {})
         super().__init__()
         self.parameters: ExportParameters = exp_parameters
-        self.filters = []
+        self.filters: list = []
 
     def prepare(self, connection_log: ConnectionLog) -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects)
         selected_tov = questions.ask_to_select_tov(selected_project)
-        self.parameters.tovKey = selected_tov["key"]["serial"]
+        self.parameters.tovKey = str(selected_tov["key"]["serial"])
         self.parameters.projectPath = [
             selected_project["name"],
             selected_tov["name"],
@@ -74,7 +74,7 @@ class ExportXMLReport(AbstractAction):
                 self.parameters.tovKey
             )
         else:
-            self.parameters.cycleKey = selected_cycle["key"]["serial"]
+            self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
             self.parameters.projectPath.append(selected_cycle["name"])
             tttree_structure = connection_log.active_connection.get_test_cycle_structure(
                 self.parameters.cycleKey
@@ -88,9 +88,11 @@ class ExportXMLReport(AbstractAction):
 
         return True
 
-    def trigger(self, connection_log: ConnectionLog) -> Union[bool, str]:
+    def trigger(self, connection_log: ConnectionLog) -> bool:
         if (not self.parameters.cycleKey or self.parameters.cycleKey == "0") and (
-            not self.parameters.tovKey and len(self.parameters.projectPath) >= 2  # noqa: PLR2004
+            not self.parameters.tovKey
+            and self.parameters.projectPath is not None
+            and len(self.parameters.projectPath) >= 2  # noqa: PLR2004
         ):
             all_projects = connection_log.active_connection.get_all_projects()
             (
@@ -100,13 +102,13 @@ class ExportXMLReport(AbstractAction):
             ) = get_project_keys(all_projects, *self.parameters.projectPath)
 
         self.job_id = connection_log.active_connection.trigger_xml_report_generation(
-            self.parameters.tovKey,
-            self.parameters.cycleKey,
+            self.parameters.tovKey or "",
+            self.parameters.cycleKey or "",
             self.parameters.reportRootUID or "ROOT",
             self.parameters.filters or [],
             self.parameters.report_config or XmlExportConfig["Itep Export"],
         )
-        return self.job_id
+        return bool(self.job_id)
 
     def wait(self, connection_log: ConnectionLog) -> bool:
         try:
@@ -125,7 +127,7 @@ class ExportXMLReport(AbstractAction):
         return bool(result)
 
     def finish(self, connection_log: ConnectionLog) -> bool:
-        report = connection_log.active_connection.get_xml_report_data(self.report_tmp_name)
+        report = connection_log.active_connection.get_xml_report_data(str(self.report_tmp_name))
         with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(report)
         pretty_print_success_message(
@@ -134,17 +136,9 @@ class ExportXMLReport(AbstractAction):
         return True
 
 
-def Action(class_name: str, parameters: Dict[str, str]) -> AbstractAction:  # noqa: N802
-    try:
-        return globals()[class_name](parameters)
-    except AttributeError:
-        logger.error(f"Failed to create class {class_name}")
-        close_program()
-
-
 class ImportExecutionResults(AbstractAction):
-    def __init__(self, parameters: Union[ImportParameters, Dict[str, Any], None] = None):
-        if parameters and isinstance(parameters, ImportParameters):
+    def __init__(self, parameters: ImportParameters | dict[str, Any] | None = None):
+        if isinstance(parameters, ImportParameters):
             imp_parameters = parameters
         elif parameters is None:
             imp_parameters = ImportParameters("result.zip")
@@ -164,7 +158,7 @@ class ImportExecutionResults(AbstractAction):
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
         selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle)
         pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
-        self.parameters.cycleKey = selected_cycle["key"]["serial"]
+        self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
         cycle_structure = connection_log.active_connection.get_test_cycle_structure(
             self.parameters.cycleKey
         )
@@ -178,9 +172,9 @@ class ImportExecutionResults(AbstractAction):
         self.parameters.importConfig = questions.ask_to_config_import()
         return True
 
-    def get_project_path_from_report(self) -> List:
+    def get_project_path_from_report(self) -> list:
         with ZipFile(self.parameters.inputPath) as zip_file:
-            xml = ElementTree.fromstring(zip_file.read("report.xml"))
+            xml = ET.fromstring(zip_file.read("report.xml"))
             project_element = xml.find("./header/project")
             project = project_element.get("name") if project_element is not None else ""
             version_element = xml.find("./header/version")
@@ -209,7 +203,7 @@ class ImportExecutionResults(AbstractAction):
                 self.parameters.reportRootUID or "ROOT",
                 serverside_file_name,
                 self.parameters.defaultTester,
-                self.parameters.filters or [],
+                self.parameters.filters,
                 self.parameters.importConfig or TYPICAL_IMPORT_CONFIG,
             )
             return True
@@ -284,7 +278,7 @@ class BrowseProjects(UnloggedAction):
         for key, value in tse.items():
             if re.match(r".*_structure$", key):
                 return value, re.sub(r"_structure$", "", key)
-        raise ValueError(f"Unknown Element Type: {str(tse)}")
+        raise ValueError(f"Unknown Element Type: {tse!s}")
 
     def trigger(self, connection_log: ConnectionLog) -> bool:
         return True
@@ -303,7 +297,7 @@ class ExportActionLog(UnloggedAction):
             )
             return True
         except KeyError as e:
-            print(f"{str(e)}")
+            print(f"{e!s}")
             return False
 
 
@@ -322,3 +316,22 @@ class Quit(UnloggedAction):
     def trigger(self, connection_log=None):
         print("Closing program.")
         sys.exit(0)
+
+
+ACTION_CLASSES: dict[str, type[AbstractAction]] = {
+    "ExportXMLReport": ExportXMLReport,
+    "ImportExecutionResults": ImportExecutionResults,
+    "BrowseProjects": BrowseProjects,
+    "ExportActionLog": ExportActionLog,
+    "ChangeConnection": ChangeConnection,
+    "Quit": Quit,
+}
+
+
+def Action(class_name: str, parameters: dict[str, str]) -> AbstractAction:  # noqa: N802
+    try:
+        action_class = ACTION_CLASSES[class_name]
+    except KeyError:
+        logger.error(f"Unknown action class: {class_name}")
+        close_program()
+    return action_class(parameters)

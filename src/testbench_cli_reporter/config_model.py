@@ -1,6 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Union
 
 
 class FilterInfoType(str, Enum):
@@ -12,8 +11,8 @@ class FilterInfoType(str, Enum):
 @dataclass
 class FilterInfo:
     name: str
-    type: FilterInfoType  # noqa: A003
-    testThemeUID: Optional[str] = None
+    type: FilterInfoType
+    testThemeUID: str | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -26,16 +25,16 @@ class FilterInfo:
 
 @dataclass
 class TestCycleXMLReportOptions:
-    exportAttachments: Optional[bool]
-    exportDesignData: Optional[bool]
-    reportRootUID: Optional[str]
-    suppressFilteredData: Optional[bool]
-    characterEncoding: Optional[str]
-    exportExpandedData: Optional[bool]
-    filters: Optional[List[FilterInfo]]
-    exportExecutionProtocols: Optional[bool]
-    exportDescriptionFields: Optional[bool]
-    outputFormattedText: Optional[bool]
+    exportAttachments: bool | None
+    exportDesignData: bool | None
+    reportRootUID: str | None
+    suppressFilteredData: bool | None
+    characterEncoding: str | None
+    exportExpandedData: bool | None
+    filters: list[FilterInfo] | None
+    exportExecutionProtocols: bool | None
+    exportDescriptionFields: bool | None
+    outputFormattedText: bool | None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -56,12 +55,12 @@ class TestCycleXMLReportOptions:
 @dataclass
 class ExportParameters:
     outputPath: str
-    projectPath: Optional[List[str]] = None
-    tovKey: Optional[str] = None
-    cycleKey: Optional[str] = None
-    reportRootUID: Optional[str] = None
-    report_config: Optional[TestCycleXMLReportOptions] = None
-    filters: Optional[List[FilterInfo]] = None
+    projectPath: list[str] | None = None
+    tovKey: str | None = None
+    cycleKey: str | None = None
+    reportRootUID: str | None = None
+    report_config: TestCycleXMLReportOptions | None = None
+    filters: list[FilterInfo] | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -81,7 +80,7 @@ class ExportParameters:
 @dataclass
 class ExportAction:
     parameters: ExportParameters
-    type: str = "ExportXMLReport"  # noqa: A003
+    type: str = "ExportXMLReport"
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -91,16 +90,16 @@ class ExportAction:
 @dataclass
 class ExecutionResultsImportOptions:
     fileName: str
-    reportRootUID: Optional[str]
-    ignoreNonExecutedTestCases: Optional[bool]
-    defaultTester: Optional[str]
-    checkPaths: Optional[bool]
-    filters: Optional[List[FilterInfo]]
-    discardTesterInformation: Optional[bool]
-    useExistingDefect: Optional[bool]
+    reportRootUID: str | None
+    ignoreNonExecutedTestCases: bool | None
+    defaultTester: str | None
+    checkPaths: bool | None
+    filters: list[FilterInfo] | None
+    discardTesterInformation: bool | None
+    useExistingDefect: bool | None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary) -> "ExecutionResultsImportOptions":
         return cls(
             fileName=dictionary.get("fileName", "result.zip"),
             reportRootUID=dictionary.get("reportRootUID"),
@@ -116,12 +115,12 @@ class ExecutionResultsImportOptions:
 @dataclass
 class ImportParameters:
     inputPath: str
-    cycleKey: Optional[str] = None
-    projectPath: Optional[List[str]] = None
-    reportRootUID: Optional[str] = None
-    defaultTester: Optional[str] = None
-    filters: Optional[List[FilterInfo]] = None
-    importConfig: Optional[ExecutionResultsImportOptions] = None
+    cycleKey: str | None = None
+    projectPath: list[str] | None = None
+    reportRootUID: str | None = None
+    defaultTester: str | None = None
+    filters: list[FilterInfo] | None = None
+    importConfig: ExecutionResultsImportOptions | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -139,7 +138,7 @@ class ImportParameters:
 @dataclass
 class ImportAction:
     parameters: ImportParameters
-    type: str = "ImportExecutionResults"  # noqa: A003
+    type: str = "ImportExecutionResults"
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -148,12 +147,12 @@ class ImportAction:
 
 @dataclass
 class Configuration:
-    server_url: Optional[str] = None
+    server_url: str | None = None
     verify: bool = True
-    basicAuth: Optional[str] = None
-    loginname: Optional[str] = None
-    password: Optional[str] = None
-    actions: Optional[List[Union[ExportAction, ImportAction]]] = None
+    basicAuth: str | None = None
+    loginname: str | None = None
+    password: str | None = None
+    actions: list[ExportAction | ImportAction] | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -228,14 +227,9 @@ class FileLoggerConfig(ConsoleLoggerConfig):
 
 @dataclass
 class loggingConfig:  # noqa: N801
-    console: Optional[ConsoleLoggerConfig] = None
-    file: Optional[FileLoggerConfig] = None
-
-    def __post_init__(self):
-        if self.console is None:
-            self.console = ConsoleLoggerConfig.from_dict({})
-        if self.file is None:
-            self.file = FileLoggerConfig.from_dict({})
+    console: ConsoleLoggerConfig = field(default_factory=lambda: ConsoleLoggerConfig.from_dict({}))
+    # file: FileLoggerConfig = field(default_factory=lambda: FileLoggerConfig.from_dict({}))
+    file: FileLoggerConfig | None = None
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -247,14 +241,8 @@ class loggingConfig:  # noqa: N801
 
 @dataclass
 class CliReporterConfig:
-    configuration: Optional[List[Configuration]] = None
-    loggingConfiguration: Optional[loggingConfig] = None
-
-    def __post_init__(self):
-        if self.configuration is None:
-            self.configuration = []
-        if self.loggingConfiguration is None:
-            self.loggingConfiguration = loggingConfig()
+    configuration: list[Configuration] = field(default_factory=list)
+    loggingConfiguration: loggingConfig = field(default_factory=loggingConfig)
 
     @classmethod
     def from_dict(cls, dictionary):
