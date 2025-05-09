@@ -151,6 +151,8 @@ def ask_for_test_bench_server_url(default="") -> str:
             ),
         )
     )
+    if not isinstance(server_url, str):
+        raise ValueError("Unexpected text_prompt result.")
     print(server_url)
     return server_url
 
