@@ -16,7 +16,6 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 from re import fullmatch, sub
-from typing import Callable, Optional, Union
 
 from questionary import Choice, Style, checkbox, confirm, select, unsafe_prompt
 from questionary import print as pprint
@@ -157,6 +156,8 @@ def ask_for_test_bench_server_url(default="") -> str:
             sub(r"^([\w\-.\d]+)$", r"\1:9445", raw),
         ),
     )
+    if not isinstance(server_url, str):
+        raise ValueError("Unexpected text_prompt result.")
     print(server_url)
     return server_url
 
@@ -444,7 +445,7 @@ def ask_for_next_action():
     )
 
 
-def ask_to_select_default_tester(all_testers: list[dict]) -> dict[str, str]:
+def ask_to_select_default_tester(all_testers: list[dict]) -> str | None:
     all_testers_sorted = sorted(
         all_testers, key=lambda tester: tester["value"]["user-name"].casefold()
     )

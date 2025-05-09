@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -15,7 +16,7 @@ class FilterInfo:
     testThemeUID: str | None = None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(
             name=dictionary["name"],
             filterType=FilterInfoType(dictionary["type"]),
@@ -30,7 +31,7 @@ class FilterJsonInfo:
     testThemeUID: str | None = None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(
             name=dictionary["name"],
             filterType=FilterInfoType(dictionary["filterType"]),
@@ -52,7 +53,7 @@ class TestCycleXMLReportOptions:
     outputFormattedText: bool | None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(
             exportAttachments=dictionary.get("exportAttachments"),
             exportDesignData=dictionary.get("exportDesignData"),
@@ -77,7 +78,7 @@ class TestCycleJsonReportOptions:
     filters: list[FilterJsonInfo] | None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(
             treeRootUID=dictionary.get("treeRootUID"),
             basedOnExecution=dictionary.get("basedOnExecution"),
@@ -99,7 +100,7 @@ class ExportParameters:
     filters: list[FilterInfo] | None = None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(
             outputPath=dictionary["outputPath"],
             projectPath=dictionary.get("projectPath", []),
@@ -122,17 +123,19 @@ class ExportJsonParameters:
     projectKey: str | None = None
     tovKey: str | None = None
     cycleKey: str | None = None
+    reportRootUID: str | None = None
     report_config: TestCycleJsonReportOptions | None = None
     filters: list[FilterJsonInfo] | None = None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(
             outputPath=dictionary["outputPath"],
             projectPath=dictionary.get("projectPath", []),
             projectKey=dictionary.get("projectKey"),
             tovKey=dictionary.get("tovKey"),
             cycleKey=dictionary.get("cycleKey"),
+            reportRootUID=dictionary.get("reportRootUID"),
             report_config=(
                 TestCycleJsonReportOptions.from_dict(dictionary.get("report_config") or {})
                 if dictionary.get("report_config")
@@ -143,22 +146,30 @@ class ExportJsonParameters:
 
 
 @dataclass
-class ExportAction:
+class BaseAction(ABC):
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, dictionary: dict):
+        pass
+
+
+@dataclass
+class ExportAction(BaseAction):
     parameters: ExportParameters
     type: str = "ExportXMLReport"
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(parameters=ExportParameters.from_dict(dictionary.get("parameters") or {}))
 
 
 @dataclass
-class ExportJsonAction:
+class ExportJsonAction(BaseAction):
     parameters: ExportJsonParameters
     type: str = "ExportJSONReport"
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(parameters=ExportJsonParameters.from_dict(dictionary.get("parameters") or {}))
 
 
@@ -174,7 +185,7 @@ class ExecutionXmlResultsImportOptions:
     useExistingDefect: bool | None
 
     @classmethod
-    def from_dict(cls, dictionary) -> "ExecutionXmlResultsImportOptions":
+    def from_dict(cls, dictionary: dict) -> "ExecutionXmlResultsImportOptions":
         return cls(
             fileName=dictionary.get("fileName", "result.zip"),
             reportRootUID=dictionary.get("reportRootUID"),
@@ -199,7 +210,7 @@ class ExecutionJsonResultsImportOptions:
     useExistingDefect: bool | None
 
     @classmethod
-    def from_dict(cls, dictionary) -> "ExecutionJsonResultsImportOptions":
+    def from_dict(cls, dictionary: dict) -> "ExecutionJsonResultsImportOptions":
         return cls(
             fileName=dictionary.get("fileName", "result.zip"),
             reportRootUID=dictionary.get("reportRootUID"),
@@ -216,22 +227,27 @@ class ExecutionJsonResultsImportOptions:
 class ImportParameters:
     inputPath: str
     cycleKey: str | None = None
-    projectPath:list[str] | None = None
+    projectPath: list[str] | None = None
     reportRootUID: str | None = None
     defaultTester: str | None = None
     filters: list[FilterInfo] | None = None
     importConfig: ExecutionXmlResultsImportOptions | None = None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
+        import_config_dict = dictionary.get("importConfig")
+        importConfig = (
+            ExecutionXmlResultsImportOptions.from_dict(import_config_dict)
+            if import_config_dict is not None
+            else None
+        )
+
         return cls(
             inputPath=dictionary["inputPath"],
             reportRootUID=dictionary.get("reportRootUID"),
             defaultTester=dictionary.get("defaultTester"),
             filters=dictionary.get("filters", []),
-            importConfig=ExecutionXmlResultsImportOptions.from_dict(
-                dictionary.get("importConfig") if dictionary.get("importConfig") else None
-            ),
+            importConfig=importConfig,
         )
 
 
@@ -247,35 +263,40 @@ class ImportJsonParameters:
     importConfig: ExecutionJsonResultsImportOptions | None = None
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
+        import_config_dict = dictionary.get("importConfig")
+        importConfig = (
+            ExecutionJsonResultsImportOptions.from_dict(import_config_dict)
+            if import_config_dict is not None
+            else None
+        )
+
         return cls(
             inputPath=dictionary["inputPath"],
             reportRootUID=dictionary.get("reportRootUID"),
             defaultTester=dictionary.get("defaultTester"),
             filters=dictionary.get("filters", []),
-            importConfig=ExecutionJsonResultsImportOptions.from_dict(
-                dictionary.get("importConfig") if dictionary.get("importConfig") else None
-            ),
+            importConfig=importConfig,
         )
 
 
 @dataclass
-class ImportXMLAction:
+class ImportXMLAction(BaseAction):
     parameters: ImportParameters
     type: str = "ImportXMLExecutionResults"
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(parameters=ImportParameters.from_dict(dictionary.get("parameters") or {}))
 
 
 @dataclass
-class ImportJSONAction:
+class ImportJSONAction(BaseAction):
     parameters: ImportJsonParameters
     type: str = "ImportJSONExecutionResults"
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(parameters=ImportJsonParameters.from_dict(dictionary.get("parameters") or {}))
 
 
@@ -287,11 +308,11 @@ class Configuration:
     basicAuth: str | None = None
     loginname: str | None = None
     password: str | None = None
-    actions: list[ExportAction | ExportJsonAction | ImportXMLAction | ImportJSONAction] | None = None
+    actions: list[BaseAction] | None = None
 
     @classmethod
-    def from_dict(cls, dictionary):
-        action_classes = {
+    def from_dict(cls, dictionary: dict):
+        action_classes: dict[str, type[BaseAction]] = {
             "ImportXMLExecutionResults": ImportXMLAction,
             "ExportXMLReport": ExportAction,
             "ExportJSONReport": ExportJsonAction,
@@ -328,7 +349,7 @@ class ConsoleLoggerConfig:
     logFormat: str
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         log_level = LogLevel[dictionary.get("logLevel", "INFO").upper()]
         if log_level.value not in LogLevel.__members__:
             print(
@@ -347,7 +368,7 @@ class FileLoggerConfig(ConsoleLoggerConfig):
     fileName: str
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         log_level = LogLevel[dictionary.get("logLevel", "DEBUG").upper()]
         if log_level.value not in LogLevel.__members__:
             print(
@@ -371,7 +392,7 @@ class loggingConfig:  # noqa: N801
     file: FileLoggerConfig = field(default_factory=lambda: FileLoggerConfig.from_dict({}))
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(
             console=ConsoleLoggerConfig.from_dict(dictionary.get("console") or {}),
             file=FileLoggerConfig.from_dict(dictionary.get("file") or {}),
@@ -384,7 +405,7 @@ class CliReporterConfig:
     loggingConfiguration: loggingConfig = field(default_factory=loggingConfig)
 
     @classmethod
-    def from_dict(cls, dictionary):
+    def from_dict(cls, dictionary: dict):
         return cls(
             configuration=[Configuration.from_dict(c) for c in dictionary.get("configuration", [])],
             loggingConfiguration=loggingConfig.from_dict(

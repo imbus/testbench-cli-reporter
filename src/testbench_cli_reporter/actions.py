@@ -54,7 +54,7 @@ class UnloggedAction(AbstractAction):
 
 class ExportXMLReport(AbstractAction):
     def __init__(self, parameters: ExportParameters | dict[str, Any] | None = None):
-        if parameters and isinstance(parameters, ExportParameters):
+        if isinstance(parameters, ExportParameters):
             exp_parameters = parameters
         elif parameters is None:
             exp_parameters = ExportParameters("report.zip")
@@ -63,9 +63,9 @@ class ExportXMLReport(AbstractAction):
         super().__init__()
         self.parameters: ExportParameters = exp_parameters
         self.filters: list = []
-        self.start_time = 0
+        self.start_time: float = 0
 
-    def prepare(self, connection_log) -> bool:
+    def prepare(self, connection_log: testbench.ConnectionLog) -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects)
         selected_tov = questions.ask_to_select_tov(selected_project)
@@ -96,7 +96,7 @@ class ExportXMLReport(AbstractAction):
 
         return True
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         if (not self.parameters.cycleKey or self.parameters.cycleKey == "0") and (
             not self.parameters.tovKey
             and self.parameters.projectPath is not None
@@ -119,7 +119,7 @@ class ExportXMLReport(AbstractAction):
         self.start_time = monotonic()
         return bool(self.job_id)
 
-    def wait(self, connection_log) -> bool:
+    def wait(self, connection_log: testbench.ConnectionLog) -> bool:
         try:
             self.report_tmp_name = connection_log.active_connection.wait_for_tmp_xml_report_name(
                 self.job_id
@@ -129,13 +129,13 @@ class ExportXMLReport(AbstractAction):
             logger.debug(traceback.format_exc())
             return False
 
-    def poll(self, connection_log) -> bool:
+    def poll(self, connection_log: testbench.ConnectionLog) -> bool:
         result = connection_log.active_connection.get_exp_job_result(self.job_id)
         if result is not None:
             self.report_tmp_name = result
         return bool(result)
 
-    def finish(self, connection_log) -> bool:
+    def finish(self, connection_log: testbench.ConnectionLog) -> bool:
         report = connection_log.active_connection.get_xml_report_data(str(self.report_tmp_name))
         with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(report)
@@ -147,8 +147,8 @@ class ExportXMLReport(AbstractAction):
 
 
 class ExportJSONReport(AbstractAction):
-    def __init__(self, parameters: ExportJsonParameters | dict[str, Any] = None):
-        if parameters and isinstance(parameters, ExportJsonParameters):
+    def __init__(self, parameters: ExportJsonParameters | dict[str, Any] | None = None):
+        if isinstance(parameters, ExportJsonParameters):
             exp_parameters = parameters
         elif parameters is None:
             exp_parameters = ExportJsonParameters("json-report.zip")
@@ -156,14 +156,14 @@ class ExportJSONReport(AbstractAction):
             exp_parameters = ExportJsonParameters.from_dict(parameters or {})
         super().__init__()
         self.parameters: ExportJsonParameters = exp_parameters
-        self.filters = []
-        self.start_time = 0
+        self.filters: list = []
+        self.start_time: float = 0
 
-    def prepare(self, connection_log) -> bool:
+    def prepare(self, connection_log: testbench.ConnectionLog) -> bool:
         all_projects = connection_log.active_connection.get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects)
         selected_tov = questions.ask_to_select_tov(selected_project)
-        self.parameters.tovKey = selected_tov["key"]["serial"]
+        self.parameters.tovKey = str(selected_tov["key"]["serial"])
         self.parameters.projectPath = [
             selected_project["name"],
             selected_tov["name"],
@@ -176,7 +176,7 @@ class ExportJSONReport(AbstractAction):
                 self.parameters.tovKey
             )
         else:
-            self.parameters.cycleKey = selected_cycle["key"]["serial"]
+            self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
             self.parameters.projectPath.append(selected_cycle["name"])
             tttree_structure = connection_log.active_connection.get_test_cycle_structure(
                 self.parameters.cycleKey
@@ -190,7 +190,7 @@ class ExportJSONReport(AbstractAction):
 
         return True
 
-    def trigger(self, connection_log) -> bool | str:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         if (
             not self.parameters.projectKey
             and self.parameters.projectPath
@@ -199,6 +199,9 @@ class ExportJSONReport(AbstractAction):
             self.parameters.projectKey = connection_log.active_connection.get_project_key_new_play(
                 self.parameters.projectPath[0]
             )
+        if not self.parameters.projectKey:
+            raise ValueError("Invalid Config! 'projectKey' missing.")
+
         if (
             not self.parameters.tovKey
             and self.parameters.projectPath
@@ -207,6 +210,9 @@ class ExportJSONReport(AbstractAction):
             self.parameters.tovKey = connection_log.active_connection.get_tov_key_new_play(
                 self.parameters.projectKey, self.parameters.projectPath[1]
             )
+        if not self.parameters.tovKey:
+            raise ValueError("Invalid Config! 'tovKey' missing.")
+
         if (
             not self.parameters.cycleKey
             and self.parameters.projectPath
@@ -215,22 +221,27 @@ class ExportJSONReport(AbstractAction):
             self.parameters.cycleKey = connection_log.active_connection.get_cycle_key_new_play(
                 self.parameters.projectKey, self.parameters.tovKey, self.parameters.projectPath[2]
             )
+
+        reportRootUID: str | None = None
+        if self.parameters.reportRootUID:
+            reportRootUID = self.parameters.reportRootUID
+        elif self.parameters.report_config is not None:
+            reportRootUID = self.parameters.report_config.treeRootUID
+
         self.job_id = connection_log.active_connection.trigger_json_report_generation(
             project_key=self.parameters.projectKey,
             tov_key=self.parameters.tovKey,
             cycle_key=self.parameters.cycleKey,
-            reportRootUID=(
-                self.parameters.reportRootUID
-                if hasattr(self.parameters, "reportRootUID")
-                else self.parameters.report_config.treeRootUID
-            ),
+            reportRootUID=reportRootUID,
             filters=self.parameters.filters or [],
             report_config=self.parameters.report_config,
         )
         self.start_time = monotonic()
-        return self.job_id
+        return bool(self.job_id)
 
-    def wait(self, connection_log) -> bool | str:
+    def wait(self, connection_log: testbench.ConnectionLog) -> bool:
+        if not self.parameters.projectKey:
+            raise ValueError("Invalid Config! 'projectKey' missing.")
         try:
             self.report_tmp_name = connection_log.active_connection.wait_for_tmp_json_report_name(
                 self.parameters.projectKey, self.job_id
@@ -240,14 +251,20 @@ class ExportJSONReport(AbstractAction):
             logger.debug(traceback.format_exc())
             return False
 
-    def poll(self, connection_log) -> bool:
+    def poll(self, connection_log: testbench.ConnectionLog) -> bool:
+        if not self.parameters.projectKey or not self.job_id:
+            raise ValueError("Invalid Config! 'projectKey' or 'job_id' missing.")
         result = connection_log.active_connection.get_exp_json_job_result(
             self.parameters.projectKey, self.job_id
         )
-        self.report_tmp_name = result.report_name
+        self.report_tmp_name = result.report_name or ""
         return result.completion
 
-    def finish(self, connection_log) -> bool:
+    def finish(self, connection_log: testbench.ConnectionLog) -> bool:
+        if not self.parameters.projectKey:
+            raise ValueError("Invalid Config! 'projectKey' missing.")
+        if not self.report_tmp_name or not isinstance(self.report_tmp_name, str):
+            raise ValueError("Invalid Config! 'report_tmp_name' missing or not str.")
         report = connection_log.active_connection.get_json_report_data(
             self.parameters.projectKey, self.report_tmp_name
         )
@@ -271,7 +288,7 @@ class ImportXMLExecutionResults(AbstractAction):
         super().__init__()
         self.parameters: ImportParameters = imp_parameters
 
-    def prepare(self, connection_log) -> bool:
+    def prepare(self, connection_log: testbench.ConnectionLog) -> bool:
         self.parameters.inputPath = questions.ask_for_input_path()
         project = version = cycle = None
         with contextlib.suppress(Exception):
@@ -307,7 +324,7 @@ class ImportXMLExecutionResults(AbstractAction):
             cycle = cycle_element.get("name") if cycle_element is not None else ""
             return [project, version, cycle]
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         if not self.parameters.cycleKey:
             if len(self.parameters.projectPath or []) != 3:  # noqa: PLR2004
                 self.parameters.projectPath = self.get_project_path_from_report()
@@ -326,14 +343,14 @@ class ImportXMLExecutionResults(AbstractAction):
                 self.parameters.cycleKey,
                 self.parameters.reportRootUID or "ROOT",
                 serverside_file_name,
-                self.parameters.defaultTester,
+                self.parameters.defaultTester or "",
                 self.parameters.filters or [],
                 self.parameters.importConfig or TYPICAL_XML_IMPORT_CONFIG,
             )
             return True
         return False
 
-    def set_cycle_key_from_path(self, connection_log):
+    def set_cycle_key_from_path(self, connection_log: testbench.ConnectionLog):
         all_projects = connection_log.active_connection.get_all_projects()
         if (
             isinstance(self.parameters.projectPath, list) and len(self.parameters.projectPath) == 3  # noqa: PLR2004
@@ -346,7 +363,7 @@ class ImportXMLExecutionResults(AbstractAction):
         if not self.parameters.cycleKey:
             raise ValueError("Invalid Config! 'cycleKey' missing.")
 
-    def wait(self, connection_log) -> bool:
+    def wait(self, connection_log: testbench.ConnectionLog) -> bool:
         self.report_tmp_name = (
             connection_log.active_connection.wait_for_execution_xml_results_import_to_finish(
                 self.job_id
@@ -354,13 +371,13 @@ class ImportXMLExecutionResults(AbstractAction):
         )
         return bool(self.report_tmp_name)
 
-    def poll(self, connection_log) -> bool:
+    def poll(self, connection_log: testbench.ConnectionLog) -> bool:
         result = connection_log.active_connection.get_imp_job_result(self.job_id)
         if result is not None:
             self.report_tmp_name = result
         return bool(result)
 
-    def finish(self, connection_log) -> bool:
+    def finish(self, connection_log: testbench.ConnectionLog) -> bool:
         if self.report_tmp_name:
             pretty_print_success_message(
                 "Report", Path(self.parameters.inputPath).resolve(), "was imported"
@@ -371,7 +388,7 @@ class ImportXMLExecutionResults(AbstractAction):
 
 class ImportJSONExecutionResults(AbstractAction):
     def __init__(self, parameters: ImportJsonParameters | dict[str, Any] | None = None):
-        if parameters and isinstance(parameters, ImportJsonParameters):
+        if isinstance(parameters, ImportJsonParameters):
             imp_parameters = parameters
         elif parameters is None:
             imp_parameters = ImportJsonParameters("result.zip")
@@ -380,7 +397,7 @@ class ImportJSONExecutionResults(AbstractAction):
         super().__init__()
         self.parameters: ImportJsonParameters = imp_parameters
 
-    def prepare(self, connection_log) -> bool:
+    def prepare(self, connection_log: testbench.ConnectionLog) -> bool:
         self.parameters.inputPath = questions.ask_for_input_path()
         project = version = cycle = None
         with contextlib.suppress(Exception):
@@ -392,7 +409,7 @@ class ImportJSONExecutionResults(AbstractAction):
         selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle)
         pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
         self.parameters.projectKey = selected_project["key"]["serial"]
-        self.parameters.cycleKey = selected_cycle["key"]["serial"]
+        self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
         cycle_structure = connection_log.active_connection.get_test_cycle_structure(
             self.parameters.cycleKey
         )
@@ -408,14 +425,17 @@ class ImportJSONExecutionResults(AbstractAction):
 
     def get_project_path_from_report(self) -> list:
         with ZipFile(self.parameters.inputPath) as zip_file:
-            project_info = json.load(zip_file.open("project.json"))
+            project_info: dict = json.load(zip_file.open("project.json"))
             return [
                 project_info.get("name", ""),
                 project_info.get("projectContext", {}).get("tovName", ""),
                 project_info.get("projectContext", {}).get("cycleName", ""),
             ]
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
+        if not self.parameters.projectKey:
+            raise ValueError("Invalid Config! 'projectKey' missing.")
+
         if not self.parameters.cycleKey:
             if len(self.parameters.projectPath or []) != 3:  # noqa: PLR2004
                 self.parameters.projectPath = self.get_project_path_from_report()
@@ -433,18 +453,17 @@ class ImportJSONExecutionResults(AbstractAction):
                 cycle_key=self.parameters.cycleKey,
                 report_root_uid=self.parameters.reportRootUID or "ROOT",
                 serverside_file_name=serverside_file_name,
-                default_tester=self.parameters.defaultTester,
+                default_tester=self.parameters.defaultTester or "",
                 filters=self.parameters.filters or [],
                 import_config=self.parameters.importConfig or TYPICAL_JSON_IMPORT_CONFIG,
             )
             return True
         return False
 
-    def set_cycle_key_from_path(self, connection_log):
+    def set_cycle_key_from_path(self, connection_log: testbench.ConnectionLog):
         all_projects = connection_log.active_connection.get_all_projects()
         if (
-            isinstance(self.parameters.projectPath, list)
-            and len(self.parameters.projectPath) == 3  # noqa: PLR2004
+            isinstance(self.parameters.projectPath, list) and len(self.parameters.projectPath) == 3  # noqa: PLR2004
         ):
             (
                 self.parameters.projectKey,
@@ -456,7 +475,9 @@ class ImportJSONExecutionResults(AbstractAction):
         if not self.parameters.projectKey:
             raise ValueError("Invalid Config! 'projectKey' missing.")
 
-    def wait(self, connection_log) -> bool:
+    def wait(self, connection_log: testbench.ConnectionLog) -> bool:
+        if not self.parameters.projectKey or not self.job_id:
+            raise ValueError("Invalid Config! 'projectKey' or 'job_id' missing.")
         self.report_tmp_name = (
             connection_log.active_connection.wait_for_execution_json_results_import_to_finish(
                 project_key=self.parameters.projectKey, job_id=self.job_id
@@ -464,14 +485,16 @@ class ImportJSONExecutionResults(AbstractAction):
         )
         return self.report_tmp_name
 
-    def poll(self, connection_log) -> bool:
+    def poll(self, connection_log: testbench.ConnectionLog) -> bool:
+        if not self.parameters.projectKey or not self.job_id:
+            raise ValueError("Invalid Config! 'projectKey' or 'job_id' missing.")
         result = connection_log.active_connection.get_imp_json_job_result(
             project_key=self.parameters.projectKey, job_id=self.job_id
         )
         self.report_tmp_name = result.completion
         return result.completion
 
-    def finish(self, connection_log) -> bool:
+    def finish(self, connection_log: testbench.ConnectionLog) -> bool:
         if self.report_tmp_name:
             pretty_print_success_message(
                 "JSON-Report", Path(self.parameters.inputPath).resolve(), "was imported"
@@ -481,7 +504,7 @@ class ImportJSONExecutionResults(AbstractAction):
 
 
 class BrowseProjects(UnloggedAction):
-    def prepare(self, connection_log) -> bool:
+    def prepare(self, connection_log: testbench.ConnectionLog) -> bool:
         arg = parser.parse_args()
         project = arg.project
         version = arg.version
@@ -515,16 +538,16 @@ class BrowseProjects(UnloggedAction):
                 return value, re.sub(r"_structure$", "", key)
         raise ValueError(f"Unknown Element Type: {tse!s}")
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         return True
 
 
 class ExportActionLog(UnloggedAction):
-    def prepare(self, connection_log):
+    def prepare(self, connection_log: testbench.ConnectionLog):
         self.parameters["outputPath"] = questions.ask_for_output_path("config.json")
         return True
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         try:
             connection_log.export_as_json(self.parameters["outputPath"])
             pretty_print_success_message(
@@ -539,18 +562,18 @@ class ExportActionLog(UnloggedAction):
 
 
 class ChangeConnection(UnloggedAction):
-    def prepare(self, connection_log):
+    def prepare(self, connection_log: testbench.ConnectionLog):
         self.parameters["newConnection"] = testbench.login()
         return True
 
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
         connection_log.active_connection.close()
         connection_log.add_connection(self.parameters["newConnection"])
         return True
 
 
 class Quit(UnloggedAction):
-    def trigger(self, connection_log=None):
+    def trigger(self, connection_log: testbench.ConnectionLog | None = None):
         print("Closing program.")
         sys.exit(0)
 

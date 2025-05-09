@@ -76,6 +76,8 @@ class Connection:
         url_matcher = fullmatch(
             r"(?P<protocol>https?)://(?P<host>[\w\-.]+):(?P<port>\d{1,5})/api/", server_url
         )
+        if url_matcher is None:
+            raise ValueError(f"Invalid server URL: {server_url}")
         self.server_protocol = url_matcher.group("protocol")
         self.server_host = url_matcher.group("host")
         self.server_port = url_matcher.group("port")
@@ -129,15 +131,16 @@ class Connection:
             json={"login": self.loginname, "password": self.password, "force": True},
         )
         try:
+            response.raise_for_status()
             resp_dict = response.json()
-            logger.info(f"Authenticated with session token: {resp_dict.get('sessionToken')}")
-        except json.JSONDecodeError as e:
+            self.session_token = resp_dict["sessionToken"]
+            logger.info(f"Authenticated with session token: {self.session_token}")
+        except (requests.HTTPError, json.JSONDecodeError, KeyError) as e:
             raise requests.HTTPError(
                 "Authentication failed\n"
                 f"Status code: {response.status_code}\n"
                 f"Response: {response.text}"
             ) from e
-        self.session_token = resp_dict["sessionToken"]
 
     def get_loginname_from_server(self):
         response = self.session.get(f"{self.server_url}login/session/v1").json()
@@ -218,7 +221,7 @@ class Connection:
         all_projects = self.session.get(f"{self.server_url}projects/v1").json()
         for project in all_projects:
             if project["name"] == project_name:
-                return project["key"]
+                return str(project["key"])
         raise ValueError(f"Project {project_name} not found")
 
     def get_tov_key_new_play(self, project_key: str, tov_name: str) -> str:
@@ -227,7 +230,7 @@ class Connection:
         ).json()
         for tov in all_tovs:
             if tov["name"] == tov_name:
-                return tov["key"]
+                return str(tov["key"])
         raise ValueError(f"TOV {tov_name} not found")
 
     def get_cycle_key_new_play(self, project_key: str, tov_key: str, cycle_name: str) -> str:
@@ -236,13 +239,14 @@ class Connection:
         ).json()
         for cycle in all_cycles:
             if cycle["name"] == cycle_name:
-                return cycle["key"]
+                return str(cycle["key"])
         raise ValueError(f"Cycle {cycle_name} not found")
 
     def get_project_tree_new_play(self, project_key: str) -> dict:
-        return self.session.get(
+        project_tree: dict = self.session.get(
             f"{self.server_url}projects/{project_key}/tree/v1",
         ).json()
+        return project_tree
 
     def get_all_projects(self) -> dict:
         all_projects = dict(
@@ -255,11 +259,10 @@ class Connection:
         return all_projects
 
     def get_all_filters(self) -> list[dict]:
-        all_filters = self.legacy_session.get(
+        all_filters: list[dict] = self.legacy_session.get(
             f"{self.server_legacy_url}filters",
-        )
-
-        return all_filters.json()
+        ).json()
+        return all_filters
 
     def get_xml_report(
         self, tov_key: str, cycle_key: str, reportRootUID: str, filters=None
@@ -275,7 +278,7 @@ class Connection:
         project_key: str,
         tov_key: str | None = None,
         cycle_key: str | None = None,
-        reportRootUID: str = "ROOT",
+        reportRootUID: str | None = "ROOT",
         filters=None,
         report_config=None,
     ) -> str:
@@ -299,15 +302,19 @@ class Connection:
             ).json()
         else:
             raise ValueError("Either tov_key or cycle_key must be provided")
-        return response["jobID"]
+        return str(response["jobID"])
 
     def wait_for_tmp_json_report_name(self, project_key: str, job_id: str) -> str:
         while True:
             report_generation_result = self.get_exp_json_job_result(project_key, job_id)
             if report_generation_result.completion:
                 print(" " * 80, end="\r")
-                return report_generation_result.report_name
-            if report_generation_result.percentage:
+                return report_generation_result.report_name or ""
+            if (
+                report_generation_result.handled_items
+                and report_generation_result.total_items
+                and report_generation_result.percentage
+            ):
                 pretty_print_progress_bar(
                     mode="Exporting",
                     handled=report_generation_result.handled_items,
@@ -319,16 +326,16 @@ class Connection:
                 spin_spinner("Waiting until creation of JSON report is complete")
 
     def get_exp_json_job_result(self, project_key: str, job_id: str) -> JobProgress:
-        report_generation_status = self.session.get(
+        report_generation_status: dict = self.session.get(
             f"{self.server_url}projects/{project_key}/report/job/{job_id}/v1",
         ).json()
-        progress = report_generation_status.get('progress')
-        completion = report_generation_status.get('completion')
+        progress = report_generation_status.get("progress")
+        completion = report_generation_status.get("completion")
         if not completion:
             if not progress:
                 return JobProgress(completion=False)
-            total_items = progress.get('totalItemsCount')
-            handled_items = progress.get('handledItemsCount')
+            total_items = progress.get("totalItemsCount")
+            handled_items = progress.get("handledItemsCount")
             percentage = round(((handled_items / total_items) * 100) / 2) * 2
             return JobProgress(
                 completion=False,
@@ -336,14 +343,14 @@ class Connection:
                 total_items=total_items,
                 handled_items=handled_items,
             )
-        result = report_generation_status.get('completion').get('result')
+        result = completion.get("result")
         logger.debug(result)
-        if result.get('ReportingSuccess', result.get('Success')):
+        if result.get("ReportingSuccess", result.get("Success")):
             return JobProgress(
                 completion=True,
-                report_name=result.get('ReportingSuccess', result.get('Success')).get('reportName'),
+                report_name=result.get("ReportingSuccess", result.get("Success")).get("reportName"),
             )
-        raise AssertionError(result.get('ReportingFailure', result.get('Failure')).get('error'))
+        raise AssertionError(result.get("ReportingFailure", result.get("Failure")).get("error"))
 
     # GET /api/projects/{projectKey}/import/job/{jobId}/v1
     def wait_for_execution_json_results_import_to_finish(
@@ -352,10 +359,14 @@ class Connection:
         try:
             while True:
                 import_status = self.get_imp_json_job_result(project_key, job_id)
-                if import_status.completion:
+                if import_status.completion is True:
                     print(" " * 80, end="\r")
                     return import_status.completion
-                if import_status.percentage:
+                if (
+                    import_status.handled_items
+                    and import_status.total_items
+                    and import_status.percentage
+                ):
                     pretty_print_progress_bar(
                         mode="Importing",
                         handled=import_status.handled_items,
@@ -370,17 +381,17 @@ class Connection:
             raise e
 
     # GET /api/projects/{projectKey}/import/job/{jobId}/v1
-    def get_imp_json_job_result(self, project_key: str, job_id: str):
-        report_import_status = self.session.get(
+    def get_imp_json_job_result(self, project_key: str, job_id: str) -> JobProgress:
+        report_import_status: dict = self.session.get(
             f"{self.server_url}projects/{project_key}/import/job/{job_id}/v1",
         ).json()
-        progress = report_import_status.get('progress')
-        completion = report_import_status.get('completion')
+        progress = report_import_status.get("progress")
+        completion = report_import_status.get("completion")
         if not completion:
             if not progress:
                 return JobProgress(completion=False)
-            total_items = progress.get('totalItemsCount')
-            handled_items = progress.get('handledItemsCount')
+            total_items = progress.get("totalItemsCount")
+            handled_items = progress.get("handledItemsCount")
             percentage = round(((handled_items / total_items) * 100) / 2) * 2
             return JobProgress(
                 completion=False,
@@ -388,10 +399,10 @@ class Connection:
                 total_items=total_items,
                 handled_items=handled_items,
             )
-        result = report_import_status.get('completion').get('result')
-        if result.get('ExecutionImportingSuccess'):
+        result = report_import_status.get("completion", {}).get("result", {})
+        if result.get("ExecutionImportingSuccess"):
             return JobProgress(completion=True)
-        raise AssertionError(result.get('ExecutionImportingFailure'))
+        raise AssertionError(result.get("ExecutionImportingFailure"))
 
     def trigger_xml_report_generation(
         self,
@@ -437,7 +448,7 @@ class Connection:
         if report_generation_status is None:
             return None
         result = report_generation_status["result"]
-        if "Right" in result:
+        if "Right" in result and isinstance(result["Right"], str):
             logger.debug(result)
             return result["Right"]
         raise AssertionError(result)
@@ -452,9 +463,10 @@ class Connection:
     def get_test_cases_of_specification(
         self, testcaseset_key: str, specification_key: str
     ) -> list[dict]:
-        return self.legacy_session.get(
+        test_cases: list[dict] = self.legacy_session.get(
             f"{self.server_legacy_url}testCaseSets/{testcaseset_key}/specifications/{specification_key}/testCases",
         ).json()
+        return test_cases
 
     def get_xml_report_data(self, report_tmp_name: str) -> bytes:
         report = self.legacy_session.get(
@@ -469,7 +481,8 @@ class Connection:
         report = self.session.get(
             f"{self.server_url}projects/{project_key}/report/{report_tmp_name}/v1",
         )
-        return report.content
+        content: bytes = report.content
+        return content
 
     def get_all_testers_of_project(self, project_key: str) -> list[dict]:
         return [
@@ -479,11 +492,10 @@ class Connection:
         ]
 
     def get_all_members_of_project(self, project_key: str) -> list[dict]:
-        all_project_members = self.legacy_session.get(
+        all_project_members: list[dict] = self.legacy_session.get(
             f"{self.server_legacy_url}project/{project_key}/members",
-        )
-
-        return all_project_members.json()
+        ).json()
+        return all_project_members
 
     # /api/projects/{projectKey}/cycles/{cycleKey}/structure/v1
     def post_project_cycle_structure(self, project_key, cycle_key, root_uid=None):
@@ -570,9 +582,9 @@ class Connection:
                 json={
                     "data": results_file_base64,
                 },
-            )
-            logger.debug(serverside_file_name.json())
-            return serverside_file_name.json()["fileName"]
+            ).json()
+            logger.debug(serverside_file_name)
+            return str(serverside_file_name["fileName"])
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
             raise e
@@ -587,8 +599,8 @@ class Connection:
             serverside_file_name = self.session.post(
                 f"{self.server_url}projects/{project_key}/executionResults/v1",
                 data=results_file,
-            )
-            return serverside_file_name.json()["fileName"]
+            ).json()
+            return str(serverside_file_name["fileName"])
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
             raise e
@@ -599,7 +611,7 @@ class Connection:
         report_root_uid: str,
         serverside_file_name: str,
         default_tester: str,
-        filters: list[FilterInfo] | list[dict[str, str]],
+        filters: list[FilterInfo],
         import_config: ExecutionXmlResultsImportOptions | None = None,
     ) -> str:
         used_import_config = TYPICAL_XML_IMPORT_CONFIG if import_config is None else import_config
@@ -616,7 +628,7 @@ class Connection:
                 headers={"Accept": "application/zip"},
                 json=asdict(used_import_config),
             ).json()
-            return response["jobID"]
+            return str(response["jobID"])
         except requests.exceptions.HTTPError as e:
             self.render_import_error(e)
             raise e
@@ -629,13 +641,10 @@ class Connection:
         report_root_uid: str,
         serverside_file_name: str,
         default_tester: str,
-        filters: list[FilterInfo] | list[dict[str, str]],
+        filters: list[FilterInfo],
         import_config: ExecutionJsonResultsImportOptions | None = None,
     ) -> str:
-        if import_config is None:
-            used_import_config = TYPICAL_JSON_IMPORT_CONFIG
-        else:
-            used_import_config = import_config
+        used_import_config = TYPICAL_JSON_IMPORT_CONFIG if import_config is None else import_config
         used_import_config.fileName = serverside_file_name
         used_import_config.filters = filters
         if default_tester:
@@ -648,7 +657,7 @@ class Connection:
                 f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/import/v1",
                 json=asdict(used_import_config),
             ).json()
-            return response["jobID"]
+            return str(response["jobID"])
         except requests.exceptions.HTTPError as e:
             self.render_import_error(e)
             raise e
@@ -687,18 +696,18 @@ class Connection:
         raise AssertionError(result)
 
     def get_test_cycle_structure(self, cycle_key: str) -> list[dict]:
-        test_cycle_structure = self.legacy_session.get(
+        test_cycle_structure: list[dict] = self.legacy_session.get(
             f"{self.server_legacy_url}cycle/{cycle_key}/structure",
-        )
-        return test_cycle_structure.json()
+        ).json()
+        return test_cycle_structure
 
     def get_tov_structure(self, tovKey: str) -> list[dict]:
-        tov_structure = self.legacy_session.get(
+        tov_structure: list[dict] = self.legacy_session.get(
             f"{self.server_legacy_url}tov/{tovKey}/structure",
-        )
-        return tov_structure.json()
+        ).json()
+        return tov_structure
 
-    def get_test_cases(self, test_case_set_structure: dict[str, Any]) -> dict[str, dict]:
+    def get_test_cases(self, test_case_set_structure: dict[str, Any]) -> dict[str, Any]:
         spec_test_cases = self.get_spec_test_cases(
             test_case_set_structure["TestCaseSet_structure"]["key"]["serial"],
             test_case_set_structure["spec"]["Specification_key"]["serial"],
@@ -735,16 +744,16 @@ class Connection:
         return spec_test_cases
 
     def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> list[dict]:
-        exec_test_cases = self.legacy_session.get(
+        exec_test_cases: list[dict] = self.legacy_session.get(
             f"{self.server_legacy_url}testCaseSets/"
             f"{testCaseSetKey}/executions/"
             f"{executionKey}/testCases",
-        )
-        return exec_test_cases.json()
+        ).json()
+        return exec_test_cases
 
 
 def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901, PLR0912
-    if server and (login and pwd) or session:
+    if (server and login and pwd) or session:
         credentials = {
             "server_url": server,
             "verify": False,

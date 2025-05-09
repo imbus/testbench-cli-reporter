@@ -18,7 +18,6 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
     cli_config: CliReporterConfig = (
         CliReporterConfig(configuration=[]) if configuration is None else configuration
     )
-    cli_config.loggingConfiguration.file = None
     cli_config.loggingConfiguration.console.logLevel = LogLevel.INFO
     cli_config.loggingConfiguration.console.logFormat = "%(message)s"
     setup_logger(cli_config.loggingConfiguration)
@@ -121,10 +120,9 @@ def trigger_all_actions(connection_queue: ConnectionLog, raise_exceptions):
     for _ in range(len(connection_queue.connections)):
         while connection_queue.active_connection.actions_to_trigger:
             action_to_trigger = connection_queue.active_connection.actions_to_trigger[0]
-            action = Action(action_to_trigger.type, action_to_trigger.parameters)
+            action = Action(action_to_trigger.type, action_to_trigger.parameters)  # type:ignore
             logger.debug(
-                f"Triggering action: {action.__class__.__name__}\n"
-                f"Parameters: {action.parameters}"
+                f"Triggering action: {action.__class__.__name__}\nParameters: {action.parameters}"
             )
             try:
                 action.trigger(connection_queue)
