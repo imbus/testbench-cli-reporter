@@ -26,7 +26,6 @@ from typing import Any
 
 import requests  # type: ignore
 import urllib3
-from questionary import print as pprint
 
 from . import questions
 from .config_model import (
@@ -43,6 +42,7 @@ from .util import (
     AbstractAction,
     XmlExportConfig,
     close_program,
+    pretty_print,
     pretty_print_progress_bar,
     spin_spinner,
 )
@@ -680,11 +680,13 @@ class Connection:
             raise e
 
     def render_import_error(self, e):
-        pprint("!!!ERROR DURING IMPORT!!!", style="#ff0e0e italic")
-        pprint("Report was NOT imported")
-        pprint(f"Error Code {e.response.status_code}")
-        pprint(f"Error Message {e.response.text}")
-        pprint(f"URL: {e.response.url}")
+        pretty_print(
+            {"value": "!!!ERROR DURING IMPORT!!!", "style": "#ff0e0e italic"},
+            {"value": "Report was NOT imported"},
+            {"value": f"Error Code {e.response.status_code}"},
+            {"value": f"Error Message {e.response.text}"},
+            {"value": f"URL: {e.response.url}"},
+        )
 
     def get_imp_job_result(self, job_id):
         report_import_status = self.get_job_result("executionResultsImporterJob/", job_id)

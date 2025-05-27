@@ -1,0 +1,24 @@
+{
+  "configuration": [
+    {
+      "server_url": "https://localhost:443/api/",
+      "verify": false,
+      "sessionToken": null,
+      "basicAuth": null,
+      "loginname": null,
+      "password": null,
+      "actions": []
+    }
+  ],
+  "loggingConfiguration": {
+    "console": {
+      "logLevel": "INFO",
+      "logFormat": "%(message)s"
+    },
+    "file": {
+      "logLevel": "DEBUG",
+      "logFormat": "%(asctime)s - %(filename)s:%(lineno)d - %(levelname)8s - %(message)s",
+      "fileName": "testbench-cli-reporter.log"
+    }
+  }
+}
