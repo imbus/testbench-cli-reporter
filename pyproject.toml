@@ -4,12 +4,12 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "testbench-cli-reporter"
-description="CLI Tool to Export XML-Full-Reports from TestBench"
+description = "CLI Tool to Export XML-Full-Reports from TestBench"
 authors = [{name = "imbus AG | Zacharias Daum & René Rohner", email = "rene.rohner@imbus.de"}]
 readme = "README.md"
 license = {file = "LICENSE"}
 dynamic = ["version"]
-classifiers= [
+classifiers = [
   "Environment :: Console",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
@@ -32,6 +32,10 @@ dev = [
   "mypy>=1.15.0",
   "flit>=3.12",
   "wheel>=0.45.1",
+]
+test = [
+  "robotframework>=7.2.2",
+  "robotframework-robocop>=6.1.1",
 ]
 
 [project.urls]
@@ -103,5 +107,20 @@ select = [
   "RSE",
   "RET",
   "SIM",
-  "RUF"
+  "RUF",
+]
+
+[tool.robocop.lint]
+select = [
+  "LEN04",
+  "NAME02",
+]
+ignore = [
+  "DOC01",
+  "DOC02",
+  "DOC03",
+]
+reports = [
+  "rules_by_id",
+  "scan_timer",
 ]

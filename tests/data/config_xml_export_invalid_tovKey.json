@@ -1,0 +1,52 @@
+{
+  "configuration": [
+    {
+      "server_url": "https://localhost:443/api/",
+      "verify": false,
+      "sessionToken": null,
+      "basicAuth": null,
+      "loginname": null,
+      "password": null,
+      "actions": [
+        {
+          "parameters": {
+            "outputPath": "report.zip",
+            "projectPath": [
+              "Car Configurator",
+              "Version 2.0",
+              "Systemtest"
+            ],
+            "tovKey": "-1",
+            "cycleKey": null,
+            "reportRootUID": null,
+            "report_config": {
+              "exportAttachments": true,
+              "exportDesignData": true,
+              "reportRootUID": null,
+              "suppressFilteredData": true,
+              "characterEncoding": "utf-8",
+              "exportExpandedData": true,
+              "filters": [],
+              "exportExecutionProtocols": false,
+              "exportDescriptionFields": true,
+              "outputFormattedText": true
+            },
+            "filters": []
+          },
+          "type": "ExportXMLReport"
+        }
+      ]
+    }
+  ],
+  "loggingConfiguration": {
+    "console": {
+      "logLevel": "INFO",
+      "logFormat": "%(message)s"
+    },
+    "file": {
+      "logLevel": "DEBUG",
+      "logFormat": "%(asctime)s - %(filename)s:%(lineno)d - %(levelname)8s - %(message)s",
+      "fileName": "testbench-cli-reporter.log"
+    }
+  }
+}
