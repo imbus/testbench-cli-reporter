@@ -755,7 +755,7 @@ class Connection:
 
 
 def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901, PLR0912
-    if (server and login and pwd) or session:
+    if server and ((login and pwd) or session):
         credentials = {
             "server_url": server,
             "verify": False,
@@ -764,7 +764,7 @@ def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901,
             "sessionToken": session,
         }
     else:
-        credentials = questions.ask_for_test_bench_credentials(server, login, pwd)
+        credentials = questions.ask_for_test_bench_credentials(server, login, pwd, session)
 
     while True:
         connection = Connection(**credentials)
