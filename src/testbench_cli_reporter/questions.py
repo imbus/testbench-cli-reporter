@@ -127,12 +127,13 @@ def text_prompt(
     return unsafe_prompt(question)["sole_question"]
 
 
-def ask_for_test_bench_credentials(server="", login="", pwd="") -> dict:
+def ask_for_test_bench_credentials(server="", login="", pwd="", session="") -> dict:
     return {
         "server_url": ask_for_test_bench_server_url(server),
         "verify": False,  # ask_for_ssl_verification_option(), #ToDo Hier könnten optional Certificate geprüft werden
         "loginname": ask_for_testbench_loginname(login),
         "password": ask_for_testbench_password(pwd),
+        "sessionToken": session,
     }
 
 
