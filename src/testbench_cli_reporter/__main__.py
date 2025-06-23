@@ -16,10 +16,10 @@ import base64
 from .config_model import (
     CliReporterConfig,
     Configuration,
-    ExportAction,
-    ExportParameters,
-    ImportParameters,
+    ExportXmlAction,
+    ExportXmlParameters,
     ImportXMLAction,
+    ImportXmlParameters,
     loggingConfig,
 )
 from .execution import run_automatic_mode, run_manual_mode
@@ -60,8 +60,8 @@ def main():
             )
             if arg.type == "e":
                 cli_config.configuration[0].actions.append(
-                    ExportAction(
-                        ExportParameters(
+                    ExportXmlAction(
+                        ExportXmlParameters(
                             outputPath=arg.path,
                             projectPath=[e for e in [arg.project, arg.version, arg.cycle] if e],
                             tovKey=arg.tovKey,
@@ -74,7 +74,7 @@ def main():
             else:
                 cli_config.configuration[0].actions.append(
                     ImportXMLAction(
-                        ImportParameters(
+                        ImportXmlParameters(
                             inputPath=arg.path,
                             projectPath=[e for e in [arg.project, arg.version, arg.cycle] if e],
                             cycleKey=arg.cycleKey,

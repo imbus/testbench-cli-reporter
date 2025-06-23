@@ -27,13 +27,10 @@ from typing import Any
 from questionary import print as pprint
 
 from .config_model import (
+    ACTION_TYPES,
     CliReporterConfig,
     ExecutionJsonResultsImportOptions,
     ExecutionXmlResultsImportOptions,
-    ExportAction,
-    ExportJsonAction,
-    ImportJSONAction,
-    ImportXMLAction,
     TestCycleJsonReportOptions,
     TestCycleXMLReportOptions,
 )
@@ -115,7 +112,7 @@ JsonImportConfig = {
 }
 
 
-XmlExportConfig = {
+XmlExportConfig: dict[str, TestCycleXMLReportOptions | bool] = {
     "Itep Export": TestCycleXMLReportOptions(
         exportAttachments=True,
         exportDesignData=True,
@@ -291,9 +288,9 @@ def add_numbering_to_cycle(cycle_structure):
                 "childs": {int(test_structure_element[key]["orderPos"]): tse_dict[tse_serial]},
             }
         else:
-            tse_dict[tse_parent_serial]["childs"][int(test_structure_element[key]["orderPos"])] = (
-                tse_dict[tse_serial]
-            )
+            tse_dict[tse_parent_serial]["childs"][int(test_structure_element[key]["orderPos"])] = tse_dict[
+                tse_serial
+            ]
 
         tse_dict[tse_parent_serial]["childs"] = OrderedDict(
             sorted(tse_dict[tse_parent_serial]["childs"].items())
@@ -307,10 +304,11 @@ def add_numbering_to_childs(child_list, parent_numbering):
     parent_numbering = f"{parent_numbering}." if parent_numbering else ""
     for index, child in enumerate(child_list):
         test_structure_element = child["tse"]
-        if "TestTheme_structure" in test_structure_element:
-            key = "TestTheme_structure"
-        else:
-            key = "TestCaseSet_structure"
+        key = (
+            "TestTheme_structure"
+            if "TestTheme_structure" in test_structure_element
+            else "TestCaseSet_structure"
+        )
         current_numbering = f"{parent_numbering}{index + 1}"
         test_structure_element[key]["numbering"] = current_numbering
         if len(child["childs"]) > 0:
@@ -381,8 +379,31 @@ def get_project_keys(
     return project_key, tov_key, cycle_key
 
 
-def pretty_print_project_selection(selected_project, selected_tov, selected_cycle):
+def pretty_print_tov_scope(selected_tov):
+    pretty_print(
+        {"value": "TOV Scope:", "end": None},
+        {"value": f"{selected_tov['name']}", "style": BLUE_BOLD_ITALIC},
+    )
+
+
+def pretty_print_cycle_scope(selected_cycle):
+    pretty_print(
+        {"value": "Cycle Scope:", "end": None},
+        {"value": f"{selected_cycle['scope']}", "style": BLUE_BOLD_ITALIC},
+    )
+
+
+def pretty_print_project_tree_selection(
+    selected_project: dict, selected_tov: dict, selected_cycle: dict | str
+):
     print("  Selection:")
+    pretty_print_project_selection(selected_project)
+    pretty_print_tov_selection(selected_tov)
+    if selected_cycle != "NO_EXEC":
+        pretty_print_cycle_selection(selected_cycle)
+
+
+def pretty_print_project_selection(selected_project):
     pretty_print(
         {
             "value": f"{' ' * 4 + selected_project['name']: <50}",
@@ -394,6 +415,11 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
             "value": f"{selected_project['key']['serial']: >15}",
             "style": BLUE_BOLD_ITALIC,
         },
+    )
+
+
+def pretty_print_tov_selection(selected_tov):
+    pretty_print(
         {
             "value": f"{' ' * 6 + selected_tov['name']: <50}",
             "style": BLUE_BOLD_ITALIC,
@@ -405,19 +431,21 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
             "style": BLUE_BOLD_ITALIC,
         },
     )
-    if selected_cycle != "NO_EXEC":
-        pretty_print(
-            {
-                "value": f"{' ' * 8 + selected_cycle['name']: <50}",
-                "style": BLUE_BOLD_ITALIC,
-                "end": None,
-            },
-            {"value": "  cycleKey:   ", "end": None},
-            {
-                "value": f"{selected_cycle['key']['serial']: >15}",
-                "style": BLUE_BOLD_ITALIC,
-            },
-        )
+
+
+def pretty_print_cycle_selection(selected_cycle):
+    pretty_print(
+        {
+            "value": f"{' ' * 8 + selected_cycle['name']: <50}",
+            "style": BLUE_BOLD_ITALIC,
+            "end": None,
+        },
+        {"value": "  cycleKey:   ", "end": None},
+        {
+            "value": f"{selected_cycle['key']['serial']: >15}",
+            "style": BLUE_BOLD_ITALIC,
+        },
+    )
 
 
 def pretty_print_test_cases(test_cases: dict[str, Any]):
@@ -568,7 +596,8 @@ def pretty_print_progress_bar(mode: str, handled: int, total: int, percentage: i
         completed_length = int(percentage / 2)  # Each 2% is one character
         bar = "#" * completed_length + "-" * (50 - completed_length)
         print(
-            f"{mode}: {Colors.BLUE}[{bar}]{Colors.END} {handled}/{total} {Colors.DARK_GRAY}({percentage}%){Colors.END}",
+            f"{mode}: {Colors.BLUE}[{bar}]{Colors.END} {handled}/{total} "
+            f"{Colors.DARK_GRAY}({percentage}%){Colors.END}",
             end="\r",
         )
 
@@ -665,14 +694,6 @@ def spin_spinner(message: str):
             time.sleep(delay())
     except UnicodeEncodeError:
         pass
-
-
-ACTION_TYPES = {
-    "ImportXMLExecutionResults": ImportXMLAction,
-    "ExportXMLReport": ExportAction,
-    "ImportJSONExecutionResults": ImportJSONAction,
-    "ExportJSONReport": ExportJsonAction,
-}
 
 
 class AbstractAction(ABC):

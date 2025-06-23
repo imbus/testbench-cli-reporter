@@ -22,8 +22,12 @@ from questionary import print as pprint
 
 from . import actions, util
 from .config_model import (
+    AutomationCSVField,
+    ExecutionCSVField,
     ExecutionJsonResultsImportOptions,
     ExecutionXmlResultsImportOptions,
+    ProjectCSVReportOptions,
+    SpecificationCSVField,
     TestCycleJsonReportOptions,
     TestCycleXMLReportOptions,
 )
@@ -109,7 +113,7 @@ def checkbox_prompt(
     return []
 
 
-def text_prompt(
+def text_prompt(  # noqa: PLR0913
     message: str,
     type: str = "text",  # noqa: A002
     validation: Callable[[str], bool | str] | None = lambda val: bool(val),
@@ -135,7 +139,7 @@ def text_prompt(
 def ask_for_test_bench_credentials(server="", login="", pwd="", session="") -> dict:
     return {
         "server_url": ask_for_test_bench_server_url(server),
-        "verify": False,  # ask_for_ssl_verification_option(), #ToDo Hier könnten optional Certificate geprüft werden
+        "verify": False,  # ask_for_ssl_verification_option() #TODO
         "loginname": ask_for_testbench_loginname(login),
         "password": ask_for_testbench_password(pwd),
         "sessionToken": session,
@@ -154,7 +158,7 @@ def ask_for_test_bench_server_url(default="") -> str:
         filter=lambda raw: sub(
             r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/?)?$",
             r"https://\2\3/api/",
-            sub(r"^([\w\-.\d]+)$", r"\1:9445", raw),
+            sub(r"^([\w\-.\d]+)$", r"\1:443", raw),
         ),
     )
     if not isinstance(server_url, str):
@@ -237,6 +241,19 @@ def ask_to_select_tov(project: dict, default=None) -> dict:
     return tov
 
 
+def ask_to_select_tovs(project: dict, default=None) -> list[dict]:
+    if selection_prompt(
+        "Select multiple test object version?", choices=[Choice("No", False), Choice("Yes", True)]
+    ):
+        tovs: list = checkbox_prompt(
+            message="Select test object version(s) with space.",
+            choices=[Choice(tov["name"], tov) for tov in project["testObjectVersions"]],
+            no_valid_option_message="No test object version available.",
+        )
+        return tovs
+    return [ask_to_select_tov(project, default)]
+
+
 def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
     choices = [Choice("<NO TEST CYCLE>", "NO_EXEC")] if export else []
     choices.extend([Choice(cycle["name"], cycle) for cycle in tov["testCycles"]])
@@ -247,6 +264,28 @@ def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
         default=next((x for x in choices if x.title == default), None),
     )
     return test_cycle
+
+
+def ask_to_select_cycles(tov: dict, default=None, export=False) -> list[dict]:
+    choices = [Choice(cycle["name"], cycle) for cycle in tov["testCycles"]]
+    if choices and selection_prompt(
+        "Select multiple test cycle(s)?", choices=[Choice("No", False), Choice("Yes", True)]
+    ):
+        test_cycles: list = checkbox_prompt(
+            message="Select test cycle(s) with space.",
+            choices=choices,
+            no_valid_option_message="No test cycle available.",
+        )
+        return test_cycles
+    choices = [Choice("<NO TEST CYCLE>", "NO_EXEC")] if export else []
+    choices.extend([Choice(cycle["name"], cycle) for cycle in tov["testCycles"]])
+    test_cycle: dict = selection_prompt(
+        message="Select a test cycle.",
+        choices=choices,
+        no_valid_option_message="No test cycle available.",
+        default=next((x for x in choices if x.title == default), None),
+    )
+    return [test_cycle]
 
 
 def ask_to_select_filters(all_filters: list[dict]) -> list:
@@ -265,7 +304,7 @@ def ask_to_select_filters(all_filters: list[dict]) -> list:
     return []
 
 
-def ask_to_config_report():
+def ask_to_config_xml_report():
     selection = selection_prompt(
         "Select Report Configuration:",
         choices=[Choice(config_name, config) for config_name, config in XmlExportConfig.items()],
@@ -309,7 +348,42 @@ def ask_to_config_json_report():
     return selection
 
 
-def ask_to_config_import() -> ExecutionXmlResultsImportOptions:
+def ask_to_config_csv_report() -> ProjectCSVReportOptions:
+    selected_fields = checkbox_prompt(
+        message="Select Specification fields to be exported.",
+        choices=[Choice(field.name, field) for field in SpecificationCSVField],
+    )
+    selected_fields.extend(
+        checkbox_prompt(
+            message="Select Execution fields to be exported.",
+            choices=[Choice(field.name, field) for field in ExecutionCSVField],
+        )
+    )
+    selected_fields.extend(
+        checkbox_prompt(
+            message="Select Automation fields to be exported.",
+            choices=[Choice(field.name, field) for field in AutomationCSVField],
+        )
+    )
+    custom_choices = {
+        "Show users full name?": [Choice("True", True), Choice("False", False)],
+        "Character encoding": [
+            Choice("UTF-8", "utf-8"),
+            Choice("UTF-16", "utf-16"),
+            Choice("Cp1252", "cp1252"),
+        ],
+    }
+    for key, value in custom_choices.items():
+        custom_choices[key] = selection_prompt(f' "{key}": ', value)
+    return ProjectCSVReportOptions(
+        [],
+        showUserFullName=custom_choices["Show users full name?"],
+        characterEncoding=custom_choices["Character encoding"],
+        fields=selected_fields,
+    )
+
+
+def ask_to_config_xml_import() -> ExecutionXmlResultsImportOptions:
     selection = selection_prompt(
         "Select Import Configuration:",
         choices=[Choice(config_name, config) for config_name, config in XmlImportConfig.items()],
@@ -430,30 +504,39 @@ def ask_for_action_after_login_timeout() -> str:
     return action
 
 
-def ask_for_next_action():
+def ask_for_main_action(server_version: list[int] | None = None) -> str:
+    tb_4_actions = [
+        Choice("Export JSON Report", actions.ExportJSONReport()),
+        Choice("Import JSON execution results", actions.ImportJSONExecutionResults()),
+    ]
+    tb_306_actions = [
+        Choice("Export CSV Report", actions.ExportCSVReport()),
+    ]
+    common_actions = [
+        Choice("Export XML Report", actions.ExportXMLReport()),
+        Choice("Import XML execution results", actions.ImportXMLExecutionResults()),
+        Choice("Browser Projects", actions.BrowseProjects()),
+        Choice("Write history to config file", actions.ExportActionLog()),
+        Choice("Change connection", actions.ChangeConnection()),
+        Choice("Quit", actions.Quit()),
+    ]
+    choices = []
+    if server_version > [4]:
+        choices.extend(tb_4_actions)
+    if server_version >= [3, 0, 6, 2]:
+        choices.extend(tb_306_actions)
+    choices.extend(common_actions)
     return selection_prompt(
         message="What do you want to do?",
-        choices=[
-            Choice("Export XML Report", actions.ExportXMLReport()),
-            Choice("Export JSON Report", actions.ExportJSONReport()),
-            Choice("Import execution results", actions.ImportXMLExecutionResults()),
-            Choice("Import JSON execution results", actions.ImportJSONExecutionResults()),
-            Choice("Browser Projects", actions.BrowseProjects()),
-            Choice("Write history to config file", actions.ExportActionLog()),
-            Choice("Change connection", actions.ChangeConnection()),
-            Choice("Quit", actions.Quit()),
-        ],
+        choices=choices,
     )
 
 
 def ask_to_select_default_tester(all_testers: list[dict]) -> str | None:
-    all_testers_sorted = sorted(
-        all_testers, key=lambda tester: tester["value"]["user-name"].casefold()
-    )
+    all_testers_sorted = sorted(all_testers, key=lambda tester: tester["value"]["user-name"].casefold())
 
     choices = [Choice("<No Tester>", False)] + [
-        Choice(tester["value"]["user-name"], tester["value"]["user-login"])
-        for tester in all_testers_sorted
+        Choice(tester["value"]["user-name"], tester["value"]["user-login"]) for tester in all_testers_sorted
     ]
 
     default_tester = selection_prompt(
@@ -469,6 +552,13 @@ def ask_to_select_default_tester(all_testers: list[dict]) -> str | None:
         raise ValueError("Unexpected selection_prompt result")
 
     return default_tester
+
+
+def ask_to_select_tree_element() -> bool:
+    return selection_prompt(
+        "Select report root from test theme tree?",
+        choices=[Choice("No", False), Choice("Yes", True)],
+    )
 
 
 def ask_to_select_report_root_uid(cycle_structure: list[dict]):
@@ -514,6 +604,6 @@ def navigate_in_cycle_stucture(theme_structure):
         )
         if not isinstance(selection, str):
             selection = navigate_in_cycle_stucture(selection)
-        if isinstance(selection, str) and selection != "BACK":
+        if isinstance(selection, str) and selection not in ("BACK", "ROOT"):
             return selection
     return None

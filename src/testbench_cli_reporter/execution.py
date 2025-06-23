@@ -27,11 +27,9 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
 
     while True:
         config = cli_config.configuration[0] if len(cli_config.configuration) else Configuration("")
-        active_connection = login(
-            config.server_url, config.loginname, config.password, config.sessionToken
-        )
+        active_connection = login(config.server_url, config.loginname, config.password, config.sessionToken)
         connection_log.add_connection(active_connection)
-        next_action = questions.ask_for_next_action()
+        next_action = questions.ask_for_main_action(active_connection.server_version)
         while next_action is not None:
             try:
                 if (
@@ -56,7 +54,7 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
                 logger.info("Action aborted due to timeout.")
 
             active_connection = connection_log.active_connection
-            next_action = questions.ask_for_next_action()
+            next_action = questions.ask_for_main_action(active_connection.server_version)
 
 
 def run_automatic_mode(
@@ -121,9 +119,7 @@ def trigger_all_actions(connection_queue: ConnectionLog, raise_exceptions):
         while connection_queue.active_connection.actions_to_trigger:
             action_to_trigger = connection_queue.active_connection.actions_to_trigger[0]
             action = Action(action_to_trigger.type, action_to_trigger.parameters)  # type:ignore
-            logger.debug(
-                f"Triggering action: {action.__class__.__name__}\nParameters: {action.parameters}"
-            )
+            logger.debug(f"Triggering action: {action.__class__.__name__}\nParameters: {action.parameters}")
             try:
                 action.trigger(connection_queue)
                 connection_queue.active_connection.actions_to_wait_for.append(action)
@@ -166,9 +162,7 @@ def poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptio
                 active_connection.actions_to_finish.append(action_to_wait_for)
                 active_connection.actions_to_wait_for.remove(action_to_wait_for)
             else:
-                active_connection.actions_to_wait_for = rotate(
-                    active_connection.actions_to_wait_for
-                )
+                active_connection.actions_to_wait_for = rotate(active_connection.actions_to_wait_for)
         except requests.exceptions.HTTPError as e:
             active_connection.actions_to_wait_for.remove(action_to_wait_for)
             if raise_exceptions:
