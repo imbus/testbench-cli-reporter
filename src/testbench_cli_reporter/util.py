@@ -165,7 +165,10 @@ JsonExportConfig = {
     "<CUSTOM>": False,
 }
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(
+    description="TestBench CLI Reporter Tool",
+    epilog=f"Version: {__import__('testbench_cli_reporter').__version__}",
+)
 parser.add_argument(
     "-c",
     "--config",
