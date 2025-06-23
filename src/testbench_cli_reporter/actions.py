@@ -36,10 +36,10 @@ from .config_model import (
 )
 from .log import logger
 from .util import (
+    ITEP_EXPORT_CONFIG,
     TYPICAL_JSON_IMPORT_CONFIG,
     TYPICAL_XML_IMPORT_CONFIG,
     AbstractAction,
-    XmlExportConfig,
     close_program,
     get_project_keys,
     parser,
@@ -113,11 +113,10 @@ class ExportXMLReport(AbstractAction):
                 self.parameters.tovKey,
                 self.parameters.cycleKey,
             ) = get_project_keys(all_projects, *self.parameters.projectPath)
-
         self.job_id = connection_log.active_connection.trigger_xml_report_generation(
             self.parameters.tovKey or "",
             self.parameters.cycleKey or "",
-            self.parameters.report_config or XmlExportConfig["Itep Export"],
+            self.parameters.report_config or ITEP_EXPORT_CONFIG,
         )
         self.start_time = monotonic()
         return bool(self.job_id)
@@ -150,7 +149,7 @@ class ExportCSVReport(AbstractAction):
         if isinstance(parameters, ExportCsvParameters):
             exp_parameters = parameters
         elif parameters is None:
-            exp_parameters = ExportCsvParameters("report.zip")
+            exp_parameters = ExportCsvParameters("report.zip", "")
         else:
             exp_parameters = ExportCsvParameters.from_dict(parameters or {})
         super().__init__()

@@ -32,7 +32,7 @@ from .config_model import (
     TestCycleXMLReportOptions,
 )
 from .log import logger
-from .util import JsonExportConfig, JsonImportConfig, XmlExportConfig, XmlImportConfig
+from .util import AbstractAction, JsonExportConfig, JsonImportConfig, XmlExportConfig, XmlImportConfig
 
 custom_style_fancy = Style(
     [
@@ -321,14 +321,15 @@ def ask_to_config_xml_report():
             "exportExecutionProtocols": [Choice("False", False), Choice("True", True)],
         }
         pprint("  {", style="bold")
+        choices: dict[str, str] = {}
         for key, value in custom_choices.items():
-            custom_choices[key] = selection_prompt(f'   "{key}": ', value)
+            choices[key] = selection_prompt(f'   "{key}": ', value)
         pprint("  }", style="bold")
-        selection = TestCycleXMLReportOptions(reportRootUID=None, filters=[], **custom_choices)
+        selection = TestCycleXMLReportOptions(reportRootUID=None, filters=[], **choices)  # type: ignore
     return selection
 
 
-def ask_to_config_json_report():
+def ask_to_config_json_report() -> TestCycleJsonReportOptions:
     selection = selection_prompt(
         "Select Report Configuration:",
         choices=[Choice(config_name, config) for config_name, config in JsonExportConfig.items()],
@@ -344,8 +345,8 @@ def ask_to_config_json_report():
         for key, value in custom_choices.items():
             custom_choices[key] = selection_prompt(f'   "{key}": ', value)
         pprint("  }", style="bold")
-        selection = TestCycleJsonReportOptions(treeRootUID=None, filters=[], **custom_choices)
-    return selection
+        selection = TestCycleJsonReportOptions(treeRootUID=None, filters=[], **custom_choices)  # type: ignore
+    return selection  # type: ignore
 
 
 def ask_to_config_csv_report() -> ProjectCSVReportOptions:
@@ -365,20 +366,23 @@ def ask_to_config_csv_report() -> ProjectCSVReportOptions:
             choices=[Choice(field.name, field) for field in AutomationCSVField],
         )
     )
-    custom_choices = {
-        "Show users full name?": [Choice("True", True), Choice("False", False)],
-        "Character encoding": [
+    show_user_full_name = confirm_prompt(
+        message="Show users full name?",
+        default=True,
+    )
+    character_encoding = selection_prompt(
+        message="Select character encoding:",
+        choices=[
             Choice("UTF-8", "utf-8"),
             Choice("UTF-16", "utf-16"),
             Choice("Cp1252", "cp1252"),
         ],
-    }
-    for key, value in custom_choices.items():
-        custom_choices[key] = selection_prompt(f' "{key}": ', value)
+        default="utf-8",
+    )
     return ProjectCSVReportOptions(
         [],
-        showUserFullName=custom_choices["Show users full name?"],
-        characterEncoding=custom_choices["Character encoding"],
+        showUserFullName=show_user_full_name,
+        characterEncoding=character_encoding,
         fields=selected_fields,
     )
 
@@ -504,7 +508,7 @@ def ask_for_action_after_login_timeout() -> str:
     return action
 
 
-def ask_for_main_action(server_version: list[int] | None = None) -> str:
+def ask_for_main_action(server_version: list[int] | None = None) -> AbstractAction:
     tb_4_actions = [
         Choice("Export JSON Report", actions.ExportJSONReport()),
         Choice("Import JSON execution results", actions.ImportJSONExecutionResults()),
@@ -521,12 +525,12 @@ def ask_for_main_action(server_version: list[int] | None = None) -> str:
         Choice("Quit", actions.Quit()),
     ]
     choices = []
-    if server_version > [4]:
+    if server_version and server_version > [4]:
         choices.extend(tb_4_actions)
-    if server_version >= [3, 0, 6, 2]:
+    if server_version and server_version >= [3, 0, 6, 2]:
         choices.extend(tb_306_actions)
     choices.extend(common_actions)
-    return selection_prompt(
+    return selection_prompt(  # type: ignore
         message="What do you want to do?",
         choices=choices,
     )
@@ -555,9 +559,11 @@ def ask_to_select_default_tester(all_testers: list[dict]) -> str | None:
 
 
 def ask_to_select_tree_element() -> bool:
-    return selection_prompt(
-        "Select report root from test theme tree?",
-        choices=[Choice("No", False), Choice("Yes", True)],
+    return bool(
+        selection_prompt(
+            "Select report root from test theme tree?",
+            choices=[Choice("No", False), Choice("Yes", True)],
+        )
     )
 
 

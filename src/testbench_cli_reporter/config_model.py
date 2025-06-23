@@ -193,14 +193,12 @@ class ProjectCSVReportOptions:
     characterEncoding: str | None = None
 
     def __post_init__(self):
-        if self.scopes is None:
-            self.scopes = []
         if self.fields is None:
             self.fields = []
 
     @classmethod
     def from_dict(cls, dictionary: dict):
-        fields = []
+        fields: list[SpecificationCSVField | AutomationCSVField | ExecutionCSVField] = []
         for key in dictionary.get("fields", []):
             if isinstance(key, str):
                 if key.startswith(("spec.", "ts.")):
@@ -242,14 +240,14 @@ class TestCycleJsonReportOptions:
 @dataclass
 class ExportCsvParameters:
     outputPath: str
-    projectKey: str | None = None
+    projectKey: str
     report_config: ProjectCSVReportOptions | None = None
 
     @classmethod
     def from_dict(cls, dictionary: dict):
         return cls(
-            outputPath=dictionary.get("outputPath"),
-            projectKey=dictionary.get("projectKey"),
+            outputPath=dictionary.get("outputPath", "csv_report.zip"),
+            projectKey=dictionary.get("projectKey", ""),
             report_config=(
                 ProjectCSVReportOptions.from_dict(dictionary.get("report_config") or {})
                 if dictionary.get("report_config")
@@ -310,7 +308,7 @@ class ExportJsonParameters:
 class BaseAction(ABC):
     @classmethod
     @abstractmethod
-    def from_dict(cls, dictionary: dict):
+    def from_dict(cls, dictionary: dict) -> "BaseAction":
         pass
 
 
@@ -469,9 +467,13 @@ class Configuration:
     password: str | None = None
     actions: list[BaseAction] | None = None
 
+    def __post_init__(self):
+        if self.actions is None:
+            self.actions = []
+
     @classmethod
     def from_dict(cls, dictionary: dict):
-        action_classes: dict[str, type[BaseAction]] = ACTION_TYPES
+        action_classes: dict[str, BaseAction] = ACTION_TYPES
 
         return cls(
             server_url=dictionary["server_url"],
@@ -566,10 +568,10 @@ class CliReporterConfig:
         )
 
 
-ACTION_TYPES = {
-    "ExportXMLReport": ExportXmlAction,
-    "ExportJSONReport": ExportJsonAction,
-    "ExportCSVReport": ExportCsvAction,
-    "ImportXMLExecutionResults": ImportXMLAction,
-    "ImportJSONExecutionResults": ImportJSONAction,
+ACTION_TYPES: dict[str, BaseAction] = {
+    "ExportXMLReport": ExportXmlAction,  # type: ignore
+    "ExportJSONReport": ExportJsonAction,  # type: ignore
+    "ExportCSVReport": ExportCsvAction,  # type: ignore
+    "ImportXMLExecutionResults": ImportXMLAction,  # type: ignore
+    "ImportJSONExecutionResults": ImportJSONAction,  # type: ignore
 }

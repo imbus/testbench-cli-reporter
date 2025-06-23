@@ -111,20 +111,21 @@ JsonImportConfig = {
     "<CUSTOM>": False,
 }
 
+ITEP_EXPORT_CONFIG = TestCycleXMLReportOptions(
+    exportAttachments=True,
+    exportDesignData=True,
+    characterEncoding="utf-16",
+    suppressFilteredData=True,
+    exportExpandedData=True,
+    exportDescriptionFields=True,
+    outputFormattedText=False,
+    exportExecutionProtocols=False,
+    filters=[],
+    reportRootUID=None,
+)
 
 XmlExportConfig: dict[str, TestCycleXMLReportOptions | bool] = {
-    "Itep Export": TestCycleXMLReportOptions(
-        exportAttachments=True,
-        exportDesignData=True,
-        characterEncoding="utf-16",
-        suppressFilteredData=True,
-        exportExpandedData=True,
-        exportDescriptionFields=True,
-        outputFormattedText=False,
-        exportExecutionProtocols=False,
-        filters=[],
-        reportRootUID=None,
-    ),
+    "Itep Export": ITEP_EXPORT_CONFIG,
     "iTorx Export (execution)": TestCycleXMLReportOptions(
         exportAttachments=True,
         exportDesignData=True,
@@ -719,4 +720,4 @@ class AbstractAction(ABC):
         return True
 
     def export(self):
-        return ACTION_TYPES[type(self).__name__](self.parameters)
+        return ACTION_TYPES[type(self).__name__](self.parameters)  # type: ignore

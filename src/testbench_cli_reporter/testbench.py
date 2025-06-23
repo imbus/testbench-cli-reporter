@@ -40,10 +40,10 @@ from .config_model import (
 from .log import logger
 from .util import (
     BLUE_BOLD_ITALIC,
+    ITEP_EXPORT_CONFIG,
     TYPICAL_JSON_IMPORT_CONFIG,
     TYPICAL_XML_IMPORT_CONFIG,
     AbstractAction,
-    XmlExportConfig,
     close_program,
     pretty_print,
     pretty_print_progress_bar,
@@ -111,17 +111,17 @@ class Connection:
 
     @property
     def is_testbench_4(self) -> bool:
-        return self.server_version and self.server_version >= [4]
+        return bool(self.server_version and self.server_version >= [4])
 
     @property
     def session(self):
         if self._session:
-            return self._session
+            return self._session  # type: ignore
         logger.info("Initializing session")
         self._session = requests.Session()
         logger.info("Session initialized")
-        self._session.verify = self.verify_ssl
-        self._session.headers.update(
+        self._session.verify = self.verify_ssl  # type: ignore
+        self._session.headers.update(  # type: ignore
             {
                 "accept": "application/vnd.testbench+json",
                 "Content-Type": "application/vnd.testbench+json; charset=utf-8",
@@ -131,10 +131,10 @@ class Connection:
         if not self.session_token:
             self.authenticate(self._session)
         else:
-            self._session.headers.update({"Authorization": self.session_token})
-        self._session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}
-        self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))
-        self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))
+            self._session.headers.update({"Authorization": self.session_token})  # type: ignore
+        self._session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}  # type: ignore
+        self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))  # type: ignore
+        self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))  # type: ignore
         return self._session
 
     def read_server_version(self, session: requests.Session) -> None:
@@ -203,9 +203,7 @@ class Connection:
                 logger.info("Authenticated")
         except (requests.HTTPError, json.JSONDecodeError, KeyError) as e:
             raise requests.HTTPError(
-                "Authentication failed\n"
-                f"Status code: {response.status_code}\n"
-                f"Response: {response.text}"
+                f"Authentication failed\nStatus code: {response.status_code}\nResponse: {response.text}"
             ) from e
 
     def get_loginname_from_server(self):
@@ -219,7 +217,7 @@ class Connection:
         if not self.is_testbench_4:
             return self.server_port
         if self._server_legacy_port:
-            return self._server_legacy_port
+            return self._server_legacy_port  # type: ignore
         response = self.session.get(f"{self.server_url}serverLocations/v1").json()
         self._server_legacy_port = response["legacyPlayPort"]
         return self._server_legacy_port
@@ -231,14 +229,14 @@ class Connection:
     @property
     def legacy_session(self):
         if self._legacy_session:
-            return self._legacy_session
+            return self._legacy_session  # type: ignore
         logger.info("Initializing legacy session")
         if not self.session:
             raise RuntimeError("Session not initialized")
         self._legacy_session = requests.Session()
         logger.info("Legacy session initialized")
-        self._legacy_session.verify = self.verify_ssl
-        self._legacy_session.headers.update(
+        self._legacy_session.verify = self.verify_ssl  # type: ignore
+        self._legacy_session.headers.update(  # type: ignore
             {
                 "accept": "application/vnd.testbench+json",
                 "Content-Type": "application/vnd.testbench+json; charset=utf-8",
@@ -247,10 +245,10 @@ class Connection:
         if not self.session_token:
             self.authenticate(self._legacy_session)
         self.get_loginname_from_server()
-        self._legacy_session.auth = (self.loginname, self.session_token)
-        self._legacy_session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}
-        self._legacy_session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))
-        self._legacy_session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))
+        self._legacy_session.auth = (self.loginname, self.session_token)  # type: ignore
+        self._legacy_session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}  # type: ignore
+        self._legacy_session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))  # type: ignore
+        self._legacy_session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))  # type: ignore
         return self._legacy_session
 
     def close(self):
@@ -339,7 +337,7 @@ class Connection:
         return all_filters
 
     def get_xml_report(self, tov_key: str, cycle_key: str, reportRootUID: str | None, filters=None) -> bytes:
-        report_config = XmlExportConfig["Itep Export"]
+        report_config = ITEP_EXPORT_CONFIG
         if filters is None:
             report_config.filters = []
         if reportRootUID and reportRootUID != "ROOT":
@@ -354,10 +352,13 @@ class Connection:
         project_key: str,
         tov_key: str | None = None,
         cycle_key: str | None = None,
-        report_config: TestCycleJsonReportOptions = None,
+        report_config: TestCycleJsonReportOptions | None = None,
     ) -> str:
         if report_config is None:
-            raise NotImplementedError
+            raise AttributeError(
+                "report_config must be provided for JSON report generation. "
+                "Use TestCycleJsonReportOptions to create a report configuration."
+            )
         if cycle_key and cycle_key != "0" and project_key and project_key != "0":
             response = self.session.post(
                 f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/report/v1",
@@ -470,10 +471,10 @@ class Connection:
         self,
         tov_key: str,
         cycle_key: str,
-        report_config: TestCycleXMLReportOptions = None,
+        report_config: TestCycleXMLReportOptions | None = None,
     ) -> str:
         if report_config is None:
-            report_config = XmlExportConfig["Itep Export"]
+            report_config = ITEP_EXPORT_CONFIG
         if cycle_key and cycle_key != "0":
             response = self.legacy_session.post(
                 f"{self.server_legacy_url}cycle/{cycle_key}/xmlReport",
@@ -516,8 +517,13 @@ class Connection:
     def trigger_csv_report_generation(
         self,
         project_key: str,
-        report_config: ProjectCSVReportOptions,
+        report_config: ProjectCSVReportOptions | None = None,
     ) -> str:
+        if report_config is None:
+            raise AttributeError(
+                "report_config must be provided for CSV report generation. "
+                "Use ProjectCSVReportOptions to create a report configuration."
+            )
         response = self.legacy_session.post(
             f"{self.server_legacy_url}projects/{project_key}/csvReport",
             json=asdict(report_config),
@@ -814,9 +820,7 @@ class Connection:
 
     def get_exec_test_cases(self, testCaseSetKey: str, executionKey: str) -> list[dict]:
         exec_test_cases: list[dict] = self.legacy_session.get(
-            f"{self.server_legacy_url}testCaseSets/"
-            f"{testCaseSetKey}/executions/"
-            f"{executionKey}/testCases",
+            f"{self.server_legacy_url}testCaseSets/{testCaseSetKey}/executions/{executionKey}/testCases",
         ).json()
         return exec_test_cases
 
