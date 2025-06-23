@@ -1,4 +1,5 @@
 import traceback
+from contextlib import suppress
 from time import sleep
 from typing import Any
 
@@ -26,9 +27,9 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
 
     while True:
         config = cli_config.configuration[0] if len(cli_config.configuration) else Configuration("")
-        active_connection = login(config.server_url, config.loginname, config.password)
+        active_connection = login(config.server_url, config.loginname, config.password, config.sessionToken)
         connection_log.add_connection(active_connection)
-        next_action = questions.ask_for_next_action()
+        next_action = questions.ask_for_main_action(active_connection.server_version)
         while next_action is not None:
             try:
                 if (
@@ -53,13 +54,14 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
                 logger.info("Action aborted due to timeout.")
 
             active_connection = connection_log.active_connection
-            next_action = questions.ask_for_next_action()
+            next_action = questions.ask_for_main_action(active_connection.server_version)
 
 
 def run_automatic_mode(
     configuration: CliReporterConfig | dict[str, Any],
     loginname: str | None = None,
     password: str | None = None,
+    sessionToken: str | None = None,
     raise_exceptions: bool = False,
 ):
     config = (
@@ -71,21 +73,23 @@ def run_automatic_mode(
     logger.info("Run Automatic Mode")
     connection_queue = ConnectionLog()
     try:
-        fill_connection_queue(config, connection_queue, loginname, password)
+        fill_connection_queue(config, connection_queue, loginname, password, sessionToken)
         trigger_all_actions(connection_queue, raise_exceptions)
         poll_and_finish_actions(connection_queue, raise_exceptions)
         logger.info("All jobs finished.")
     except requests.HTTPError as e:
         logger.debug(traceback.format_exc())
-        logger.error(e.response.json())
+        with suppress(Exception):
+            logger.error(e.response.json())
         raise e
 
 
-def fill_connection_queue(configuration, connection_queue, loginname, password):
+def fill_connection_queue(configuration, connection_queue, loginname, password, sessionToken):
     for connection_data in configuration.configuration:
         connection = Connection(
             server_url=connection_data.server_url,
             verify=connection_data.verify,
+            sessionToken=sessionToken or connection_data.sessionToken,
             basicAuth=connection_data.basicAuth,
             actions=connection_data.actions,
             loginname=loginname,
@@ -109,15 +113,13 @@ def poll_and_finish_actions(connection_queue, raise_exceptions):
             break
 
 
-def trigger_all_actions(connection_queue, raise_exceptions):
+def trigger_all_actions(connection_queue: ConnectionLog, raise_exceptions):
     job_counter = 0
     for _ in range(len(connection_queue.connections)):
         while connection_queue.active_connection.actions_to_trigger:
             action_to_trigger = connection_queue.active_connection.actions_to_trigger[0]
             action = Action(action_to_trigger.type, action_to_trigger.parameters)  # type:ignore
-            logger.debug(
-                f"Triggering action: {action.__class__.__name__}\nParameters: {action.parameters}"
-            )
+            logger.debug(f"Triggering action: {action.__class__.__name__}\nParameters: {action.parameters}")
             try:
                 action.trigger(connection_queue)
                 connection_queue.active_connection.actions_to_wait_for.append(action)
@@ -160,9 +162,7 @@ def poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptio
                 active_connection.actions_to_finish.append(action_to_wait_for)
                 active_connection.actions_to_wait_for.remove(action_to_wait_for)
             else:
-                active_connection.actions_to_wait_for = rotate(
-                    active_connection.actions_to_wait_for
-                )
+                active_connection.actions_to_wait_for = rotate(active_connection.actions_to_wait_for)
         except requests.exceptions.HTTPError as e:
             active_connection.actions_to_wait_for.remove(action_to_wait_for)
             if raise_exceptions:

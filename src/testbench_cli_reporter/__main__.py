@@ -16,10 +16,10 @@ import base64
 from .config_model import (
     CliReporterConfig,
     Configuration,
-    ExportAction,
-    ExportParameters,
-    ImportAction,
-    ImportParameters,
+    ExportXmlAction,
+    ExportXmlParameters,
+    ImportXMLAction,
+    ImportXmlParameters,
     loggingConfig,
 )
 from .execution import run_automatic_mode, run_manual_mode
@@ -32,31 +32,36 @@ def main():
         if arg.config:
             cli_config = get_configuration(arg.config)
             print("Config file found")
-            run_automatic_mode(cli_config, loginname=arg.login, password=arg.password)
+            run_automatic_mode(
+                cli_config, loginname=arg.login, password=arg.password, sessionToken=arg.session
+            )
         elif (
             arg.server
-            and arg.login
-            and arg.password
+            and ((arg.login and arg.password) or arg.session)
             and ((arg.project and arg.version) or arg.tovKey or arg.cycleKey or arg.type == "i")
             and not arg.manual
         ):
             server = resolve_server_name(arg.server)
+            config = Configuration(
+                server_url=server,
+                verify=False,
+                basicAuth=(
+                    base64.b64encode(f"{arg.login}:{arg.password}".encode()).decode()
+                    if arg.login and arg.password
+                    else None
+                ),
+                sessionToken=arg.session,
+                actions=[],
+            )
 
             cli_config = CliReporterConfig(
-                configuration=[
-                    Configuration(
-                        server_url=server,
-                        verify=False,
-                        basicAuth=base64.b64encode(f"{arg.login}:{arg.password}".encode()).decode(),
-                        actions=[],
-                    )
-                ],
+                configuration=[config],
                 loggingConfiguration=loggingConfig.from_dict({}),
             )
             if arg.type == "e":
                 cli_config.configuration[0].actions.append(
-                    ExportAction(
-                        ExportParameters(
+                    ExportXmlAction(
+                        ExportXmlParameters(
                             outputPath=arg.path,
                             projectPath=[e for e in [arg.project, arg.version, arg.cycle] if e],
                             tovKey=arg.tovKey,
@@ -68,8 +73,8 @@ def main():
                 )
             else:
                 cli_config.configuration[0].actions.append(
-                    ImportAction(
-                        ImportParameters(
+                    ImportXMLAction(
+                        ImportXmlParameters(
                             inputPath=arg.path,
                             projectPath=[e for e in [arg.project, arg.version, arg.cycle] if e],
                             cycleKey=arg.cycleKey,
@@ -90,6 +95,7 @@ def main():
                         verify=False,
                         loginname=arg.login,
                         password=arg.password,
+                        sessionToken=arg.session,
                         actions=[],
                     )
                 ],

@@ -33,10 +33,13 @@ from .config_model import (
     Configuration,
     ExecutionJsonResultsImportOptions,
     ExecutionXmlResultsImportOptions,
-    FilterInfo,
+    ProjectCSVReportOptions,
+    TestCycleJsonReportOptions,
+    TestCycleXMLReportOptions,
 )
 from .log import logger
 from .util import (
+    BLUE_BOLD_ITALIC,
     TYPICAL_JSON_IMPORT_CONFIG,
     TYPICAL_XML_IMPORT_CONFIG,
     AbstractAction,
@@ -58,7 +61,7 @@ class JobProgress:
 
 
 class Connection:
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         server_url: str,
         verify: bool | str,
@@ -100,8 +103,15 @@ class Connection:
         self.actions_to_finish: list[AbstractAction] = []
         self.connection_timeout = connection_timeout_sec
         self.verify_ssl = verify
+        self.server_version: list[int] = []
+        self.databaseVersion: str | None = None
+        self.revision: str | None = None
         self._session = None
         self._legacy_session = None
+
+    @property
+    def is_testbench_4(self) -> bool:
+        return self.server_version and self.server_version >= [4]
 
     @property
     def session(self):
@@ -117,24 +127,80 @@ class Connection:
                 "Content-Type": "application/vnd.testbench+json; charset=utf-8",
             }
         )
+        self.read_server_version(self._session)
         if not self.session_token:
             self.authenticate(self._session)
-        self._session.headers.update({"Authorization": self.session_token})
+        else:
+            self._session.headers.update({"Authorization": self.session_token})
         self._session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}
         self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))
         self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))
         return self._session
 
-    def authenticate(self, session: requests.Session):
-        response = session.post(
-            f"{self.server_url}login/session/v1",
-            json={"login": self.loginname, "password": self.password, "force": True},
-        )
+    def read_server_version(self, session: requests.Session) -> None:
+        versions = {}
         try:
+            response = session.get(f"{self.server_url}serverVersions/v1")
             response.raise_for_status()
-            resp_dict = response.json()
-            self.session_token = resp_dict["sessionToken"]
-            logger.info(f"Authenticated with session token: {self.session_token}")
+            versions = response.json()
+            self.server_version = [int(v) for v in versions.get("releaseVersion", "").split(".")]
+        except requests.HTTPError:
+            logger.debug(
+                "Failed to read server version from "
+                f"{self.server_url}/serverVersions/v1, trying {self.server_url}1/serverVersions"
+            )
+            try:
+                response = session.get(f"{self.server_url}1/serverVersions")
+                response.raise_for_status()
+                versions = response.json()
+                self.server_version = [int(v) for v in versions.get("version", "").split(".")]
+            except requests.HTTPError as e:
+                raise requests.HTTPError(
+                    "Failed to read server version. Please check the server URL and connection."
+                ) from e
+        except Exception as e:
+            raise e
+        finally:
+            self.databaseVersion = versions.get("databaseVersion")
+            self.revision = versions.get("revision")
+            if self.server_version:
+                pretty_print(
+                    {"value": "Server version: ", "end": None},
+                    {
+                        "value": f"{'.'.join(map(str, self.server_version))}",
+                        "style": BLUE_BOLD_ITALIC,
+                    },
+                )
+            if self.databaseVersion:
+                pretty_print(
+                    {"value": "Database version: ", "end": None},
+                    {"value": f"{self.databaseVersion}", "style": BLUE_BOLD_ITALIC},
+                )
+            if self.revision:
+                pretty_print(
+                    {"value": "Revision: ", "end": None},
+                    {"value": f"{self.revision}", "style": BLUE_BOLD_ITALIC},
+                )
+
+    def authenticate(self, session: requests.Session):
+        try:
+            if self.is_testbench_4:
+                response = session.post(
+                    f"{self.server_url}login/session/v1",
+                    json={"login": self.loginname, "password": self.password, "force": True},
+                )
+                response.raise_for_status()
+                resp_dict = response.json()
+                self.session_token = resp_dict["sessionToken"]
+                session.headers.update({"Authorization": self.session_token})
+                logger.info(f"Authenticated with session token: {self.session_token}")
+            else:
+                self.session_token = self.password
+                session.auth = (self.loginname, self.password)
+                response = session.get(f"{self.server_url}1/checkLogin")
+                response.raise_for_status()
+                self._legacy_session = session
+                logger.info("Authenticated")
         except (requests.HTTPError, json.JSONDecodeError, KeyError) as e:
             raise requests.HTTPError(
                 "Authentication failed\n"
@@ -143,11 +209,15 @@ class Connection:
             ) from e
 
     def get_loginname_from_server(self):
+        if self.loginname:
+            return
         response = self.session.get(f"{self.server_url}login/session/v1").json()
         self.loginname = response["login"]
 
     @property
     def server_legacy_port(self):
+        if not self.is_testbench_4:
+            return self.server_port
         if self._server_legacy_port:
             return self._server_legacy_port
         response = self.session.get(f"{self.server_url}serverLocations/v1").json()
@@ -196,7 +266,6 @@ class Connection:
             server_url=self.server_url,
             verify=self.session.verify,
             basicAuth=basic_auth,
-            sessionToken=self.session_token,
             actions=[action.export() for action in self.action_log if action.export() is not None],
         )
 
@@ -211,7 +280,12 @@ class Connection:
         )
 
     def check_is_working(self) -> bool:
-        response = self.session.get(f"{self.server_url}login/session/v1")
+        session = self.session
+        response = (
+            session.get(f"{self.server_url}login/session/v1")
+            if self.is_testbench_4
+            else session.get(f"{self.server_url}1/checkLogin")
+        )
         response.json()
         legacy_response = self.legacy_session.get(f"{self.server_legacy_url}checkLogin")
         legacy_response.json()
@@ -264,12 +338,14 @@ class Connection:
         ).json()
         return all_filters
 
-    def get_xml_report(
-        self, tov_key: str, cycle_key: str, reportRootUID: str, filters=None
-    ) -> bytes:
+    def get_xml_report(self, tov_key: str, cycle_key: str, reportRootUID: str | None, filters=None) -> bytes:
+        report_config = XmlExportConfig["Itep Export"]
         if filters is None:
-            filters = []
-        job_id = self.trigger_xml_report_generation(tov_key, cycle_key, reportRootUID, filters)
+            report_config.filters = []
+        if reportRootUID and reportRootUID != "ROOT":
+            report_config.reportRootUID = reportRootUID
+
+        job_id = self.trigger_xml_report_generation(tov_key, cycle_key, report_config)
         report_tmp_name = self.wait_for_tmp_xml_report_name(job_id)
         return self.get_xml_report_data(report_tmp_name)
 
@@ -278,18 +354,10 @@ class Connection:
         project_key: str,
         tov_key: str | None = None,
         cycle_key: str | None = None,
-        reportRootUID: str | None = "ROOT",
-        filters=None,
-        report_config=None,
+        report_config: TestCycleJsonReportOptions = None,
     ) -> str:
         if report_config is None:
             raise NotImplementedError
-        if filters is None:
-            filters = []
-
-        if reportRootUID and reportRootUID != "ROOT":
-            report_config.treeRootUID = reportRootUID
-        report_config.filters = filters
         if cycle_key and cycle_key != "0" and project_key and project_key != "0":
             response = self.session.post(
                 f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/report/v1",
@@ -353,20 +421,14 @@ class Connection:
         raise AssertionError(result.get("ReportingFailure", result.get("Failure")).get("error"))
 
     # GET /api/projects/{projectKey}/import/job/{jobId}/v1
-    def wait_for_execution_json_results_import_to_finish(
-        self, project_key: str, job_id: str
-    ) -> bool:
+    def wait_for_execution_json_results_import_to_finish(self, project_key: str, job_id: str) -> bool:
         try:
             while True:
                 import_status = self.get_imp_json_job_result(project_key, job_id)
                 if import_status.completion is True:
                     print(" " * 80, end="\r")
                     return import_status.completion
-                if (
-                    import_status.handled_items
-                    and import_status.total_items
-                    and import_status.percentage
-                ):
+                if import_status.handled_items and import_status.total_items and import_status.percentage:
                     pretty_print_progress_bar(
                         mode="Importing",
                         handled=import_status.handled_items,
@@ -408,18 +470,10 @@ class Connection:
         self,
         tov_key: str,
         cycle_key: str,
-        reportRootUID: str,
-        filters=None,
-        report_config=None,
+        report_config: TestCycleXMLReportOptions = None,
     ) -> str:
         if report_config is None:
             report_config = XmlExportConfig["Itep Export"]
-        if filters is None:
-            filters = []
-
-        if reportRootUID and reportRootUID != "ROOT":
-            report_config.reportRootUID = reportRootUID
-        report_config.filters = filters
         if cycle_key and cycle_key != "0":
             response = self.legacy_session.post(
                 f"{self.server_legacy_url}cycle/{cycle_key}/xmlReport",
@@ -459,10 +513,30 @@ class Connection:
         )
         return report_generation_status.json()["completion"]
 
+    def trigger_csv_report_generation(
+        self,
+        project_key: str,
+        report_config: ProjectCSVReportOptions,
+    ) -> str:
+        response = self.legacy_session.post(
+            f"{self.server_legacy_url}projects/{project_key}/csvReport",
+            json=asdict(report_config),
+        )
+        data = response.json()
+        job_id = data.get("jobID")
+        if not isinstance(job_id, str):
+            raise ValueError("jobID is missing or not a string")
+        return job_id
+
+    def wait_for_tmp_csv_report_name(self, job_id: str) -> str:
+        while True:
+            report_generation_result = self.get_exp_job_result(job_id)
+            if report_generation_result is not None:
+                return report_generation_result
+            spin_spinner("Waiting until creation of CSV report is complete")
+
     # GET /testCaseSets/{testCaseSetKey}/specifications/{specificationKey}/testCases
-    def get_test_cases_of_specification(
-        self, testcaseset_key: str, specification_key: str
-    ) -> list[dict]:
+    def get_test_cases_of_specification(self, testcaseset_key: str, specification_key: str) -> list[dict]:
         test_cases: list[dict] = self.legacy_session.get(
             f"{self.server_legacy_url}testCaseSets/{testcaseset_key}/specifications/{specification_key}/testCases",
         ).json()
@@ -471,6 +545,15 @@ class Connection:
     def get_xml_report_data(self, report_tmp_name: str) -> bytes:
         report = self.legacy_session.get(
             f"{self.server_legacy_url}xmlReport/{report_tmp_name}",
+        )
+        content = report.content
+        if not isinstance(content, bytes):
+            raise TypeError("Expected bytes from response.content")
+        return content
+
+    def get_csv_report_data(self, report_tmp_name: str) -> bytes:
+        report = self.legacy_session.get(
+            f"{self.server_legacy_url}csvReport/{report_tmp_name}",
         )
         content = report.content
         if not isinstance(content, bytes):
@@ -511,9 +594,7 @@ class Connection:
         ).json()
 
     # /api/projects/{projectKey}/testThemes/{testThemeKey}/v1
-    def get_project_test_theme(
-        self, project_key, test_theme_key, specification_key=None, execution_key=None
-    ):
+    def get_project_test_theme(self, project_key, test_theme_key, specification_key=None, execution_key=None):
         return self.session.get(
             f"{self.server_url}projects/{project_key}/testThemes/{test_theme_key}/v1",
             params={
@@ -563,7 +644,7 @@ class Connection:
             },
         ).json()
 
-    #     /api/projects/{projectKey}/testCaseSets/{testCaseSetKey}/testCases/{testCaseSpecificationKey}/v1:
+    # /api/projects/{projectKey}/testCaseSets/{testCaseSetKey}/testCases/{testCaseSpecificationKey}/v1:
     def get_project_test_case(
         self, project_key, test_case_set_key, test_case_specification_key, execution_key=None
     ):
@@ -608,19 +689,13 @@ class Connection:
     def trigger_execution_xml_results_import(
         self,
         cycle_key: str,
-        report_root_uid: str,
         serverside_file_name: str,
-        default_tester: str,
-        filters: list[FilterInfo],
         import_config: ExecutionXmlResultsImportOptions | None = None,
     ) -> str:
         used_import_config = TYPICAL_XML_IMPORT_CONFIG if import_config is None else import_config
         used_import_config.fileName = serverside_file_name
-        used_import_config.filters = filters
-        if default_tester:
-            used_import_config.defaultTester = default_tester
-        if report_root_uid and report_root_uid != "ROOT":
-            used_import_config.reportRootUID = report_root_uid
+        if used_import_config.reportRootUID and used_import_config.reportRootUID == "ROOT":
+            used_import_config.reportRootUID = None
 
         try:
             response = self.legacy_session.post(
@@ -638,19 +713,11 @@ class Connection:
         self,
         project_key: str,
         cycle_key: str,
-        report_root_uid: str,
         serverside_file_name: str,
-        default_tester: str,
-        filters: list[FilterInfo],
         import_config: ExecutionJsonResultsImportOptions | None = None,
     ) -> str:
         used_import_config = TYPICAL_JSON_IMPORT_CONFIG if import_config is None else import_config
         used_import_config.fileName = serverside_file_name
-        used_import_config.filters = filters
-        if default_tester:
-            used_import_config.defaultTester = default_tester
-        if report_root_uid and report_root_uid != "ROOT":
-            used_import_config.reportRootUID = report_root_uid
 
         try:
             response = self.session.post(
@@ -773,7 +840,7 @@ def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901,
                 return connection
 
         except requests.HTTPError:
-            logger.error("Invalid login credentials.")
+            logger.error("HTTP Error during login. See log file for more details.")
             logger.debug(traceback.format_exc())
             action = questions.ask_for_action_after_failed_login()
             if action == "retry_password":
@@ -787,7 +854,7 @@ def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901,
                 close_program()
 
         except (requests.ConnectionError, requests.exceptions.MissingSchema):
-            logger.error("Invalid server url.")
+            logger.error("Connection Error. See log file for more details.")
             logger.debug(traceback.format_exc())
             action = questions.ask_for_action_after_failed_server_connection()
             if action == "retry_server":
@@ -798,7 +865,7 @@ def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901,
                 close_program()
 
         except requests.exceptions.Timeout:
-            logger.error("No connection could be established due to timeout.")
+            logger.error("No connection could be established due to timeout. See log file for more details.")
             logger.debug(traceback.format_exc())
             action = questions.ask_for_action_after_login_timeout()
             if action == "retry":

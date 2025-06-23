@@ -21,9 +21,18 @@ from questionary import Choice, Style, checkbox, confirm, select, unsafe_prompt
 from questionary import print as pprint
 
 from . import actions, util
-from .config_model import ExecutionResultsImportOptions
+from .config_model import (
+    AutomationCSVField,
+    ExecutionCSVField,
+    ExecutionJsonResultsImportOptions,
+    ExecutionXmlResultsImportOptions,
+    ProjectCSVReportOptions,
+    SpecificationCSVField,
+    TestCycleJsonReportOptions,
+    TestCycleXMLReportOptions,
+)
 from .log import logger
-from .util import ImportConfig, XmlExportConfig
+from .util import JsonExportConfig, JsonImportConfig, XmlExportConfig, XmlImportConfig
 
 custom_style_fancy = Style(
     [
@@ -104,7 +113,7 @@ def checkbox_prompt(
     return []
 
 
-def text_prompt(
+def text_prompt(  # noqa: PLR0913
     message: str,
     type: str = "text",  # noqa: A002
     validation: Callable[[str], bool | str] | None = lambda val: bool(val),
@@ -130,7 +139,7 @@ def text_prompt(
 def ask_for_test_bench_credentials(server="", login="", pwd="", session="") -> dict:
     return {
         "server_url": ask_for_test_bench_server_url(server),
-        "verify": False,  # ask_for_ssl_verification_option(), #ToDo Hier könnten optional Certificate geprüft werden
+        "verify": False,  # ask_for_ssl_verification_option() #TODO
         "loginname": ask_for_testbench_loginname(login),
         "password": ask_for_testbench_password(pwd),
         "sessionToken": session,
@@ -138,19 +147,19 @@ def ask_for_test_bench_credentials(server="", login="", pwd="", session="") -> d
 
 
 def ask_for_test_bench_server_url(default="") -> str:
-    server_url = str(
-        text_prompt(
-            message="Enter the TestBench server address and port <host:port>:",
-            validation=lambda text: True
-            if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/)?", text)
-            else f"Server '{text}' is not valid! ",
-            default=default,
-            filter=lambda raw: sub(
-                r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/1/?)?$",
-                r"https://\2\3/api/1/",
-                sub(r"^([\w\-.\d]+)$", r"\1:9443", raw),
-            ),
-        )
+    server_url = text_prompt(
+        message="Enter the TestBench server address and port <host:port>:",
+        validation=lambda text: (
+            True
+            if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/)?", text)
+            else f"Server '{text}' is not valid! "
+        ),
+        default=default,
+        filter=lambda raw: sub(
+            r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/?)?$",
+            r"https://\2\3/api/",
+            sub(r"^([\w\-.\d]+)$", r"\1:443", raw),
+        ),
     )
     if not isinstance(server_url, str):
         raise ValueError("Unexpected text_prompt result.")
@@ -177,9 +186,11 @@ def ask_for_certificate_path() -> str:
     certificate_path = text_prompt(
         message="Provide the path to the certificate.",
         type="path",
-        validation=lambda path: True
-        if isfile(path) and os.access(path, os.R_OK)
-        else f"Path '{path}' is not a file or not readable.",
+        validation=lambda path: (
+            True
+            if isfile(path) and os.access(path, os.R_OK)
+            else f"Path '{path}' is not a file or not readable."
+        ),
     )
     if not isinstance(certificate_path, str):
         raise ValueError("Unexpected text_prompt result.")
@@ -230,6 +241,19 @@ def ask_to_select_tov(project: dict, default=None) -> dict:
     return tov
 
 
+def ask_to_select_tovs(project: dict, default=None) -> list[dict]:
+    if selection_prompt(
+        "Select multiple test object version?", choices=[Choice("No", False), Choice("Yes", True)]
+    ):
+        tovs: list = checkbox_prompt(
+            message="Select test object version(s) with space.",
+            choices=[Choice(tov["name"], tov) for tov in project["testObjectVersions"]],
+            no_valid_option_message="No test object version available.",
+        )
+        return tovs
+    return [ask_to_select_tov(project, default)]
+
+
 def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
     choices = [Choice("<NO TEST CYCLE>", "NO_EXEC")] if export else []
     choices.extend([Choice(cycle["name"], cycle) for cycle in tov["testCycles"]])
@@ -242,6 +266,28 @@ def ask_to_select_cycle(tov: dict, default=None, export=False) -> dict:
     return test_cycle
 
 
+def ask_to_select_cycles(tov: dict, default=None, export=False) -> list[dict]:
+    choices = [Choice(cycle["name"], cycle) for cycle in tov["testCycles"]]
+    if choices and selection_prompt(
+        "Select multiple test cycle(s)?", choices=[Choice("No", False), Choice("Yes", True)]
+    ):
+        test_cycles: list = checkbox_prompt(
+            message="Select test cycle(s) with space.",
+            choices=choices,
+            no_valid_option_message="No test cycle available.",
+        )
+        return test_cycles
+    choices = [Choice("<NO TEST CYCLE>", "NO_EXEC")] if export else []
+    choices.extend([Choice(cycle["name"], cycle) for cycle in tov["testCycles"]])
+    test_cycle: dict = selection_prompt(
+        message="Select a test cycle.",
+        choices=choices,
+        no_valid_option_message="No test cycle available.",
+        default=next((x for x in choices if x.title == default), None),
+    )
+    return [test_cycle]
+
+
 def ask_to_select_filters(all_filters: list[dict]) -> list:
     if selection_prompt("Activate Filters:", choices=[Choice("No", False), Choice("Yes", True)]):
         all_filters_sorted = sorted(all_filters, key=lambda fltr: fltr["name"].casefold())
@@ -249,7 +295,7 @@ def ask_to_select_filters(all_filters: list[dict]) -> list:
         filters: list = checkbox_prompt(
             message="Provide a set of filters.",
             choices=[
-                Choice(fltr["name"], {"name": fltr["name"], "type": fltr["type"]})
+                Choice(fltr["name"], {"name": fltr["name"], "filterType": fltr["type"]})
                 for fltr in all_filters_sorted
             ],
             no_valid_option_message="No filters available.",
@@ -258,13 +304,13 @@ def ask_to_select_filters(all_filters: list[dict]) -> list:
     return []
 
 
-def ask_to_config_report():
+def ask_to_config_xml_report():
     selection = selection_prompt(
         "Select Report Configuration:",
         choices=[Choice(config_name, config) for config_name, config in XmlExportConfig.items()],
     )
     if not selection:
-        selection = {
+        custom_choices = {
             "exportAttachments": [Choice("True", True), Choice("False", False)],
             "exportDesignData": [Choice("True", True), Choice("False", False)],
             "characterEncoding": [Choice("UTF-16", "utf-16"), Choice("UTF-8", "utf-8")],
@@ -275,18 +321,74 @@ def ask_to_config_report():
             "exportExecutionProtocols": [Choice("False", False), Choice("True", True)],
         }
         pprint("  {", style="bold")
-        for key, value in selection.items():
-            selection[key] = selection_prompt(f'   "{key}": ', value)
+        for key, value in custom_choices.items():
+            custom_choices[key] = selection_prompt(f'   "{key}": ', value)
         pprint("  }", style="bold")
+        selection = TestCycleXMLReportOptions(reportRootUID=None, filters=[], **custom_choices)
     return selection
 
 
-def ask_to_config_import() -> ExecutionResultsImportOptions:
+def ask_to_config_json_report():
+    selection = selection_prompt(
+        "Select Report Configuration:",
+        choices=[Choice(config_name, config) for config_name, config in JsonExportConfig.items()],
+    )
+    if not selection:
+        custom_choices = {
+            "basedOnExecution": [Choice("True", True), Choice("False", False)],
+            "suppressFilteredData": [Choice("True", True), Choice("False", False)],
+            "suppressNotExecutable": [Choice("True", True), Choice("False", False)],
+            "suppressEmptyTestThemes": [Choice("True", True), Choice("False", False)],
+        }
+        pprint("  {", style="bold")
+        for key, value in custom_choices.items():
+            custom_choices[key] = selection_prompt(f'   "{key}": ', value)
+        pprint("  }", style="bold")
+        selection = TestCycleJsonReportOptions(treeRootUID=None, filters=[], **custom_choices)
+    return selection
+
+
+def ask_to_config_csv_report() -> ProjectCSVReportOptions:
+    selected_fields = checkbox_prompt(
+        message="Select Specification fields to be exported.",
+        choices=[Choice(field.name, field) for field in SpecificationCSVField],
+    )
+    selected_fields.extend(
+        checkbox_prompt(
+            message="Select Execution fields to be exported.",
+            choices=[Choice(field.name, field) for field in ExecutionCSVField],
+        )
+    )
+    selected_fields.extend(
+        checkbox_prompt(
+            message="Select Automation fields to be exported.",
+            choices=[Choice(field.name, field) for field in AutomationCSVField],
+        )
+    )
+    custom_choices = {
+        "Show users full name?": [Choice("True", True), Choice("False", False)],
+        "Character encoding": [
+            Choice("UTF-8", "utf-8"),
+            Choice("UTF-16", "utf-16"),
+            Choice("Cp1252", "cp1252"),
+        ],
+    }
+    for key, value in custom_choices.items():
+        custom_choices[key] = selection_prompt(f' "{key}": ', value)
+    return ProjectCSVReportOptions(
+        [],
+        showUserFullName=custom_choices["Show users full name?"],
+        characterEncoding=custom_choices["Character encoding"],
+        fields=selected_fields,
+    )
+
+
+def ask_to_config_xml_import() -> ExecutionXmlResultsImportOptions:
     selection = selection_prompt(
         "Select Import Configuration:",
-        choices=[Choice(config_name, config) for config_name, config in ImportConfig.items()],
+        choices=[Choice(config_name, config) for config_name, config in XmlImportConfig.items()],
     )
-    if isinstance(selection, ExecutionResultsImportOptions):
+    if isinstance(selection, ExecutionXmlResultsImportOptions):
         return selection
     selection = {
         "ignoreNonExecutedTestCases": [
@@ -301,17 +403,39 @@ def ask_to_config_import() -> ExecutionResultsImportOptions:
     for key, value in selection.items():
         selection[key] = selection_prompt(f'   "{key}": ', value)
     pprint("  }", style="bold")
-    return ExecutionResultsImportOptions.from_dict(selection)
+    return ExecutionXmlResultsImportOptions.from_dict(selection)
+
+
+def ask_to_config_json_import() -> ExecutionJsonResultsImportOptions:
+    selection = selection_prompt(
+        "Select Import Configuration:",
+        choices=[Choice(config_name, config) for config_name, config in JsonImportConfig.items()],
+    )
+    if isinstance(selection, ExecutionJsonResultsImportOptions):
+        return selection
+    selection = {
+        "UseExistingDefect": [Choice("True", True), Choice("False", False)],
+        "IgnoreNonExecutedTestCases": [Choice("True", True), Choice("False", False)],
+        "CheckPaths": [Choice("True", True), Choice("False", False)],
+        "DiscardTesterInformation": [Choice("True", True), Choice("False", False)],
+    }
+    pprint("  {", style="bold")
+    for key, value in selection.items():
+        selection[key] = selection_prompt(f'   "{key}": ', value)
+    pprint("  }", style="bold")
+    return ExecutionJsonResultsImportOptions.from_dict(selection)
 
 
 def ask_for_output_path(default: str = "report.zip") -> str:
     output_path = text_prompt(
         message=f"Provide the output path [{default}]:",
         type="path",
-        validation=lambda path: True
-        if ((isdir(path) or isfile(path)) and os.access(path, os.W_OK))
-        or os.access(dirname(abspath(path)), os.W_OK)
-        else f"Path '{path}' does not exist or is not writeable.",
+        validation=lambda path: (
+            True
+            if ((isdir(path) or isfile(path)) and os.access(path, os.W_OK))
+            or os.access(dirname(abspath(path)), os.W_OK)
+            else f"Path '{path}' does not exist or is not writeable."
+        ),
         filter=lambda path: str(Path(path) / default) if isdir(path or ".") else path,
     )
     pprint("Output Path: ", end=None)
@@ -323,10 +447,12 @@ def ask_for_input_path() -> str:
     input_path = text_prompt(
         message="Provide the input path [report.zip]:",
         type="path",
-        validation=lambda path: True
-        if (isfile(path) and os.access(path, os.R_OK))
-        or (isfile("report.zip") and os.access("report.zip", os.R_OK))
-        else f"'{path}' is not a file or not readable.",
+        validation=lambda path: (
+            True
+            if (isfile(path) and os.access(path, os.R_OK))
+            or (not path and isfile("report.zip") and os.access("report.zip", os.R_OK))
+            else f"'{path}' is not a file or not readable."
+        ),
         filter=lambda path: path if path else "report.zip",
     )
     if not isinstance(input_path, str):
@@ -378,28 +504,39 @@ def ask_for_action_after_login_timeout() -> str:
     return action
 
 
-def ask_for_next_action():
+def ask_for_main_action(server_version: list[int] | None = None) -> str:
+    tb_4_actions = [
+        Choice("Export JSON Report", actions.ExportJSONReport()),
+        Choice("Import JSON execution results", actions.ImportJSONExecutionResults()),
+    ]
+    tb_306_actions = [
+        Choice("Export CSV Report", actions.ExportCSVReport()),
+    ]
+    common_actions = [
+        Choice("Export XML Report", actions.ExportXMLReport()),
+        Choice("Import XML execution results", actions.ImportXMLExecutionResults()),
+        Choice("Browser Projects", actions.BrowseProjects()),
+        Choice("Write history to config file", actions.ExportActionLog()),
+        Choice("Change connection", actions.ChangeConnection()),
+        Choice("Quit", actions.Quit()),
+    ]
+    choices = []
+    if server_version > [4]:
+        choices.extend(tb_4_actions)
+    if server_version >= [3, 0, 6, 2]:
+        choices.extend(tb_306_actions)
+    choices.extend(common_actions)
     return selection_prompt(
         message="What do you want to do?",
-        choices=[
-            Choice("Export XML Report", actions.ExportXMLReport()),
-            Choice("Import execution results", actions.ImportExecutionResults()),
-            Choice("Browser Projects", actions.BrowseProjects()),
-            Choice("Write history to config file", actions.ExportActionLog()),
-            Choice("Change connection", actions.ChangeConnection()),
-            Choice("Quit", actions.Quit()),
-        ],
+        choices=choices,
     )
 
 
 def ask_to_select_default_tester(all_testers: list[dict]) -> str | None:
-    all_testers_sorted = sorted(
-        all_testers, key=lambda tester: tester["value"]["user-name"].casefold()
-    )
+    all_testers_sorted = sorted(all_testers, key=lambda tester: tester["value"]["user-name"].casefold())
 
     choices = [Choice("<No Tester>", False)] + [
-        Choice(tester["value"]["user-name"], tester["value"]["user-login"])
-        for tester in all_testers_sorted
+        Choice(tester["value"]["user-name"], tester["value"]["user-login"]) for tester in all_testers_sorted
     ]
 
     default_tester = selection_prompt(
@@ -417,6 +554,13 @@ def ask_to_select_default_tester(all_testers: list[dict]) -> str | None:
     return default_tester
 
 
+def ask_to_select_tree_element() -> bool:
+    return selection_prompt(
+        "Select report root from test theme tree?",
+        choices=[Choice("No", False), Choice("Yes", True)],
+    )
+
+
 def ask_to_select_report_root_uid(cycle_structure: list[dict]):
     cycle_structure_tree = util.add_numbering_to_cycle(cycle_structure)
     return navigate_in_cycle_stucture(cycle_structure_tree)
@@ -427,9 +571,11 @@ def navigate_in_cycle_stucture(theme_structure):
         choices = [Choice("<SELECT ALL>", "ROOT")]
     else:
         te = theme_structure["tse"][
-            "TestTheme_structure"
-            if "TestTheme_structure" in theme_structure["tse"]
-            else "TestCaseSet_structure"
+            (
+                "TestTheme_structure"
+                if "TestTheme_structure" in theme_structure["tse"]
+                else "TestCaseSet_structure"
+            )
         ]
         choices = [
             Choice(
@@ -458,6 +604,6 @@ def navigate_in_cycle_stucture(theme_structure):
         )
         if not isinstance(selection, str):
             selection = navigate_in_cycle_stucture(selection)
-        if isinstance(selection, str) and selection != "BACK":
+        if isinstance(selection, str) and selection not in ("BACK", "ROOT"):
             return selection
     return None

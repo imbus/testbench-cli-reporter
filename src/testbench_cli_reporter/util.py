@@ -27,10 +27,11 @@ from typing import Any
 from questionary import print as pprint
 
 from .config_model import (
+    ACTION_TYPES,
     CliReporterConfig,
-    ExecutionResultsImportOptions,
-    ExportAction,
-    ImportAction,
+    ExecutionJsonResultsImportOptions,
+    ExecutionXmlResultsImportOptions,
+    TestCycleJsonReportOptions,
     TestCycleXMLReportOptions,
 )
 from .log import logger
@@ -39,7 +40,46 @@ BLUE_ITALIC = "#06c8ff italic"
 
 BLUE_BOLD_ITALIC = "#06c8ff bold italic"
 
-TYPICAL_IMPORT_CONFIG: ExecutionResultsImportOptions = ExecutionResultsImportOptions(
+
+class Colors:
+    """ANSI color codes"""
+
+    BLACK = "\033[0;30m"
+    RED = "\033[0;31m"
+    GREEN = "\033[0;32m"
+    BROWN = "\033[0;33m"
+    BLUE = "\033[0;34m"
+    PURPLE = "\033[0;35m"
+    CYAN = "\033[0;36m"
+    LIGHT_GRAY = "\033[0;37m"
+    DARK_GRAY = "\033[1;30m"
+    LIGHT_RED = "\033[1;31m"
+    LIGHT_GREEN = "\033[1;32m"
+    YELLOW = "\033[1;33m"
+    LIGHT_BLUE = "\033[1;34m"
+    LIGHT_PURPLE = "\033[1;35m"
+    LIGHT_CYAN = "\033[1;36m"
+    LIGHT_WHITE = "\033[1;37m"
+    BOLD = "\033[1m"
+    FAINT = "\033[2m"
+    ITALIC = "\033[3m"
+    UNDERLINE = "\033[4m"
+    BLINK = "\033[5m"
+    NEGATIVE = "\033[7m"
+    CROSSED = "\033[9m"
+    END = "\033[0m"
+    # cancel SGR codes if we don't write to a terminal
+    if not __import__("sys").stdout.isatty():
+        for _ in dir():
+            if isinstance(_, str) and _[0] != "_":
+                locals()[_] = ""
+    elif __import__("platform").system() == "Windows":
+        kernel32 = __import__("ctypes").windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+        del kernel32
+
+
+TYPICAL_XML_IMPORT_CONFIG: ExecutionXmlResultsImportOptions = ExecutionXmlResultsImportOptions(
     fileName="",
     reportRootUID=None,
     ignoreNonExecutedTestCases=True,
@@ -50,13 +90,29 @@ TYPICAL_IMPORT_CONFIG: ExecutionResultsImportOptions = ExecutionResultsImportOpt
     useExistingDefect=True,
 )
 
-ImportConfig = {
-    "Typical": TYPICAL_IMPORT_CONFIG,
+XmlImportConfig = {
+    "Typical": TYPICAL_XML_IMPORT_CONFIG,
+    "<CUSTOM>": False,
+}
+
+TYPICAL_JSON_IMPORT_CONFIG: ExecutionJsonResultsImportOptions = ExecutionJsonResultsImportOptions(
+    fileName="",
+    reportRootUID=None,
+    useExistingDefect=True,
+    ignoreNonExecutedTestCases=True,
+    checkPaths=True,
+    discardTesterInformation=True,
+    defaultTester=None,
+    filters=None,
+)
+
+JsonImportConfig = {
+    "Typical": TYPICAL_JSON_IMPORT_CONFIG,
     "<CUSTOM>": False,
 }
 
 
-XmlExportConfig = {
+XmlExportConfig: dict[str, TestCycleXMLReportOptions | bool] = {
     "Itep Export": TestCycleXMLReportOptions(
         exportAttachments=True,
         exportDesignData=True,
@@ -93,9 +149,20 @@ XmlExportConfig = {
         filters=[],
         reportRootUID=None,
     ),
-    "<CUSTOM>": None,
+    "<CUSTOM>": False,
 }
 
+JsonExportConfig = {
+    "iTorx Export (execution)": TestCycleJsonReportOptions(
+        treeRootUID=None,
+        basedOnExecution=True,
+        suppressFilteredData=True,
+        suppressNotExecutable=True,
+        suppressEmptyTestThemes=True,
+        filters=[],
+    ),
+    "<CUSTOM>": False,
+}
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -113,6 +180,7 @@ parser.add_argument(
 )
 parser.add_argument("--login", help="Users Login.", type=str, default="")
 parser.add_argument("--password", help="Users Password.", type=str, default="")
+parser.add_argument("--session", help="Session Token", type=str, default="")
 parser.add_argument(
     "-p",
     "--project",
@@ -220,9 +288,9 @@ def add_numbering_to_cycle(cycle_structure):
                 "childs": {int(test_structure_element[key]["orderPos"]): tse_dict[tse_serial]},
             }
         else:
-            tse_dict[tse_parent_serial]["childs"][int(test_structure_element[key]["orderPos"])] = (
-                tse_dict[tse_serial]
-            )
+            tse_dict[tse_parent_serial]["childs"][int(test_structure_element[key]["orderPos"])] = tse_dict[
+                tse_serial
+            ]
 
         tse_dict[tse_parent_serial]["childs"] = OrderedDict(
             sorted(tse_dict[tse_parent_serial]["childs"].items())
@@ -236,10 +304,11 @@ def add_numbering_to_childs(child_list, parent_numbering):
     parent_numbering = f"{parent_numbering}." if parent_numbering else ""
     for index, child in enumerate(child_list):
         test_structure_element = child["tse"]
-        if "TestTheme_structure" in test_structure_element:
-            key = "TestTheme_structure"
-        else:
-            key = "TestCaseSet_structure"
+        key = (
+            "TestTheme_structure"
+            if "TestTheme_structure" in test_structure_element
+            else "TestCaseSet_structure"
+        )
         current_numbering = f"{parent_numbering}{index + 1}"
         test_structure_element[key]["numbering"] = current_numbering
         if len(child["childs"]) > 0:
@@ -264,38 +333,41 @@ def pretty_print(*print_statements: dict):
         print("".join([statement["value"] for statement in print_statements]))
 
 
-def get_project_keys(  # noqa: C901
+def get_project_by_name(projects, project_name):
+    for project in projects:
+        if project["name"] == project_name:
+            return project
+    raise ValueError(f"Project '{project_name}' not found.")
+
+
+def get_tov_by_name(tovs, tov_name):
+    for tov in tovs:
+        if tov["name"] == tov_name:
+            return tov
+    raise ValueError(f"TOV '{tov_name}' not found.")
+
+
+def get_cycle_by_name(cycles, cycle_name):
+    for cycle in cycles:
+        if cycle["name"] == cycle_name:
+            return cycle
+    raise ValueError(f"Cycle '{cycle_name}' not found.")
+
+
+def get_project_keys(
     projects: dict,
     project_name: str,
     tov_name: str,
     cycle_name: str | None = None,
 ):
-    project_key = None
-    tov_key = None
     cycle_key = None
-    for project in projects["projects"]:
-        if project["name"] == project_name:
-            project_key = project["key"]["serial"]
-            for tov in project["testObjectVersions"]:
-                if tov["name"] == tov_name:
-                    project["testObjectVersions"] = [tov]
-                    tov_key = tov["key"]["serial"]
-                    if cycle_name:
-                        for cycle in tov["testCycles"]:
-                            if cycle["name"] == cycle_name:
-                                project["testObjectVersions"][0]["testCycles"] = cycle
-                                cycle_key = cycle["key"]["serial"]
-                                break
-                        break
-            break
-    if not project_key:
-        raise ValueError(f"Project '{project_name}' not found.")
-    if not tov_key:
-        raise ValueError(f"TOV '{tov_name}' not found in project '{project_name}'.")
-    if not cycle_key and cycle_name:
-        raise ValueError(
-            f"Cycle '{cycle_name}' not found in TOV '{tov_name}' in project '{project_name}'."
-        )
+    project = get_project_by_name(projects["projects"], project_name)
+    project_key = project["key"]["serial"]
+    tov = get_tov_by_name(project["testObjectVersions"], tov_name)
+    tov_key = tov["key"]["serial"]
+    if cycle_name:
+        cycle = get_cycle_by_name(tov["testCycles"], cycle_name)
+        cycle_key = cycle["key"]["serial"]
     pretty_print(
         {"value": "PROJECT_KEY: ", "end": None},
         {"value": f"{project_key}", "style": BLUE_BOLD_ITALIC, "end": None},
@@ -307,8 +379,31 @@ def get_project_keys(  # noqa: C901
     return project_key, tov_key, cycle_key
 
 
-def pretty_print_project_selection(selected_project, selected_tov, selected_cycle):
+def pretty_print_tov_scope(selected_tov):
+    pretty_print(
+        {"value": "TOV Scope:", "end": None},
+        {"value": f"{selected_tov['name']}", "style": BLUE_BOLD_ITALIC},
+    )
+
+
+def pretty_print_cycle_scope(selected_cycle):
+    pretty_print(
+        {"value": "Cycle Scope:", "end": None},
+        {"value": f"{selected_cycle['scope']}", "style": BLUE_BOLD_ITALIC},
+    )
+
+
+def pretty_print_project_tree_selection(
+    selected_project: dict, selected_tov: dict, selected_cycle: dict | str
+):
     print("  Selection:")
+    pretty_print_project_selection(selected_project)
+    pretty_print_tov_selection(selected_tov)
+    if selected_cycle != "NO_EXEC":
+        pretty_print_cycle_selection(selected_cycle)
+
+
+def pretty_print_project_selection(selected_project):
     pretty_print(
         {
             "value": f"{' ' * 4 + selected_project['name']: <50}",
@@ -320,6 +415,11 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
             "value": f"{selected_project['key']['serial']: >15}",
             "style": BLUE_BOLD_ITALIC,
         },
+    )
+
+
+def pretty_print_tov_selection(selected_tov):
+    pretty_print(
         {
             "value": f"{' ' * 6 + selected_tov['name']: <50}",
             "style": BLUE_BOLD_ITALIC,
@@ -331,19 +431,21 @@ def pretty_print_project_selection(selected_project, selected_tov, selected_cycl
             "style": BLUE_BOLD_ITALIC,
         },
     )
-    if selected_cycle != "NO_EXEC":
-        pretty_print(
-            {
-                "value": f"{' ' * 8 + selected_cycle['name']: <50}",
-                "style": BLUE_BOLD_ITALIC,
-                "end": None,
-            },
-            {"value": "  cycleKey:   ", "end": None},
-            {
-                "value": f"{selected_cycle['key']['serial']: >15}",
-                "style": BLUE_BOLD_ITALIC,
-            },
-        )
+
+
+def pretty_print_cycle_selection(selected_cycle):
+    pretty_print(
+        {
+            "value": f"{' ' * 8 + selected_cycle['name']: <50}",
+            "style": BLUE_BOLD_ITALIC,
+            "end": None,
+        },
+        {"value": "  cycleKey:   ", "end": None},
+        {
+            "value": f"{selected_cycle['key']['serial']: >15}",
+            "style": BLUE_BOLD_ITALIC,
+        },
+    )
 
 
 def pretty_print_test_cases(test_cases: dict[str, Any]):
@@ -489,12 +591,23 @@ def pretty_print_success_message(prefix: str, value: Any, suffix: str):
     )
 
 
-def resolve_server_name(server):
-    if fullmatch(r"([\w\-.]+)(:\d{1,5})", server):
-        resolved_server = f"https://{server}/api/1/"
+def pretty_print_progress_bar(mode: str, handled: int, total: int, percentage: int):
+    if total is not None and handled is not None:
+        completed_length = int(percentage / 2)  # Each 2% is one character
+        bar = "#" * completed_length + "-" * (50 - completed_length)
+        print(
+            f"{mode}: {Colors.BLUE}[{bar}]{Colors.END} {handled}/{total} "
+            f"{Colors.DARK_GRAY}({percentage}%){Colors.END}",
+            end="\r",
+        )
+
+
+def resolve_server_name(server: str) -> str:
+    if fullmatch(r"([\w\-.]+):(\d{1,5})", server):
+        resolved_server = f"https://{server}/api/"
     elif fullmatch(r"([\w\-.]+)", server):
-        resolved_server = f"https://{server}:9443/api/1/"
-    elif fullmatch(r"https?://([\w\-.]+)(:\d{1,5})/api/1/", server):
+        resolved_server = f"https://{server}:9445/api/"
+    elif fullmatch(r"https?://([\w\-.]+):(\d{1,5})/api/", server):
         resolved_server = server
     else:
         raise ValueError(f"Server name '{server}' is not valid.")
@@ -581,9 +694,6 @@ def spin_spinner(message: str):
             time.sleep(delay())
     except UnicodeEncodeError:
         pass
-
-
-ACTION_TYPES = {"ImportExecutionResults": ImportAction, "ExportXMLReport": ExportAction}
 
 
 class AbstractAction(ABC):

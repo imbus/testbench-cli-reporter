@@ -19,7 +19,7 @@ class FilterInfo:
     def from_dict(cls, dictionary: dict):
         return cls(
             name=dictionary["name"],
-            filterType=FilterInfoType(dictionary["type"]),
+            filterType=FilterInfoType(dictionary["filterType"]),
             testThemeUID=dictionary.get("testThemeUID"),
         )
 
@@ -69,6 +69,156 @@ class TestCycleXMLReportOptions:
 
 
 @dataclass
+class Key:
+    serial: str
+
+    @classmethod
+    def from_dict(cls, dictionary: dict):
+        return cls(serial=dictionary.get("serial", "0"))
+
+
+@dataclass
+class ProjectCSVReportScope:
+    tovKey: Key
+    reportRootUID: str | None = None
+    cycleKeys: list[Key] | None = None
+
+    def __post_init__(self):
+        if self.cycleKeys is None:
+            self.cycleKeys = []
+
+    @classmethod
+    def from_dict(cls, dictionary: dict):
+        return cls(
+            tovKey=Key.from_dict(dictionary.get("tovKey", {})),
+            reportRootUID=dictionary.get("reportRootUID"),
+            cycleKeys=[Key.from_dict(c) for c in dictionary.get("cycleKeys", [])],
+        )
+
+
+class SpecificationCSVField(str, Enum):
+    Name = "spec.name"
+    Status = "spec.status"
+    Locker = "spec.locker"
+    DueDate = "spec.duedate"
+    Priority = "spec.priority"
+    Responsible = "spec.responsible"
+    Reviewer = "spec.reviewer"
+    Description = "spec.description"
+    Calls = "spec.calls"
+    Parameters = "spec.parameters"
+    Keywords = "spec.keywords"
+    References = "spec.references"
+    Version = "spec.version"
+    VersionDate = "spec.versiondate"
+    VersionLabel = "spec.versionlabel"
+    VersionOwner = "spec.versionowner"
+    UDFs = "spec.userdefinedfields"
+    Requirements = "spec.requirements"
+    RequirementIDs = "spec.requirements.identifier"
+    Attachments = "spec.attachments"
+    ReviewComment = "spec.reviewcomment"
+    Comment = "spec.comment"
+    VersionComment = "spec.versioncomment"
+    TestCases = "spec.pcs"
+    DetailedInteraction = "spec.testsequence"
+    InteractionType = "ts.type"
+    InteractionPhase = "ts.phase"
+    InteractionDescription = "ts.description"
+    InteractionName = "ts.name"
+
+    def __str__(self):
+        return self.value
+
+
+class AutomationCSVField(str, Enum):
+    Status = "aut.status"
+    Locker = "aut.locker"
+    DueDate = "aut.duedate"
+    Priority = "aut.priority"
+    Responsible = "aut.responsible"
+    Reviewer = "aut.reviewer"
+    ScriptTemplate = "aut.scripttemplate"
+    ScriptEditor = "aut.scripteditor"
+    References = "aut.references"
+    Version = "aut.version"
+    VersionDate = "aut.versiondate"
+    VersionLabel = "aut.versionlabel"
+    VersionOwner = "aut.versionowner"
+    Attachments = "aut.attachments"
+    VersionComment = "aut.versioncomment"
+
+    def __str__(self):
+        return self.value
+
+
+class ExecutionCSVField(str, Enum):
+    Status = "exec.status"
+    Verdict = "exec.verdict"
+    ExecStatus = "exec.execstatus"
+    Locker = "exec.locker"
+    DueDate = "exec.duedate"
+    Priority = "exec.priority"
+    Responsible = "exec.responsible"
+    References = "exec.references"
+    PlannedTime = "exec.plannedtime"
+    ActualTime = "exec.actualtime"
+    ScriptPath = "exec.scriptpath"
+    ProtocolPath = "exec.protocolpath"
+    ExecutionEngine = "exec.engine"
+    Defects = "exec.error-details"
+    Version = "exec.version"
+    VersionDate = "exec.versiondate"
+    VersionLabel = "exec.versionlabel"
+    VersionOwner = "exec.versionowner"
+    Keywords = "exec.keywords"
+    UDFs = "exec.userdefinedfields"
+    Attachments = "exec.attachments"
+    TestCases = "exec.pcs"
+    VersionComment = "exec.versioncomment"
+    Tester = "exec.tester"
+    Comment = "exec.comment"
+    DefectIDs = "exec.errors"
+    VerdictTimestamp = "exec.verdicttimestamp"
+
+    def __str__(self):
+        return self.value
+
+
+@dataclass
+class ProjectCSVReportOptions:
+    scopes: list[ProjectCSVReportScope]
+    showUserFullName: bool | None = None
+    fields: list[SpecificationCSVField | AutomationCSVField | ExecutionCSVField] | None = None
+    characterEncoding: str | None = None
+
+    def __post_init__(self):
+        if self.scopes is None:
+            self.scopes = []
+        if self.fields is None:
+            self.fields = []
+
+    @classmethod
+    def from_dict(cls, dictionary: dict):
+        fields = []
+        for key in dictionary.get("fields", []):
+            if isinstance(key, str):
+                if key.startswith(("spec.", "ts.")):
+                    fields.append(SpecificationCSVField(key))
+                elif key.startswith("aut."):
+                    fields.append(AutomationCSVField(key))
+                elif key.startswith("exec."):
+                    fields.append(ExecutionCSVField(key))
+
+        return cls(
+            scopes=[ProjectCSVReportScope.from_dict(s) for s in dictionary.get("scopes", [])],
+            showUserFullName=dictionary.get("showUserFullName"),
+            fields=fields,
+            characterEncoding=dictionary.get("characterEncoding"),
+        )
+
+
+@dataclass
 class TestCycleJsonReportOptions:
     treeRootUID: str | None
     basedOnExecution: bool | None
@@ -90,14 +240,31 @@ class TestCycleJsonReportOptions:
 
 
 @dataclass
-class ExportParameters:
+class ExportCsvParameters:
+    outputPath: str
+    projectKey: str | None = None
+    report_config: ProjectCSVReportOptions | None = None
+
+    @classmethod
+    def from_dict(cls, dictionary: dict):
+        return cls(
+            outputPath=dictionary.get("outputPath"),
+            projectKey=dictionary.get("projectKey"),
+            report_config=(
+                ProjectCSVReportOptions.from_dict(dictionary.get("report_config") or {})
+                if dictionary.get("report_config")
+                else None
+            ),
+        )
+
+
+@dataclass
+class ExportXmlParameters:
     outputPath: str
     projectPath: list[str] | None = None
     tovKey: str | None = None
     cycleKey: str | None = None
-    reportRootUID: str | None = None
     report_config: TestCycleXMLReportOptions | None = None
-    filters: list[FilterInfo] | None = None
 
     @classmethod
     def from_dict(cls, dictionary: dict):
@@ -106,13 +273,11 @@ class ExportParameters:
             projectPath=dictionary.get("projectPath", []),
             tovKey=dictionary.get("tovKey"),
             cycleKey=dictionary.get("cycleKey"),
-            reportRootUID=dictionary.get("reportRootUID"),
             report_config=(
                 TestCycleXMLReportOptions.from_dict(dictionary.get("report_config") or {})
                 if dictionary.get("report_config")
                 else None
             ),
-            filters=[FilterInfo.from_dict(f) for f in dictionary.get("filters", [])],
         )
 
 
@@ -123,9 +288,7 @@ class ExportJsonParameters:
     projectKey: str | None = None
     tovKey: str | None = None
     cycleKey: str | None = None
-    reportRootUID: str | None = None
     report_config: TestCycleJsonReportOptions | None = None
-    filters: list[FilterJsonInfo] | None = None
 
     @classmethod
     def from_dict(cls, dictionary: dict):
@@ -135,13 +298,11 @@ class ExportJsonParameters:
             projectKey=dictionary.get("projectKey"),
             tovKey=dictionary.get("tovKey"),
             cycleKey=dictionary.get("cycleKey"),
-            reportRootUID=dictionary.get("reportRootUID"),
             report_config=(
                 TestCycleJsonReportOptions.from_dict(dictionary.get("report_config") or {})
                 if dictionary.get("report_config")
                 else None
             ),
-            filters=[FilterJsonInfo.from_dict(f) for f in dictionary.get("filters", [])],
         )
 
 
@@ -154,13 +315,13 @@ class BaseAction(ABC):
 
 
 @dataclass
-class ExportAction(BaseAction):
-    parameters: ExportParameters
+class ExportXmlAction(BaseAction):
+    parameters: ExportXmlParameters
     type: str = "ExportXMLReport"
 
     @classmethod
     def from_dict(cls, dictionary: dict):
-        return cls(parameters=ExportParameters.from_dict(dictionary.get("parameters") or {}))
+        return cls(parameters=ExportXmlParameters.from_dict(dictionary.get("parameters") or {}))
 
 
 @dataclass
@@ -171,6 +332,16 @@ class ExportJsonAction(BaseAction):
     @classmethod
     def from_dict(cls, dictionary: dict):
         return cls(parameters=ExportJsonParameters.from_dict(dictionary.get("parameters") or {}))
+
+
+@dataclass
+class ExportCsvAction(BaseAction):
+    parameters: ExportCsvParameters
+    type: str = "ExportCSVReport"
+
+    @classmethod
+    def from_dict(cls, dictionary: dict):
+        return cls(parameters=ExportCsvParameters.from_dict(dictionary.get("parameters") or {}))
 
 
 @dataclass
@@ -224,19 +395,16 @@ class ExecutionJsonResultsImportOptions:
 
 
 @dataclass
-class ImportParameters:
+class ImportXmlParameters:
     inputPath: str
     cycleKey: str | None = None
     projectPath: list[str] | None = None
-    reportRootUID: str | None = None
-    defaultTester: str | None = None
-    filters: list[FilterInfo] | None = None
     importConfig: ExecutionXmlResultsImportOptions | None = None
 
     @classmethod
     def from_dict(cls, dictionary: dict):
         import_config_dict = dictionary.get("importConfig")
-        importConfig = (
+        import_config = (
             ExecutionXmlResultsImportOptions.from_dict(import_config_dict)
             if import_config_dict is not None
             else None
@@ -244,10 +412,7 @@ class ImportParameters:
 
         return cls(
             inputPath=dictionary["inputPath"],
-            reportRootUID=dictionary.get("reportRootUID"),
-            defaultTester=dictionary.get("defaultTester"),
-            filters=dictionary.get("filters", []),
-            importConfig=importConfig,
+            importConfig=import_config,
         )
 
 
@@ -257,15 +422,12 @@ class ImportJsonParameters:
     projectKey: str | None = None
     cycleKey: str | None = None
     projectPath: list[str] | None = None
-    reportRootUID: str | None = None
-    defaultTester: str | None = None
-    filters: list[FilterInfo] | None = None
     importConfig: ExecutionJsonResultsImportOptions | None = None
 
     @classmethod
     def from_dict(cls, dictionary: dict):
         import_config_dict = dictionary.get("importConfig")
-        importConfig = (
+        import_config = (
             ExecutionJsonResultsImportOptions.from_dict(import_config_dict)
             if import_config_dict is not None
             else None
@@ -273,21 +435,18 @@ class ImportJsonParameters:
 
         return cls(
             inputPath=dictionary["inputPath"],
-            reportRootUID=dictionary.get("reportRootUID"),
-            defaultTester=dictionary.get("defaultTester"),
-            filters=dictionary.get("filters", []),
-            importConfig=importConfig,
+            importConfig=import_config,
         )
 
 
 @dataclass
 class ImportXMLAction(BaseAction):
-    parameters: ImportParameters
+    parameters: ImportXmlParameters
     type: str = "ImportXMLExecutionResults"
 
     @classmethod
     def from_dict(cls, dictionary: dict):
-        return cls(parameters=ImportParameters.from_dict(dictionary.get("parameters") or {}))
+        return cls(parameters=ImportXmlParameters.from_dict(dictionary.get("parameters") or {}))
 
 
 @dataclass
@@ -312,12 +471,7 @@ class Configuration:
 
     @classmethod
     def from_dict(cls, dictionary: dict):
-        action_classes: dict[str, type[BaseAction]] = {
-            "ImportXMLExecutionResults": ImportXMLAction,
-            "ExportXMLReport": ExportAction,
-            "ExportJSONReport": ExportJsonAction,
-            "ImportJSONExecutionResults": ImportJSONAction,
-        }
+        action_classes: dict[str, type[BaseAction]] = ACTION_TYPES
 
         return cls(
             server_url=dictionary["server_url"],
@@ -326,9 +480,7 @@ class Configuration:
             basicAuth=dictionary.get("basicAuth"),
             loginname=dictionary.get("loginname"),
             password=dictionary.get("password"),
-            actions=[
-                action_classes[action["type"]].from_dict(action) for action in dictionary["actions"]
-            ],
+            actions=[action_classes[action["type"]].from_dict(action) for action in dictionary["actions"]],
         )
 
 
@@ -409,8 +561,15 @@ class CliReporterConfig:
         return cls(
             configuration=[Configuration.from_dict(c) for c in dictionary.get("configuration", [])],
             loggingConfiguration=loggingConfig.from_dict(
-                dictionary.get("loggingConfiguration")
-                or dictionary.get("logging_configuration")
-                or {}
+                dictionary.get("loggingConfiguration") or dictionary.get("logging_configuration") or {}
             ),
         )
+
+
+ACTION_TYPES = {
+    "ExportXMLReport": ExportXmlAction,
+    "ExportJSONReport": ExportJsonAction,
+    "ExportCSVReport": ExportCsvAction,
+    "ImportXMLExecutionResults": ImportXMLAction,
+    "ImportJSONExecutionResults": ImportJSONAction,
+}

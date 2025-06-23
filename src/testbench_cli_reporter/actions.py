@@ -26,10 +26,13 @@ from zipfile import ZipFile
 
 from . import questions, testbench
 from .config_model import (
+    ExportCsvParameters,
     ExportJsonParameters,
-    ExportParameters,
+    ExportXmlParameters,
     ImportJsonParameters,
-    ImportParameters,
+    ImportXmlParameters,
+    Key,
+    ProjectCSVReportScope,
 )
 from .log import logger
 from .util import (
@@ -40,9 +43,12 @@ from .util import (
     close_program,
     get_project_keys,
     parser,
+    pretty_print_cycle_selection,
     pretty_print_project_selection,
+    pretty_print_project_tree_selection,
     pretty_print_success_message,
     pretty_print_test_cases,
+    pretty_print_tov_selection,
     pretty_print_tse_information,
 )
 
@@ -53,15 +59,15 @@ class UnloggedAction(AbstractAction):
 
 
 class ExportXMLReport(AbstractAction):
-    def __init__(self, parameters: ExportParameters | dict[str, Any] | None = None):
-        if isinstance(parameters, ExportParameters):
+    def __init__(self, parameters: ExportXmlParameters | dict[str, Any] | None = None):
+        if isinstance(parameters, ExportXmlParameters):
             exp_parameters = parameters
         elif parameters is None:
-            exp_parameters = ExportParameters("report.zip")
+            exp_parameters = ExportXmlParameters("report.zip")
         else:
-            exp_parameters = ExportParameters.from_dict(parameters or {})
+            exp_parameters = ExportXmlParameters.from_dict(parameters or {})
         super().__init__()
-        self.parameters: ExportParameters = exp_parameters
+        self.parameters: ExportXmlParameters = exp_parameters
         self.filters: list = []
         self.start_time: float = 0
 
@@ -75,23 +81,22 @@ class ExportXMLReport(AbstractAction):
             selected_tov["name"],
         ]
         selected_cycle = questions.ask_to_select_cycle(selected_tov, export=True)
-        pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
+        pretty_print_project_tree_selection(selected_project, selected_tov, selected_cycle)
         if selected_cycle == "NO_EXEC":
             self.parameters.cycleKey = None
-            tttree_structure = connection_log.active_connection.get_tov_structure(
-                self.parameters.tovKey
-            )
+            tttree_structure = connection_log.active_connection.get_tov_structure(self.parameters.tovKey)
         else:
             self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
             self.parameters.projectPath.append(selected_cycle["name"])
             tttree_structure = connection_log.active_connection.get_test_cycle_structure(
                 self.parameters.cycleKey
             )
-        self.parameters.reportRootUID = questions.ask_to_select_report_root_uid(tttree_structure)
+        report_root_uid = questions.ask_to_select_report_root_uid(tttree_structure)
         all_filters = connection_log.active_connection.get_all_filters()
-        self.parameters.filters = questions.ask_to_select_filters(all_filters)
-        self.filters = self.parameters.filters
-        self.parameters.report_config = questions.ask_to_config_report()
+        filters = questions.ask_to_select_filters(all_filters)
+        self.parameters.report_config = questions.ask_to_config_xml_report()
+        self.parameters.report_config.reportRootUID = report_root_uid
+        self.parameters.report_config.filters = filters
         self.parameters.outputPath = questions.ask_for_output_path()
 
         return True
@@ -112,8 +117,6 @@ class ExportXMLReport(AbstractAction):
         self.job_id = connection_log.active_connection.trigger_xml_report_generation(
             self.parameters.tovKey or "",
             self.parameters.cycleKey or "",
-            self.parameters.reportRootUID or "ROOT",
-            self.parameters.filters or [],
             self.parameters.report_config or XmlExportConfig["Itep Export"],
         )
         self.start_time = monotonic()
@@ -121,9 +124,7 @@ class ExportXMLReport(AbstractAction):
 
     def wait(self, connection_log: testbench.ConnectionLog) -> bool:
         try:
-            self.report_tmp_name = connection_log.active_connection.wait_for_tmp_xml_report_name(
-                self.job_id
-            )
+            self.report_tmp_name = connection_log.active_connection.wait_for_tmp_xml_report_name(self.job_id)
             return bool(self.report_tmp_name)
         except KeyError:
             logger.debug(traceback.format_exc())
@@ -139,10 +140,99 @@ class ExportXMLReport(AbstractAction):
         report = connection_log.active_connection.get_xml_report_data(str(self.report_tmp_name))
         with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(report)
-        pretty_print_success_message(
-            "Report", Path(self.parameters.outputPath).resolve(), "was generated"
+        pretty_print_success_message("Report", Path(self.parameters.outputPath).resolve(), "was generated")
+        logger.info(f"    Time elapsed: {monotonic() - self.start_time:.2f} seconds")
+        return True
+
+
+class ExportCSVReport(AbstractAction):
+    def __init__(self, parameters: ExportCsvParameters | dict[str, Any] | None = None):
+        if isinstance(parameters, ExportCsvParameters):
+            exp_parameters = parameters
+        elif parameters is None:
+            exp_parameters = ExportCsvParameters("report.zip")
+        else:
+            exp_parameters = ExportCsvParameters.from_dict(parameters or {})
+        super().__init__()
+        self.parameters: ExportCsvParameters = exp_parameters
+        self.filters: list = []
+        self.start_time: float = 0
+
+    def prepare(self, connection_log: testbench.ConnectionLog) -> bool:
+        all_projects = connection_log.active_connection.get_all_projects()
+        selected_project = questions.ask_to_select_project(all_projects)
+        pretty_print_project_selection(selected_project)
+        self.parameters.projectKey = selected_project["key"]["serial"]
+        selected_tovs = questions.ask_to_select_tovs(selected_project)
+        scopes = []
+        for selected_tov in selected_tovs:
+            print(f"{'-' * 33} Selected TOV {'-' * 33}")
+            pretty_print_tov_selection(selected_tov)
+            report_scope = ProjectCSVReportScope(Key(str(selected_tov["key"]["serial"])))
+            selected_cycles = questions.ask_to_select_cycles(selected_tov, export=True)
+            if selected_cycles == ["NO_EXEC"] or not selected_cycles:
+                report_scope.cycleKeys = []
+                tttree_structure = connection_log.active_connection.get_tov_structure(
+                    report_scope.tovKey.serial
+                )
+            else:
+                [pretty_print_cycle_selection(selected_cycle) for selected_cycle in selected_cycles]
+                report_scope.cycleKeys = [
+                    Key(str(selected_cycle["key"]["serial"])) for selected_cycle in selected_cycles
+                ]
+                tttree_structure = connection_log.active_connection.get_test_cycle_structure(
+                    report_scope.cycleKeys[0].serial
+                )
+            if questions.ask_to_select_tree_element():
+                report_scope.reportRootUID = questions.ask_to_select_report_root_uid(tttree_structure)
+                for tse in tttree_structure:
+                    info, typ = self.get_test_structure_element_info(tse)
+                    if info.get("uniqueID") == report_scope.reportRootUID:
+                        pretty_print_tse_information(tse, typ, info)
+
+            scopes.append(report_scope)
+        self.parameters.report_config = questions.ask_to_config_csv_report()
+        self.parameters.report_config.scopes = scopes
+        self.parameters.outputPath = questions.ask_for_output_path()
+
+        return True
+
+    def get_test_structure_element_info(self, tse):
+        # TODO: sollte mal in utils ausgelagert werden, da mehrfach implementiert
+        for key, value in tse.items():
+            if re.match(r".*_structure$", key):
+                return value, re.sub(r"_structure$", "", key)
+        raise ValueError(f"Unknown Element Type: {tse!s}")
+
+    # TODO: Hier weiter machen!!!
+    def trigger(self, connection_log: testbench.ConnectionLog) -> bool:
+        self.job_id = connection_log.active_connection.trigger_csv_report_generation(
+            project_key=self.parameters.projectKey,
+            report_config=self.parameters.report_config,
         )
-        logger.info(f"Time elapsed: {monotonic() - self.start_time:.2f} seconds")
+        self.start_time = monotonic()
+        return bool(self.job_id)
+
+    def wait(self, connection_log: testbench.ConnectionLog) -> bool:
+        try:
+            self.report_tmp_name = connection_log.active_connection.wait_for_tmp_csv_report_name(self.job_id)
+            return bool(self.report_tmp_name)
+        except KeyError:
+            logger.debug(traceback.format_exc())
+            return False
+
+    def poll(self, connection_log: testbench.ConnectionLog) -> bool:
+        result = connection_log.active_connection.get_exp_job_result(self.job_id)
+        if result is not None:
+            self.report_tmp_name = result
+        return bool(result)
+
+    def finish(self, connection_log: testbench.ConnectionLog) -> bool:
+        report = connection_log.active_connection.get_csv_report_data(str(self.report_tmp_name))
+        with Path(self.parameters.outputPath).open("wb") as output_file:
+            output_file.write(report)
+        pretty_print_success_message("Report", Path(self.parameters.outputPath).resolve(), "was generated")
+        logger.info(f"    Time elapsed: {monotonic() - self.start_time:.2f} seconds")
         return True
 
 
@@ -169,23 +259,22 @@ class ExportJSONReport(AbstractAction):
             selected_tov["name"],
         ]
         selected_cycle = questions.ask_to_select_cycle(selected_tov, export=True)
-        pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
+        pretty_print_project_tree_selection(selected_project, selected_tov, selected_cycle)
         if selected_cycle == "NO_EXEC":
             self.parameters.cycleKey = None
-            tttree_structure = connection_log.active_connection.get_tov_structure(
-                self.parameters.tovKey
-            )
+            tttree_structure = connection_log.active_connection.get_tov_structure(self.parameters.tovKey)
         else:
             self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
             self.parameters.projectPath.append(selected_cycle["name"])
             tttree_structure = connection_log.active_connection.get_test_cycle_structure(
                 self.parameters.cycleKey
             )
-        self.parameters.reportRootUID = questions.ask_to_select_report_root_uid(tttree_structure)
+        report_root_uid = questions.ask_to_select_report_root_uid(tttree_structure)
         all_filters = connection_log.active_connection.get_all_filters()
-        self.parameters.filters = questions.ask_to_select_filters(all_filters)
-        self.filters = self.parameters.filters
+        filters = questions.ask_to_select_filters(all_filters)
         self.parameters.report_config = questions.ask_to_config_json_report()
+        self.parameters.report_config.treeRootUID = report_root_uid
+        self.parameters.report_config.filters = filters
         self.parameters.outputPath = questions.ask_for_output_path()
 
         return True
@@ -221,19 +310,10 @@ class ExportJSONReport(AbstractAction):
             self.parameters.cycleKey = connection_log.active_connection.get_cycle_key_new_play(
                 self.parameters.projectKey, self.parameters.tovKey, self.parameters.projectPath[2]
             )
-
-        reportRootUID: str | None = None
-        if self.parameters.reportRootUID:
-            reportRootUID = self.parameters.reportRootUID
-        elif self.parameters.report_config is not None:
-            reportRootUID = self.parameters.report_config.treeRootUID
-
         self.job_id = connection_log.active_connection.trigger_json_report_generation(
             project_key=self.parameters.projectKey,
             tov_key=self.parameters.tovKey,
             cycle_key=self.parameters.cycleKey,
-            reportRootUID=reportRootUID,
-            filters=self.parameters.filters or [],
             report_config=self.parameters.report_config,
         )
         self.start_time = monotonic()
@@ -270,23 +350,22 @@ class ExportJSONReport(AbstractAction):
         )
         with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(report)
-        pretty_print_success_message(
-            "Report", Path(self.parameters.outputPath).resolve(), "was generated"
-        )
-        logger.info(f"Time elapsed: {monotonic() - self.start_time:.2f} seconds")
+        pretty_print_success_message("Report", Path(self.parameters.outputPath).resolve(), "was generated")
+        logger.info(f"    Time elapsed: {monotonic() - self.start_time:.2f} seconds")
         return True
 
 
 class ImportXMLExecutionResults(AbstractAction):
-    def __init__(self, parameters: ImportParameters | dict[str, Any] | None = None):
-        if isinstance(parameters, ImportParameters):
+    def __init__(self, parameters: ImportXmlParameters | dict[str, Any] | None = None):
+        if isinstance(parameters, ImportXmlParameters):
             imp_parameters = parameters
         elif parameters is None:
-            imp_parameters = ImportParameters("result.zip")
+            imp_parameters = ImportXmlParameters("result.zip")
         else:
-            imp_parameters = ImportParameters.from_dict(parameters)
+            imp_parameters = ImportXmlParameters.from_dict(parameters)
         super().__init__()
-        self.parameters: ImportParameters = imp_parameters
+        self.parameters: ImportXmlParameters = imp_parameters
+        self.start_time: float = 0
 
     def prepare(self, connection_log: testbench.ConnectionLog) -> bool:
         self.parameters.inputPath = questions.ask_for_input_path()
@@ -298,19 +377,20 @@ class ImportXMLExecutionResults(AbstractAction):
         selected_project = questions.ask_to_select_project(all_projects, default=project)
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
         selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle)
-        pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
+        pretty_print_project_tree_selection(selected_project, selected_tov, selected_cycle)
         self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
-        cycle_structure = connection_log.active_connection.get_test_cycle_structure(
-            self.parameters.cycleKey
-        )
-        self.parameters.reportRootUID = questions.ask_to_select_report_root_uid(cycle_structure)
+        cycle_structure = connection_log.active_connection.get_test_cycle_structure(self.parameters.cycleKey)
+        report_root_uid = questions.ask_to_select_report_root_uid(cycle_structure)
         available_testers = connection_log.active_connection.get_all_testers_of_project(
             selected_project["key"]["serial"]
         )
-        self.parameters.defaultTester = questions.ask_to_select_default_tester(available_testers)
+        default_tester = questions.ask_to_select_default_tester(available_testers)
         all_filters = connection_log.active_connection.get_all_filters()
-        self.parameters.filters = questions.ask_to_select_filters(all_filters)
-        self.parameters.importConfig = questions.ask_to_config_import()
+        filters = questions.ask_to_select_filters(all_filters)
+        self.parameters.importConfig = questions.ask_to_config_xml_import()
+        self.parameters.importConfig.reportRootUID = report_root_uid
+        self.parameters.importConfig.filters = filters
+        self.parameters.importConfig.defaultTester = default_tester
         return True
 
     def get_project_path_from_report(self) -> list:
@@ -341,12 +421,10 @@ class ImportXMLExecutionResults(AbstractAction):
         if serverside_file_name:
             self.job_id = connection_log.active_connection.trigger_execution_xml_results_import(
                 self.parameters.cycleKey,
-                self.parameters.reportRootUID or "ROOT",
                 serverside_file_name,
-                self.parameters.defaultTester or "",
-                self.parameters.filters or [],
                 self.parameters.importConfig or TYPICAL_XML_IMPORT_CONFIG,
             )
+            self.start_time = monotonic()
             return True
         return False
 
@@ -365,9 +443,7 @@ class ImportXMLExecutionResults(AbstractAction):
 
     def wait(self, connection_log: testbench.ConnectionLog) -> bool:
         self.report_tmp_name = (
-            connection_log.active_connection.wait_for_execution_xml_results_import_to_finish(
-                self.job_id
-            )
+            connection_log.active_connection.wait_for_execution_xml_results_import_to_finish(self.job_id)
         )
         return bool(self.report_tmp_name)
 
@@ -379,9 +455,8 @@ class ImportXMLExecutionResults(AbstractAction):
 
     def finish(self, connection_log: testbench.ConnectionLog) -> bool:
         if self.report_tmp_name:
-            pretty_print_success_message(
-                "Report", Path(self.parameters.inputPath).resolve(), "was imported"
-            )
+            pretty_print_success_message("Report", Path(self.parameters.inputPath).resolve(), "was imported")
+            logger.info(f"    Time elapsed: {monotonic() - self.start_time:.2f} seconds")
             return True
         return False
 
@@ -396,6 +471,7 @@ class ImportJSONExecutionResults(AbstractAction):
             imp_parameters = ImportJsonParameters.from_dict(parameters)
         super().__init__()
         self.parameters: ImportJsonParameters = imp_parameters
+        self.start_time: float = 0
 
     def prepare(self, connection_log: testbench.ConnectionLog) -> bool:
         self.parameters.inputPath = questions.ask_for_input_path()
@@ -407,20 +483,21 @@ class ImportJSONExecutionResults(AbstractAction):
         selected_project = questions.ask_to_select_project(all_projects, default=project)
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
         selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle)
-        pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
+        pretty_print_project_tree_selection(selected_project, selected_tov, selected_cycle)
         self.parameters.projectKey = selected_project["key"]["serial"]
         self.parameters.cycleKey = str(selected_cycle["key"]["serial"])
-        cycle_structure = connection_log.active_connection.get_test_cycle_structure(
-            self.parameters.cycleKey
-        )
-        self.parameters.reportRootUID = questions.ask_to_select_report_root_uid(cycle_structure)
+        cycle_structure = connection_log.active_connection.get_test_cycle_structure(self.parameters.cycleKey)
+        report_root_uid = questions.ask_to_select_report_root_uid(cycle_structure)
         available_testers = connection_log.active_connection.get_all_testers_of_project(
             selected_project["key"]["serial"]
         )
-        self.parameters.defaultTester = questions.ask_to_select_default_tester(available_testers)
+        default_tester = questions.ask_to_select_default_tester(available_testers)
         all_filters = connection_log.active_connection.get_all_filters()
-        self.parameters.filters = questions.ask_to_select_filters(all_filters)
+        filters = questions.ask_to_select_filters(all_filters)
         self.parameters.importConfig = questions.ask_to_config_json_import()
+        self.parameters.importConfig.reportRootUID = report_root_uid
+        self.parameters.importConfig.filters = filters
+        self.parameters.importConfig.defaultTester = default_tester
         return True
 
     def get_project_path_from_report(self) -> list:
@@ -451,12 +528,10 @@ class ImportJSONExecutionResults(AbstractAction):
             self.job_id = connection_log.active_connection.trigger_execution_json_results_import(
                 project_key=self.parameters.projectKey,
                 cycle_key=self.parameters.cycleKey,
-                report_root_uid=self.parameters.reportRootUID or "ROOT",
                 serverside_file_name=serverside_file_name,
-                default_tester=self.parameters.defaultTester or "",
-                filters=self.parameters.filters or [],
                 import_config=self.parameters.importConfig or TYPICAL_JSON_IMPORT_CONFIG,
             )
+            self.start_time = monotonic()
             return True
         return False
 
@@ -499,6 +574,7 @@ class ImportJSONExecutionResults(AbstractAction):
             pretty_print_success_message(
                 "JSON-Report", Path(self.parameters.inputPath).resolve(), "was imported"
             )
+            logger.info(f"    Time elapsed: {monotonic() - self.start_time:.2f} seconds")
             return True
         return False
 
@@ -513,7 +589,7 @@ class BrowseProjects(UnloggedAction):
         selected_project = questions.ask_to_select_project(all_projects, default=project)
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)
         selected_cycle = questions.ask_to_select_cycle(selected_tov, default=cycle, export=True)
-        pretty_print_project_selection(selected_project, selected_tov, selected_cycle)
+        pretty_print_project_tree_selection(selected_project, selected_tov, selected_cycle)
         if selected_cycle == "NO_EXEC":
             tttree_structure = connection_log.active_connection.get_tov_structure(
                 selected_tov["key"]["serial"]
@@ -581,6 +657,7 @@ class Quit(UnloggedAction):
 ACTION_CLASSES: dict[str, type[AbstractAction]] = {
     "ExportXMLReport": ExportXMLReport,
     "ExportJSONReport": ExportJSONReport,
+    "ExportCSVReport": ExportCSVReport,
     "ImportXMLExecutionResults": ImportXMLExecutionResults,
     "ImportJSONExecutionResults": ImportJSONExecutionResults,
     "BrowseProjects": BrowseProjects,
