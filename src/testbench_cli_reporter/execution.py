@@ -54,8 +54,9 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
                 logger.info("Action aborted due to timeout.")
             except Exception:
                 logger.exception("An unexpected error occurred while executing the action.")
-                logger.debug(f"Action: {next_action.__class__.__name__}, "
-                            f"Parameters: {next_action.parameters}")
+                logger.debug(
+                    f"Action: {next_action.__class__.__name__}, Parameters: {next_action.parameters}"
+                )
 
             active_connection = connection_log.active_connection
             next_action = questions.ask_for_main_action(active_connection.server_version)
@@ -156,7 +157,7 @@ def poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptio
                 e.add_note(f"Job {action_to_wait_for.job_id} failed.")
                 raise e
             logger.exception(f"Polling job {action_to_wait_for.job_id} failed.")
-            if hasattr(e, 'response') and e.response is not None:
+            if hasattr(e, "response") and e.response is not None:
                 logger.error(e.response.json())
 
 
@@ -175,7 +176,7 @@ def execute_actions_to_finish(active_connection, connection_queue, raise_excepti
                 e.add_note(f"Job {action_to_finish.job_id} failed.")
                 raise e
             logger.exception(f"Finishing job {action_to_finish.job_id} failed, skipping action.")
-            if hasattr(e, 'response') and e.response is not None:
+            if hasattr(e, "response") and e.response is not None:
                 logger.error(e.response.json())
             logger.error(f"Error: {e!s}")
 

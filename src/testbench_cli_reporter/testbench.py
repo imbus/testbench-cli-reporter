@@ -515,9 +515,7 @@ class Connection:
                 f"Error trace: {result.get('Left', {}).get('trace', '--')}\n"
                 f"Error cause: {result.get('Left', {}).get('cause', '--')}"
             )
-        raise AssertionError(
-            f"Unexpected result format: {result}. Expected 'Right' or 'Left'."
-        ) from None
+        raise AssertionError(f"Unexpected result format: {result}. Expected 'Right' or 'Left'.") from None
 
     def get_job_result(self, path: str, job_id: str):
         report_generation_status = self.legacy_session.get(
@@ -771,6 +769,7 @@ class Connection:
                 raise AssertionError(
                     f"Unexpected result format: {result}. Expected 'Right' or 'Left'."
                 ) from None
+            raise AssertionError(f"Unexpected result format: {result}. Expected 'Right' or 'Left'.") from None
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
             raise e
@@ -801,9 +800,7 @@ class Connection:
                 f"Error trace: {result.get('Left', {}).get('trace', '--')}\n"
                 f"Error cause: {result.get('Left', {}).get('cause', '--')}"
             )
-        raise AssertionError(
-            f"Unexpected result format: {result}. Expected 'Right' or 'Left'."
-        ) from None
+        raise AssertionError(f"Unexpected result format: {result}. Expected 'Right' or 'Left'.") from None
 
     def get_test_cycle_structure(self, cycle_key: str) -> list[dict]:
         test_cycle_structure: list[dict] = self.legacy_session.get(
