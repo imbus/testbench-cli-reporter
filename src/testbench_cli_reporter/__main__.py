@@ -23,7 +23,14 @@ from .config_model import (
     loggingConfig,
 )
 from .execution import run_automatic_mode, run_manual_mode
-from .util import close_program, get_configuration, parser, resolve_server_name
+from .util import (
+    ITEP_EXPORT_CONFIG,
+    TYPICAL_XML_IMPORT_CONFIG,
+    close_program,
+    get_configuration,
+    parser,
+    resolve_server_name,
+)
 
 
 def main():
@@ -59,28 +66,29 @@ def main():
                 loggingConfiguration=loggingConfig.from_dict({}),
             )
             if arg.type == "e":
-                cli_config.configuration[0].actions.append(
+                export_config = ITEP_EXPORT_CONFIG
+                export_config.reportRootUID = arg.uid if arg.uid else None
+                cli_config.configuration[0].actions.append(  # type: ignore
                     ExportXmlAction(
                         ExportXmlParameters(
                             outputPath=arg.path,
                             projectPath=[e for e in [arg.project, arg.version, arg.cycle] if e],
                             tovKey=arg.tovKey,
                             cycleKey=arg.cycleKey,
-                            reportRootUID=arg.uid,
-                            filters=[],
+                            report_config=export_config,
                         )
                     )
                 )
             else:
-                cli_config.configuration[0].actions.append(
+                import_config = TYPICAL_XML_IMPORT_CONFIG
+                import_config.reportRootUID = arg.uid if arg.uid else None
+                cli_config.configuration[0].actions.append(  # type: ignore
                     ImportXMLAction(
                         ImportXmlParameters(
                             inputPath=arg.path,
                             projectPath=[e for e in [arg.project, arg.version, arg.cycle] if e],
                             cycleKey=arg.cycleKey,
-                            reportRootUID=arg.uid,
-                            defaultTester=None,
-                            filters=[],
+                            importConfig=import_config,
                         )
                     )
                 )
