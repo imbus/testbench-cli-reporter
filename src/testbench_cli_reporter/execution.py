@@ -52,6 +52,10 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
 
             except Timeout:
                 logger.info("Action aborted due to timeout.")
+            except Exception:
+                logger.exception("An unexpected error occurred while executing the action.")
+                logger.debug(f"Action: {next_action.__class__.__name__}, "
+                            f"Parameters: {next_action.parameters}")
 
             active_connection = connection_log.active_connection
             next_action = questions.ask_for_main_action(active_connection.server_version)
@@ -137,23 +141,6 @@ def trigger_all_actions(connection_queue: ConnectionLog, raise_exceptions):
     logger.info(f"{job_counter} jobs started at {len(connection_queue.connections)} server(s).")
 
 
-def execute_actions_to_finish(active_connection, connection_queue, raise_exceptions):
-    for _ in range(len(active_connection.actions_to_finish)):
-        action_to_finish = active_connection.actions_to_finish[0]
-        try:
-            if action_to_finish.finish(connection_queue):
-                active_connection.action_log.append(action_to_finish)
-                active_connection.actions_to_finish.remove(action_to_finish)
-            else:
-                active_connection.actions_to_finish = rotate(active_connection.actions_to_finish)
-        except requests.exceptions.HTTPError as e:
-            active_connection.actions_to_finish.remove(action_to_finish)
-            if raise_exceptions:
-                raise e
-            logger.exception("Action finish failed, skipping action.")
-            logger.error(e.response.json())
-
-
 def poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptions):
     for _ in range(len(active_connection.actions_to_wait_for)):
         action_to_wait_for = active_connection.actions_to_wait_for[0]
@@ -163,12 +150,34 @@ def poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptio
                 active_connection.actions_to_wait_for.remove(action_to_wait_for)
             else:
                 active_connection.actions_to_wait_for = rotate(active_connection.actions_to_wait_for)
-        except requests.exceptions.HTTPError as e:
+        except (requests.exceptions.HTTPError, AssertionError) as e:
             active_connection.actions_to_wait_for.remove(action_to_wait_for)
             if raise_exceptions:
+                e.add_note(f"Job {action_to_wait_for.job_id} failed.")
                 raise e
-            logger.exception("Action poll failed, skipping action.")
-            logger.error(e.response.json())
+            logger.exception(f"Polling job {action_to_wait_for.job_id} failed.")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(e.response.json())
+
+
+def execute_actions_to_finish(active_connection, connection_queue, raise_exceptions):
+    for _ in range(len(active_connection.actions_to_finish)):
+        action_to_finish = active_connection.actions_to_finish[0]
+        try:
+            if action_to_finish.finish(connection_queue):
+                active_connection.action_log.append(action_to_finish)
+                active_connection.actions_to_finish.remove(action_to_finish)
+            else:
+                active_connection.actions_to_finish = rotate(active_connection.actions_to_finish)
+        except (requests.exceptions.HTTPError, AssertionError) as e:
+            active_connection.actions_to_finish.remove(action_to_finish)
+            if raise_exceptions:
+                e.add_note(f"Job {action_to_finish.job_id} failed.")
+                raise e
+            logger.exception(f"Finishing job {action_to_finish.job_id} failed, skipping action.")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(e.response.json())
+            logger.error(f"Error: {e!s}")
 
 
 def active_connection_finished(active_connection):

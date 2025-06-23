@@ -506,7 +506,18 @@ class Connection:
         if "Right" in result and isinstance(result["Right"], str):
             logger.debug(result)
             return result["Right"]
-        raise AssertionError(result)
+        if "Left" in result:
+            logger.debug(result)
+            raise AssertionError(
+                "Error during report generation.\n"
+                f"Error message: {result.get('Left', {}).get('message', '--')}\n"
+                f"Error details: {result.get('Left', {}).get('details', '--')}\n"
+                f"Error trace: {result.get('Left', {}).get('trace', '--')}\n"
+                f"Error cause: {result.get('Left', {}).get('cause', '--')}"
+            )
+        raise AssertionError(
+            f"Unexpected result format: {result}. Expected 'Right' or 'Left'."
+        ) from None
 
     def get_job_result(self, path: str, job_id: str):
         report_generation_status = self.legacy_session.get(
@@ -531,7 +542,7 @@ class Connection:
         data = response.json()
         job_id = data.get("jobID")
         if not isinstance(job_id, str):
-            raise ValueError("jobID is missing or not a string")
+            raise ValueError(f"jobID is missing or not a string: {data}")
         return job_id
 
     def wait_for_tmp_csv_report_name(self, job_id: str) -> str:
@@ -746,8 +757,20 @@ class Connection:
             result = import_status["result"]
 
             if "Right" in result:
+                logger.debug(result)
                 return True
-            raise AssertionError(result)
+            if "Left" in result:
+                logger.error(result)
+                raise AssertionError(
+                    "Error during report generation.\n"
+                    f"Error message: {result.get('Left', {}).get('message', '--')}\n"
+                    f"Error details: {result.get('Left', {}).get('details', '--')}\n"
+                    f"Error trace: {result.get('Left', {}).get('trace', '--')}\n"
+                    f"Error cause: {result.get('Left', {}).get('cause', '--')}"
+                )
+                raise AssertionError(
+                    f"Unexpected result format: {result}. Expected 'Right' or 'Left'."
+                ) from None
         except requests.exceptions.RequestException as e:
             self.render_import_error(e)
             raise e
@@ -767,8 +790,20 @@ class Connection:
             return None
         result = report_import_status["result"]
         if "Right" in result:
+            logger.debug(result)
             return result["Right"]
-        raise AssertionError(result)
+        if "Left" in result:
+            logger.error(result)
+            raise AssertionError(
+                "Error during report generation.\n"
+                f"Error message: {result.get('Left', {}).get('message', '--')}\n"
+                f"Error details: {result.get('Left', {}).get('details', '--')}\n"
+                f"Error trace: {result.get('Left', {}).get('trace', '--')}\n"
+                f"Error cause: {result.get('Left', {}).get('cause', '--')}"
+            )
+        raise AssertionError(
+            f"Unexpected result format: {result}. Expected 'Right' or 'Left'."
+        ) from None
 
     def get_test_cycle_structure(self, cycle_key: str) -> list[dict]:
         test_cycle_structure: list[dict] = self.legacy_session.get(
