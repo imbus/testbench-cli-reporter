@@ -466,6 +466,7 @@ class Configuration:
     loginname: str | None = None
     password: str | None = None
     actions: list[BaseAction] | None = None
+    thread_limit: int | None = None
 
     def __post_init__(self):
         if self.actions is None:
@@ -483,6 +484,7 @@ class Configuration:
             loginname=dictionary.get("loginname"),
             password=dictionary.get("password"),
             actions=[action_classes[action["type"]].from_dict(action) for action in dictionary["actions"]],
+            thread_limit=dictionary.get("thread_limit"),
         )
 
 

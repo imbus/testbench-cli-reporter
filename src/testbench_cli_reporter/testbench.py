@@ -72,6 +72,7 @@ class Connection:
         job_timeout_sec: int = 4 * 60 * 60,
         connection_timeout_sec: int | None = None,
         actions: list | None = None,
+        thread_limit: int | None = None,
         **kwargs,
     ):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -100,6 +101,9 @@ class Connection:
         self.action_log: list[AbstractAction] = []
         self.actions_to_trigger: list[dict] = actions or []
         self.actions_to_wait_for: list[AbstractAction] = []
+        if thread_limit is not None:
+            thread_limit = None if thread_limit <= 0 else thread_limit
+        self.thread_limit = thread_limit
         self.actions_to_finish: list[AbstractAction] = []
         self.connection_timeout = connection_timeout_sec
         self.verify_ssl = verify
@@ -265,6 +269,7 @@ class Connection:
             verify=self.session.verify,
             basicAuth=basic_auth,
             actions=[action.export() for action in self.action_log if action.export() is not None],
+            thread_limit=self.thread_limit,
         )
 
     def add_action(self, action: AbstractAction):
