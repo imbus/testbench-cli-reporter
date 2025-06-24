@@ -80,6 +80,8 @@ def selection_prompt(
             choices=choices,
             style=style,
             default=default,
+            use_jk_keys=False,
+            use_search_filter=True,
         ).unsafe_ask()
     raise ValueError(no_valid_option_message)
 
@@ -108,6 +110,8 @@ def checkbox_prompt(
             message=message,
             choices=choices,
             style=style,
+            use_jk_keys=False,
+            use_search_filter=True,
         ).unsafe_ask()
     logger.info(no_valid_option_message)
     return []

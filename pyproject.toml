@@ -74,6 +74,7 @@ ignore = [
   "N815",  # mixedCase variable in class scope
   "N803",  # argument name should be lowercase
   "T201",  # Print statements
+  "INP001",  # part of an implicit namespace package
 ]
 select = [
   "E",

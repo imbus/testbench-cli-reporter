@@ -7,7 +7,7 @@ import requests.exceptions  # type: ignore
 from requests import Timeout
 
 from . import questions
-from .actions import Action
+from .actions import Action, UnloggedAction
 from .config_model import CliReporterConfig, Configuration, LogLevel
 from .log import logger, setup_logger
 from .testbench import Connection, ConnectionLog, login
@@ -32,11 +32,14 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
         next_action = questions.ask_for_main_action(active_connection.server_version)
         while next_action is not None:
             try:
-                if (
-                    next_action.prepare(connection_log)
-                    and next_action.trigger(connection_log)
-                    and next_action.wait(connection_log)
-                    and next_action.finish(connection_log)
+                if isinstance(next_action, UnloggedAction):
+                    next_action.prepare(active_connection)
+                    next_action.trigger_connections(connection_log)
+                elif (
+                    next_action.prepare(active_connection)
+                    and next_action.trigger(active_connection)
+                    and next_action.wait(active_connection)
+                    and next_action.finish(active_connection)
                 ):
                     active_connection.add_action(next_action)
             except KeyError as e:
@@ -79,8 +82,10 @@ def run_automatic_mode(
     connection_queue = ConnectionLog()
     try:
         fill_connection_queue(config, connection_queue, loginname, password, sessionToken)
-        trigger_all_actions(connection_queue, raise_exceptions)
-        poll_and_finish_actions(connection_queue, raise_exceptions)
+        while connection_queue.len:
+            trigger_possible_actions(connection_queue, raise_exceptions)
+            spin_spinner("Wait for Jobs to be finished.")
+            poll_and_finish_actions(connection_queue, raise_exceptions)
         logger.info("All jobs finished.")
     except requests.HTTPError as e:
         logger.debug(traceback.format_exc())
@@ -89,64 +94,82 @@ def run_automatic_mode(
         raise e
 
 
-def fill_connection_queue(configuration, connection_queue, loginname, password, sessionToken):
+def fill_connection_queue(
+    configuration: CliReporterConfig,
+    connection_queue: ConnectionLog,
+    loginname: str | None,
+    password: str | None,
+    sessionToken: str | None,
+):
     for connection_data in configuration.configuration:
         connection = Connection(
-            server_url=connection_data.server_url,
+            server_url=connection_data.server_url or "https://localhost:443",
             verify=connection_data.verify,
             sessionToken=sessionToken or connection_data.sessionToken,
             basicAuth=connection_data.basicAuth,
             actions=connection_data.actions,
             loginname=loginname,
             password=password,
+            thread_limit=connection_data.thread_limit,
         )
         connection_queue.add_connection(connection)
 
 
-def poll_and_finish_actions(connection_queue, raise_exceptions):
-    while True:
+def trigger_possible_actions(connection_queue: ConnectionLog, raise_exceptions: bool = False):
+    job_counter = 0
+    server_ids = set()
+    for _ in range(len(connection_queue.connections)):
         active_connection = connection_queue.active_connection
-        spin_spinner("Wait for Jobs to be finished.")
-        poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptions)
-        execute_actions_to_finish(active_connection, connection_queue, raise_exceptions)
+        while active_connection.actions_to_trigger and (
+            active_connection.thread_limit is None
+            or len(active_connection.actions_to_wait_for) < active_connection.thread_limit
+        ):
+            trigger_next_action(active_connection, raise_exceptions)
+            job_counter += 1
+            server_ids.add(active_connection.server_url)
+            sleep(0.05)
+        connection_queue.next()
+    if job_counter:
+        logger.info(f"{job_counter} jobs started at {len(server_ids)} server(s).")
 
+
+def trigger_next_action(active_connection: Connection, raise_exceptions: bool):
+    action_to_trigger = active_connection.actions_to_trigger[0]
+    try:
+        action = Action(action_to_trigger.type, action_to_trigger.parameters)  # type:ignore
+        logger.debug(f"Triggering action: {action.__class__.__name__}\nParameters: {action.parameters}")
+        action.trigger(active_connection)
+        active_connection.actions_to_wait_for.append(action)
+        logger.info(f"Job {action.__class__.__name__}: {action.job_id} started.")
+    except requests.exceptions.HTTPError as e:
+        if raise_exceptions:
+            raise e
+        logger.exception("Action trigger failed")
+        logger.error(e.response.json())
+    except TypeError as e:
+        if raise_exceptions:
+            raise e
+        logger.error(e)
+    finally:
+        active_connection.actions_to_trigger.remove(action_to_trigger)
+
+
+def poll_and_finish_actions(connection_queue: ConnectionLog, raise_exceptions: bool):
+    for _ in range(len(connection_queue.connections)):
+        active_connection = connection_queue.active_connection
+        poll_actions_to_wait_for(active_connection, raise_exceptions)
+        execute_actions_to_finish(active_connection, raise_exceptions)
         if active_connection_finished(active_connection):
             connection_queue.remove(active_connection)
         if connection_queue.len > 1:
             connection_queue.next()
-        elif connection_queue.len == 0:
-            break
 
 
-def trigger_all_actions(connection_queue: ConnectionLog, raise_exceptions):
-    job_counter = 0
-    for _ in range(len(connection_queue.connections)):
-        while connection_queue.active_connection.actions_to_trigger:
-            action_to_trigger = connection_queue.active_connection.actions_to_trigger[0]
-            action = Action(action_to_trigger.type, action_to_trigger.parameters)  # type:ignore
-            logger.debug(f"Triggering action: {action.__class__.__name__}\nParameters: {action.parameters}")
-            try:
-                action.trigger(connection_queue)
-                connection_queue.active_connection.actions_to_wait_for.append(action)
-                job_counter += 1
-                logger.info(f"Job {action.__class__.__name__}: {action.job_id} started.")
-            except requests.exceptions.HTTPError as e:
-                if raise_exceptions:
-                    raise e
-                logger.exception("Action trigger failed")
-                logger.error(e.response.json())
-            finally:
-                connection_queue.active_connection.actions_to_trigger.remove(action_to_trigger)
-            sleep(0.05)
-        connection_queue.next()
-    logger.info(f"{job_counter} jobs started at {len(connection_queue.connections)} server(s).")
-
-
-def poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptions):
+def poll_actions_to_wait_for(active_connection: Connection, raise_exceptions: bool):
     for _ in range(len(active_connection.actions_to_wait_for)):
         action_to_wait_for = active_connection.actions_to_wait_for[0]
         try:
-            if action_to_wait_for.poll(connection_queue):
+            if action_to_wait_for.poll(active_connection):
                 active_connection.actions_to_finish.append(action_to_wait_for)
                 active_connection.actions_to_wait_for.remove(action_to_wait_for)
             else:
@@ -154,18 +177,17 @@ def poll_actions_to_wait_for(active_connection, connection_queue, raise_exceptio
         except (requests.exceptions.HTTPError, AssertionError) as e:
             active_connection.actions_to_wait_for.remove(action_to_wait_for)
             if raise_exceptions:
-                e.add_note(f"Job {action_to_wait_for.job_id} failed.")
                 raise e
             logger.exception(f"Polling job {action_to_wait_for.job_id} failed.")
             if hasattr(e, "response") and e.response is not None:
                 logger.error(e.response.json())
 
 
-def execute_actions_to_finish(active_connection, connection_queue, raise_exceptions):
+def execute_actions_to_finish(active_connection: Connection, raise_exceptions: bool):
     for _ in range(len(active_connection.actions_to_finish)):
         action_to_finish = active_connection.actions_to_finish[0]
         try:
-            if action_to_finish.finish(connection_queue):
+            if action_to_finish.finish(active_connection):
                 active_connection.action_log.append(action_to_finish)
                 active_connection.actions_to_finish.remove(action_to_finish)
             else:
@@ -173,7 +195,6 @@ def execute_actions_to_finish(active_connection, connection_queue, raise_excepti
         except (requests.exceptions.HTTPError, AssertionError) as e:
             active_connection.actions_to_finish.remove(action_to_finish)
             if raise_exceptions:
-                e.add_note(f"Job {action_to_finish.job_id} failed.")
                 raise e
             logger.exception(f"Finishing job {action_to_finish.job_id} failed, skipping action.")
             if hasattr(e, "response") and e.response is not None:

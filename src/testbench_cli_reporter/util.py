@@ -20,9 +20,11 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from collections.abc import Mapping
+from copy import deepcopy
 from pathlib import Path
 from re import fullmatch
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from questionary import print as pprint
 
@@ -36,9 +38,29 @@ from .config_model import (
 )
 from .log import logger
 
+if TYPE_CHECKING:
+    from .testbench import Connection
+
 BLUE_ITALIC = "#06c8ff italic"
 
 BLUE_BOLD_ITALIC = "#06c8ff bold italic"
+
+
+class CopyOnAccessDict(Mapping):
+    def __init__(self, data):
+        self._data = data
+
+    def __getitem__(self, key):
+        return deepcopy(self._data[key])
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self._data})"
 
 
 class Colors:
@@ -90,10 +112,12 @@ TYPICAL_XML_IMPORT_CONFIG: ExecutionXmlResultsImportOptions = ExecutionXmlResult
     useExistingDefect=True,
 )
 
-XmlImportConfig = {
-    "Typical": TYPICAL_XML_IMPORT_CONFIG,
-    "<CUSTOM>": False,
-}
+XmlImportConfig = CopyOnAccessDict(
+    {
+        "Typical": TYPICAL_XML_IMPORT_CONFIG,
+        "<CUSTOM>": False,
+    }
+)
 
 TYPICAL_JSON_IMPORT_CONFIG: ExecutionJsonResultsImportOptions = ExecutionJsonResultsImportOptions(
     fileName="",
@@ -106,10 +130,12 @@ TYPICAL_JSON_IMPORT_CONFIG: ExecutionJsonResultsImportOptions = ExecutionJsonRes
     filters=None,
 )
 
-JsonImportConfig = {
-    "Typical": TYPICAL_JSON_IMPORT_CONFIG,
-    "<CUSTOM>": False,
-}
+JsonImportConfig = CopyOnAccessDict(
+    {
+        "Typical": TYPICAL_JSON_IMPORT_CONFIG,
+        "<CUSTOM>": False,
+    }
+)
 
 ITEP_EXPORT_CONFIG = TestCycleXMLReportOptions(
     exportAttachments=True,
@@ -124,46 +150,50 @@ ITEP_EXPORT_CONFIG = TestCycleXMLReportOptions(
     reportRootUID=None,
 )
 
-XmlExportConfig: dict[str, TestCycleXMLReportOptions | bool] = {
-    "Itep Export": ITEP_EXPORT_CONFIG,
-    "iTorx Export (execution)": TestCycleXMLReportOptions(
-        exportAttachments=True,
-        exportDesignData=True,
-        characterEncoding="utf-8",
-        suppressFilteredData=True,
-        exportExpandedData=True,
-        exportDescriptionFields=True,
-        outputFormattedText=True,
-        exportExecutionProtocols=False,
-        filters=[],
-        reportRootUID=None,
-    ),
-    "iTorx Export (continue|view)": TestCycleXMLReportOptions(
-        exportAttachments=True,
-        exportDesignData=True,
-        characterEncoding="utf-8",
-        suppressFilteredData=True,
-        exportExpandedData=True,
-        exportDescriptionFields=True,
-        outputFormattedText=True,
-        exportExecutionProtocols=True,
-        filters=[],
-        reportRootUID=None,
-    ),
-    "<CUSTOM>": False,
-}
+XmlExportConfig = CopyOnAccessDict(
+    {
+        "Itep Export": ITEP_EXPORT_CONFIG,
+        "iTorx Export (execution)": TestCycleXMLReportOptions(
+            exportAttachments=True,
+            exportDesignData=True,
+            characterEncoding="utf-8",
+            suppressFilteredData=True,
+            exportExpandedData=True,
+            exportDescriptionFields=True,
+            outputFormattedText=True,
+            exportExecutionProtocols=False,
+            filters=[],
+            reportRootUID=None,
+        ),
+        "iTorx Export (continue|view)": TestCycleXMLReportOptions(
+            exportAttachments=True,
+            exportDesignData=True,
+            characterEncoding="utf-8",
+            suppressFilteredData=True,
+            exportExpandedData=True,
+            exportDescriptionFields=True,
+            outputFormattedText=True,
+            exportExecutionProtocols=True,
+            filters=[],
+            reportRootUID=None,
+        ),
+        "<CUSTOM>": False,
+    }
+)
 
-JsonExportConfig = {
-    "iTorx Export (execution)": TestCycleJsonReportOptions(
-        treeRootUID=None,
-        basedOnExecution=True,
-        suppressFilteredData=True,
-        suppressNotExecutable=True,
-        suppressEmptyTestThemes=True,
-        filters=[],
-    ),
-    "<CUSTOM>": False,
-}
+JsonExportConfig = CopyOnAccessDict(
+    {
+        "iTorx Export (execution)": TestCycleJsonReportOptions(
+            treeRootUID=None,
+            basedOnExecution=True,
+            suppressFilteredData=True,
+            suppressNotExecutable=True,
+            suppressEmptyTestThemes=True,
+            filters=[],
+        ),
+        "<CUSTOM>": False,
+    }
+)
 
 parser = argparse.ArgumentParser(
     description="TestBench CLI Reporter Tool",
@@ -706,20 +736,20 @@ class AbstractAction(ABC):
         self.report_tmp_name: str | bool = ""
         self.job_id = ""
 
-    def prepare(self, connection_log) -> bool:
+    def prepare(self, active_connection: "Connection") -> bool:
         return True
 
     @abstractmethod
-    def trigger(self, connection_log) -> bool:
+    def trigger(self, active_connection: "Connection") -> bool:
         raise NotImplementedError
 
-    def wait(self, connection_log) -> bool:
+    def wait(self, active_connection: "Connection") -> bool:
         return True
 
-    def poll(self, connection_log) -> bool:
+    def poll(self, active_connection: "Connection") -> bool:
         return True
 
-    def finish(self, connection_log) -> bool:
+    def finish(self, active_connection: "Connection") -> bool:
         return True
 
     def export(self):
