@@ -305,6 +305,17 @@ class ExportJsonParameters:
 
 
 @dataclass
+class ExportServerLogsParameters:
+    outputPath: str
+
+    @classmethod
+    def from_dict(cls, dictionary: dict):
+        return cls(
+            outputPath=dictionary.get("outputPath", "server_logs.zip"),
+        )
+
+
+@dataclass
 class BaseAction(ABC):
     @classmethod
     @abstractmethod
@@ -340,6 +351,16 @@ class ExportCsvAction(BaseAction):
     @classmethod
     def from_dict(cls, dictionary: dict):
         return cls(parameters=ExportCsvParameters.from_dict(dictionary.get("parameters") or {}))
+
+
+@dataclass
+class ExportServerLogsAction(BaseAction):
+    parameters: ExportServerLogsParameters
+    type: str = "ExportServerLogs"
+
+    @classmethod
+    def from_dict(cls, dictionary: dict):
+        return cls(parameters=ExportServerLogsParameters.from_dict(dictionary.get("parameters") or {}))
 
 
 @dataclass
@@ -576,4 +597,5 @@ ACTION_TYPES: dict[str, BaseAction] = {
     "ExportCSVReport": ExportCsvAction,  # type: ignore
     "ImportXMLExecutionResults": ImportXMLAction,  # type: ignore
     "ImportJSONExecutionResults": ImportJSONAction,  # type: ignore
+    "ExportServerLogs": ExportServerLogsAction,  # type: ignore
 }

@@ -110,6 +110,7 @@ class Connection:
         self.server_version: list[int] = []
         self.databaseVersion: str | None = None
         self.revision: str | None = None
+        self.is_admin = False
         self._session = None
         self._legacy_session = None
 
@@ -131,21 +132,21 @@ class Connection:
                 "Content-Type": "application/vnd.testbench+json; charset=utf-8",
             }
         )
+        self._session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}  # type: ignore
         self.read_server_version(self._session)
         if not self.session_token:
             self.authenticate(self._session)
         else:
             self._session.headers.update({"Authorization": self.session_token})  # type: ignore
-        self._session.hooks = {"response": lambda r, *args, **kwargs: r.raise_for_status()}  # type: ignore
         self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))  # type: ignore
         self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))  # type: ignore
+        self.is_admin = "Administrator" in self.read_user_roles(self._session)
         return self._session
 
     def read_server_version(self, session: requests.Session) -> None:
         versions = {}
         try:
             response = session.get(f"{self.server_url}serverVersions/v1")
-            response.raise_for_status()
             versions = response.json()
             self.server_version = [int(v) for v in versions.get("releaseVersion", "").split(".")]
         except requests.HTTPError:
@@ -155,7 +156,6 @@ class Connection:
             )
             try:
                 response = session.get(f"{self.server_url}1/serverVersions")
-                response.raise_for_status()
                 versions = response.json()
                 self.server_version = [int(v) for v in versions.get("version", "").split(".")]
             except requests.HTTPError as e:
@@ -186,6 +186,27 @@ class Connection:
                     {"value": f"{self.revision}", "style": BLUE_BOLD_ITALIC},
                 )
 
+    def read_user_roles(self, session: requests.Session) -> list[str]:
+        if self.is_testbench_4:
+            response = session.get(f"{self.server_url}login/session/v1")
+            return response.json().get("globalRoles", [])
+        response = session.get(f"{self.server_url}1/checkLogin")
+        user_key = response.json().get("userKey", {}).get("serial")
+        if user_key is None:
+            raise ValueError("User key not found in checkLogin response")
+        try:
+            user_response = session.get(f"{self.server_url}1/users")
+        except requests.HTTPError as e:
+            if e.response.status_code == requests.codes.forbidden:
+                return ["Project User"]
+        login_name = next(
+            (user["name"] for user in user_response.json() if user["User_key"]["serial"] == user_key), None
+        )
+        if not login_name:
+            raise ValueError("User name not found in users response")
+        roles_response = session.get(f"{self.server_url}1/user/{login_name}/roles")
+        return roles_response.json()
+
     def authenticate(self, session: requests.Session):
         try:
             if self.is_testbench_4:
@@ -193,7 +214,6 @@ class Connection:
                     f"{self.server_url}login/session/v1",
                     json={"login": self.loginname, "password": self.password, "force": True},
                 )
-                response.raise_for_status()
                 resp_dict = response.json()
                 self.session_token = resp_dict["sessionToken"]
                 session.headers.update({"Authorization": self.session_token})
@@ -202,7 +222,6 @@ class Connection:
                 self.session_token = self.password
                 session.auth = (self.loginname, self.password)
                 response = session.get(f"{self.server_url}1/checkLogin")
-                response.raise_for_status()
                 self._legacy_session = session
                 logger.info("Authenticated")
         except (requests.HTTPError, json.JSONDecodeError, KeyError) as e:
@@ -860,6 +879,30 @@ class Connection:
             f"{self.server_legacy_url}testCaseSets/{testCaseSetKey}/executions/{executionKey}/testCases",
         ).json()
         return exec_test_cases
+
+    # GET /server/logFiles/zip
+    def get_server_logs(self) -> bytes:
+        try:
+            response = self.legacy_session.get(f"{self.server_legacy_url}server/logFiles/zip")
+            content = response.content
+            if not isinstance(content, bytes):
+                raise TypeError("Expected bytes from response.content")
+            return content
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to retrieve server logs: {e}")
+            raise e
+
+    # GET /project/{projectKey}/members
+    def get_project_members(self, project_key: str) -> list[dict]:
+        try:
+            response = self.legacy_session.get(f"{self.server_legacy_url}project/{project_key}/members")
+            members = response.json()
+            if not isinstance(members, list) or not all(isinstance(member, dict) for member in members):
+                raise ValueError("Members not in expected format")
+            return members
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to retrieve project members: {e}")
+            raise e
 
 
 def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901, PLR0912
