@@ -189,7 +189,7 @@ class Connection:
     def read_user_roles(self, session: requests.Session) -> list[str]:
         if self.is_testbench_4:
             response = session.get(f"{self.server_url}login/session/v1")
-            return response.json().get("globalRoles", [])
+            return response.json().get("globalRoles", [])  # type: ignore
         response = session.get(f"{self.server_url}1/checkLogin")
         user_key = response.json().get("userKey", {}).get("serial")
         if user_key is None:
@@ -205,7 +205,7 @@ class Connection:
         if not login_name:
             raise ValueError("User name not found in users response")
         roles_response = session.get(f"{self.server_url}1/user/{login_name}/roles")
-        return roles_response.json()
+        return roles_response.json()  # type: ignore
 
     def authenticate(self, session: requests.Session):
         try:

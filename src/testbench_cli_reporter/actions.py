@@ -575,7 +575,6 @@ class ExportServerLogs(AbstractAction):
             exp_parameters = ExportServerLogsParameters.from_dict(parameters or {})
         super().__init__()
         self.parameters: ExportServerLogsParameters = exp_parameters
-        self.start_time: float = 0
 
     def prepare(self, active_connection: testbench.Connection) -> bool:
         self.parameters.outputPath = questions.ask_for_output_path("server_logs.zip")
@@ -585,6 +584,7 @@ class ExportServerLogs(AbstractAction):
         return True
 
     def finish(self, active_connection: testbench.Connection) -> bool:
+        self.start_time: float = 0
         try:
             server_logs = active_connection.get_server_logs()
             with Path(self.parameters.outputPath).open("wb") as output_file:
@@ -764,6 +764,11 @@ class Quit(UnloggedAction):
 
 
 class Back(UnloggedAction):
+    def trigger_connections(self, connection_log: testbench.ConnectionLog | None = None):
+        return True
+
+
+class OpenAdminMenu(UnloggedAction):
     def trigger_connections(self, connection_log: testbench.ConnectionLog | None = None):
         return True
 
