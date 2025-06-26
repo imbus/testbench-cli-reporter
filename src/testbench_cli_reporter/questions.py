@@ -530,29 +530,26 @@ def ask_for_action_after_login_timeout() -> str:
     return action
 
 
-ADMIN_ACTION = "admin_action"
-
-
 def ask_for_main_action(server_version: list[int] | None = None, is_admin: bool = False) -> AbstractAction:
     tb_4_actions = [
-        Choice("Export JSON Report", actions.ExportJSONReport()),
-        Choice("Import JSON execution results", actions.ImportJSONExecutionResults()),
+        Choice("Export JSON Report", actions.ExportJSONReport),
+        Choice("Import JSON execution results", actions.ImportJSONExecutionResults),
     ]
     tb_306_actions = [
-        Choice("Export CSV Report", actions.ExportCSVReport()),
+        Choice("Export CSV Report", actions.ExportCSVReport),
     ]
     common_actions = [
-        Choice("Export XML Report", actions.ExportXMLReport()),
-        Choice("Import XML execution results", actions.ImportXMLExecutionResults()),
+        Choice("Export XML Report", actions.ExportXMLReport),
+        Choice("Import XML execution results", actions.ImportXMLExecutionResults),
     ]
     admin_actions = [
-        Choice("▶ Administrator Actions", ADMIN_ACTION),
+        Choice("▶ Administrator Actions", actions.OpenAdminMenu),
     ]
     unlogged_actions = [
-        Choice("Browser Projects", actions.BrowseProjects()),
-        Choice("Write history to config file", actions.ExportActionLog()),
-        Choice("Change connection", actions.ChangeConnection()),
-        Choice("Quit", actions.Quit()),
+        Choice("Browser Projects", actions.BrowseProjects),
+        Choice("Write history to config file", actions.ExportActionLog),
+        Choice("Change connection", actions.ChangeConnection),
+        Choice("Quit", actions.Quit),
     ]
     choices = []
     if server_version and server_version > [4]:
@@ -566,22 +563,22 @@ def ask_for_main_action(server_version: list[int] | None = None, is_admin: bool 
     main_action = selection_prompt(  # type: ignore
         message="What do you want to do?",
         choices=choices,
-    )
-    if main_action is ADMIN_ACTION:
+    )()
+    if isinstance(main_action, actions.OpenAdminMenu):
         return ask_for_admin_action()
-    return main_action
+    return main_action  # type: ignore
 
 
 def ask_for_admin_action() -> AbstractAction:
     choices = [
-        Choice("Export Server Logs", actions.ExportServerLogs()),
-        Choice("Export Project Users", actions.ExportProjectMembers()),
-        Choice("◀︎ Back", actions.Back()),
+        Choice("Export Server Logs", actions.ExportServerLogs),
+        Choice("Export Project Users", actions.ExportProjectMembers),
+        Choice("◀︎ Back", actions.Back),
     ]
     return selection_prompt(  # type: ignore
         message="What do you want to do?",
         choices=choices,
-    )
+    )()
 
 
 def ask_to_select_default_tester(all_testers: list[dict]) -> str | None:
