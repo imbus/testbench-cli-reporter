@@ -29,7 +29,9 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
         config = cli_config.configuration[0] if len(cli_config.configuration) else Configuration("")
         active_connection = login(config.server_url, config.loginname, config.password, config.sessionToken)
         connection_log.add_connection(active_connection)
-        next_action = questions.ask_for_main_action(active_connection.server_version)
+        next_action = questions.ask_for_main_action(
+            active_connection.server_version, active_connection.is_admin
+        )
         while next_action is not None:
             try:
                 if isinstance(next_action, UnloggedAction):
@@ -62,7 +64,9 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
                 )
 
             active_connection = connection_log.active_connection
-            next_action = questions.ask_for_main_action(active_connection.server_version)
+            next_action = questions.ask_for_main_action(
+                active_connection.server_version, active_connection.is_admin
+            )
 
 
 def run_automatic_mode(

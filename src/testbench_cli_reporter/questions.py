@@ -152,7 +152,7 @@ def ask_for_test_bench_credentials(server="", login="", pwd="", session="") -> d
 
 def ask_for_test_bench_server_url(default="") -> str:
     server_url = text_prompt(
-        message="Enter the TestBench server address and port <host:port>:",
+        message="Enter the TestBench server address:",
         validation=lambda text: (
             True
             if fullmatch(r"(https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/)?", text)
@@ -162,7 +162,7 @@ def ask_for_test_bench_server_url(default="") -> str:
         filter=lambda raw: sub(
             r"(^https?://)?([\w\-.\d]+)(:\d{1,5})?(/api/?)?$",
             r"https://\2\3/api/",
-            sub(r"^([\w\-.\d]+)$", r"\1:443", raw),
+            sub(r"^([\w\-.\d]+)$", r"\1:9443", raw),
         ),
     )
     if not isinstance(server_url, str):
@@ -232,6 +232,24 @@ def ask_to_select_project(all_projects: dict, default=None) -> dict:
         default=next((x for x in choices if x.title == default), None),
     )
     return project
+
+
+def ask_to_select_projects(all_projects: dict, default=None) -> list[dict]:
+    choices = [Choice(project["name"], project) for project in all_projects["projects"]]
+    if selection_prompt("Select multiple projects?", choices=[Choice("No", False), Choice("Yes", True)]):
+        projects: list = checkbox_prompt(
+            message="Select project(s) with space.",
+            choices=choices,
+            no_valid_option_message="No project available.",
+        )
+        return projects
+    project: dict = selection_prompt(
+        message="Select a project.",
+        choices=choices,
+        no_valid_option_message="No project available.",
+        default=next((x for x in choices if x.title == default), None),
+    )
+    return [project]
 
 
 def ask_to_select_tov(project: dict, default=None) -> dict:
@@ -434,7 +452,7 @@ def ask_to_config_json_import() -> ExecutionJsonResultsImportOptions:
     return ExecutionJsonResultsImportOptions.from_dict(selection)
 
 
-def ask_for_output_path(default: str = "report.zip") -> str:
+def ask_for_output_path(default: str = "report.zip", allow_dir: bool = False) -> str:
     output_path = text_prompt(
         message=f"Provide the output path [{default}]:",
         type="path",
@@ -444,7 +462,7 @@ def ask_for_output_path(default: str = "report.zip") -> str:
             or os.access(dirname(abspath(path)), os.W_OK)
             else f"Path '{path}' does not exist or is not writeable."
         ),
-        filter=lambda path: str(Path(path) / default) if isdir(path or ".") else path,
+        filter=lambda path: str(Path(path) / default) if isdir(path or ".") and not allow_dir else path,
     )
     pprint("Output Path: ", end=None)
     pprint(f"{output_path}", style="#06c8ff bold italic")
@@ -512,7 +530,10 @@ def ask_for_action_after_login_timeout() -> str:
     return action
 
 
-def ask_for_main_action(server_version: list[int] | None = None) -> AbstractAction:
+ADMIN_ACTION = "admin_action"
+
+
+def ask_for_main_action(server_version: list[int] | None = None, is_admin: bool = False) -> AbstractAction:
     tb_4_actions = [
         Choice("Export JSON Report", actions.ExportJSONReport()),
         Choice("Import JSON execution results", actions.ImportJSONExecutionResults()),
@@ -523,6 +544,11 @@ def ask_for_main_action(server_version: list[int] | None = None) -> AbstractActi
     common_actions = [
         Choice("Export XML Report", actions.ExportXMLReport()),
         Choice("Import XML execution results", actions.ImportXMLExecutionResults()),
+    ]
+    admin_actions = [
+        Choice("▶ Administrator Actions", ADMIN_ACTION),
+    ]
+    unlogged_actions = [
         Choice("Browser Projects", actions.BrowseProjects()),
         Choice("Write history to config file", actions.ExportActionLog()),
         Choice("Change connection", actions.ChangeConnection()),
@@ -534,6 +560,24 @@ def ask_for_main_action(server_version: list[int] | None = None) -> AbstractActi
     if server_version and server_version >= [3, 0, 6, 2]:
         choices.extend(tb_306_actions)
     choices.extend(common_actions)
+    if is_admin:
+        choices.extend(admin_actions)
+    choices.extend(unlogged_actions)
+    main_action = selection_prompt(  # type: ignore
+        message="What do you want to do?",
+        choices=choices,
+    )
+    if main_action is ADMIN_ACTION:
+        return ask_for_admin_action()
+    return main_action
+
+
+def ask_for_admin_action() -> AbstractAction:
+    choices = [
+        Choice("Export Server Logs", actions.ExportServerLogs()),
+        Choice("Export Project Users", actions.ExportProjectMembers()),
+        Choice("◀︎ Back", actions.Back()),
+    ]
     return selection_prompt(  # type: ignore
         message="What do you want to do?",
         choices=choices,

@@ -14,6 +14,7 @@
 
 import base64
 import contextlib
+import csv
 import json
 import re
 import sys
@@ -28,6 +29,7 @@ from . import questions, testbench
 from .config_model import (
     ExportCsvParameters,
     ExportJsonParameters,
+    ExportServerLogsParameters,
     ExportXmlParameters,
     ImportJsonParameters,
     ImportXmlParameters,
@@ -563,6 +565,133 @@ class ImportJSONExecutionResults(AbstractAction):
         return False
 
 
+class ExportServerLogs(AbstractAction):
+    def __init__(self, parameters: ExportServerLogsParameters | dict[str, Any] | None = None):
+        if isinstance(parameters, ExportServerLogsParameters):
+            exp_parameters = parameters
+        elif parameters is None:
+            exp_parameters = ExportServerLogsParameters("server_logs.zip")
+        else:
+            exp_parameters = ExportServerLogsParameters.from_dict(parameters or {})
+        super().__init__()
+        self.parameters: ExportServerLogsParameters = exp_parameters
+        self.start_time: float = 0
+
+    def prepare(self, active_connection: testbench.Connection) -> bool:
+        self.parameters.outputPath = questions.ask_for_output_path("server_logs.zip")
+        return True
+
+    def trigger(self, active_connection: testbench.Connection) -> bool:
+        return True
+
+    def finish(self, active_connection: testbench.Connection) -> bool:
+        try:
+            server_logs = active_connection.get_server_logs()
+            with Path(self.parameters.outputPath).open("wb") as output_file:
+                output_file.write(server_logs)
+            pretty_print_success_message(
+                "Server Logs", Path(self.parameters.outputPath).resolve(), "were generated"
+            )
+            logger.info(f"    Time elapsed: {monotonic() - self.start_time:.2f} seconds")
+            return True
+        except Exception as e:
+            logger.error(f"An error occurred while exporting server logs: {e!s}")
+            return False
+
+
+class ExportProjectMembers(UnloggedAction):
+    def prepare(self, active_connection: testbench.Connection) -> bool:
+        all_projects = active_connection.get_all_projects()
+        selected_projects = questions.ask_to_select_projects(all_projects)
+        if not selected_projects:
+            print("No projects selected. Aborting action.")
+            return False
+        if len(selected_projects) == 1:
+            self.parameters["outputPath"] = questions.ask_for_output_path(
+                f"{selected_projects[0]['name']}_members.csv"
+            )
+        else:
+            self.parameters["outputPath"] = questions.ask_for_output_path("project_members/")
+        self.parameters["selected_projects"] = selected_projects
+        pretty_print_success_message("", len(selected_projects), "projects selected")
+        return True
+
+    def trigger_connections(self, connection_log: testbench.ConnectionLog) -> bool:
+        selected_projects = self.parameters.get("selected_projects", [])
+        project_members = {}
+
+        for project in selected_projects:
+            members = connection_log.active_connection.get_project_members(project["key"]["serial"])
+            project_members[project["name"]] = [self._format_member_data(member) for member in members]
+
+        self._write_members_to_files(selected_projects, project_members)
+        return True
+
+    def _format_member_data(self, member: dict) -> dict:
+        """Format member data for CSV export."""
+        member_value = member["value"]
+        roles = member_value["membership"]["roles"]
+
+        return {
+            "User Name": member_value["user-name"],
+            "User Login": member_value["user-login"],
+            "Test Manager": self._has_role(roles, "Test Manager"),
+            "Test Designer": self._has_role(roles, "Test Designer"),
+            "Test Programmer": self._has_role(roles, "Test Programmer"),
+            "Tester": self._has_role(roles, "Tester"),
+            "Read-Only": self._has_role(roles, "Read Only"),
+        }
+
+    def _has_role(self, roles: list, role_name: str) -> bool:
+        """Check if a specific role exists in the list of roles."""
+        return any(role_name in role for role in roles)
+
+    def _write_members_to_files(self, selected_projects: list, project_members: dict) -> None:
+        """Write project members to CSV files."""
+        if len(selected_projects) == 1:
+            self._write_single_project_file(selected_projects[0]["name"], project_members)
+        else:
+            self._write_multiple_project_files(project_members)
+
+    def _write_single_project_file(self, project_name: str, project_members: dict) -> None:
+        """Write members of a single project to CSV file."""
+        project_path = Path(self.parameters["outputPath"])
+        project_path.parent.mkdir(parents=True, exist_ok=True)
+        with project_path.open("w", encoding="utf-8") as output_file:
+            self._write_project_members_to_csv(project_members[project_name], output_file)
+        pretty_print_success_message("Project members successfully written to:\n", project_path.resolve(), "")
+
+    def _write_multiple_project_files(self, project_members: dict) -> None:
+        """Write members of multiple projects to separate CSV files."""
+        export_dir = Path(self.parameters["outputPath"])
+        for project_name, members in project_members.items():
+            project_path = export_dir / f"{project_name}_members.csv"
+            project_path.parent.mkdir(parents=True, exist_ok=True)
+            with project_path.open("w", encoding="utf-8") as output_file:
+                self._write_project_members_to_csv(members, output_file)
+        pretty_print_success_message(
+            "Project members successfully written to directory:\n", export_dir.resolve(), ""
+        )
+
+    def _write_project_members_to_csv(self, members, output_file):
+        writer = csv.DictWriter(
+            output_file,
+            fieldnames=[
+                "User Name",
+                "User Login",
+                "Test Manager",
+                "Test Designer",
+                "Test Programmer",
+                "Tester",
+                "Read-Only",
+            ],
+            delimiter=";",
+            quoting=csv.QUOTE_MINIMAL,
+        )
+        writer.writeheader()
+        writer.writerows(members)
+
+
 class BrowseProjects(UnloggedAction):
     def prepare(self, active_connection: testbench.Connection) -> bool:
         arg = parser.parse_args()
@@ -634,12 +763,18 @@ class Quit(UnloggedAction):
         sys.exit(0)
 
 
+class Back(UnloggedAction):
+    def trigger_connections(self, connection_log: testbench.ConnectionLog | None = None):
+        return True
+
+
 ACTION_CLASSES: dict[str, type[AbstractAction]] = {
     "ExportXMLReport": ExportXMLReport,
     "ExportJSONReport": ExportJSONReport,
     "ExportCSVReport": ExportCSVReport,
     "ImportXMLExecutionResults": ImportXMLExecutionResults,
     "ImportJSONExecutionResults": ImportJSONExecutionResults,
+    "ExportServerLogs": ExportServerLogs,
 }
 
 
