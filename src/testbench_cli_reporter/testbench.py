@@ -16,6 +16,8 @@
 
 import base64
 import json
+import random
+import threading
 import time
 import traceback
 from dataclasses import asdict, dataclass
@@ -33,6 +35,7 @@ from .config_model import (
     Configuration,
     ExecutionJsonResultsImportOptions,
     ExecutionXmlResultsImportOptions,
+    Permission,
     ProjectCSVReportOptions,
     TestCycleJsonReportOptions,
     TestCycleXMLReportOptions,
@@ -113,6 +116,11 @@ class Connection:
         self.is_admin = False
         self._session = None
         self._legacy_session = None
+        self.session_terminated = False
+        self._hb_thread: threading.Thread | None = None
+        self._hb_stop: threading.Event | None = None
+        self._hb_interval_sec: int = 10
+        self._hb_auth_lost: bool = False
 
     @property
     def is_testbench_4(self) -> bool:
@@ -141,30 +149,30 @@ class Connection:
         self._session.mount("http://", TimeoutHTTPAdapter(self.connection_timeout))  # type: ignore
         self._session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))  # type: ignore
         self.is_admin = "Administrator" in self.read_user_roles(self._session)
+        self._ensure_heartbeat_started()
         return self._session
 
     def read_server_version(self, session: requests.Session) -> None:
         versions = {}
         try:
-            response = session.get(f"{self.server_url}serverVersions/v1")
-            versions = response.json()
-            self.server_version = [int(v) for v in versions.get("releaseVersion", "").split(".")]
+            versions = session.get(f"{self.server_url}serverVersions/v1").json()
         except requests.HTTPError:
             logger.debug(
                 "Failed to read server version from "
                 f"{self.server_url}/serverVersions/v1, trying {self.server_url}1/serverVersions"
             )
             try:
-                response = session.get(f"{self.server_url}1/serverVersions")
-                versions = response.json()
-                self.server_version = [int(v) for v in versions.get("version", "").split(".")]
+                versions = session.get(f"{self.server_url}1/serverVersions").json()
             except requests.HTTPError as e:
                 raise requests.HTTPError(
-                    "Failed to read server version. Please check the server URL and connection."
+                    "Failed to read server version.\n"
+                    f"versions: {json.dumps(versions)}\n"
+                    "Please check the server URL and connection."
                 ) from e
         except Exception as e:
             raise e
-        finally:
+        try:
+            self.server_version = [int(v) for v in versions.get("version", "").split(".")]
             self.databaseVersion = versions.get("databaseVersion")
             self.revision = versions.get("revision")
             if self.server_version:
@@ -185,6 +193,10 @@ class Connection:
                     {"value": "Revision: ", "end": None},
                     {"value": f"{self.revision}", "style": BLUE_BOLD_ITALIC},
                 )
+        except Exception as e:
+            traceback.print_exc()
+            raise RuntimeError(f"Failed to parse server version from response: {versions}") from e
+
 
     def read_user_roles(self, session: requests.Session) -> list[str]:
         if self.is_testbench_4:
@@ -225,9 +237,13 @@ class Connection:
                 self._legacy_session = session
                 logger.info("Authenticated")
         except (requests.HTTPError, json.JSONDecodeError, KeyError) as e:
-            raise requests.HTTPError(
-                f"Authentication failed\nStatus code: {response.status_code}\nResponse: {response.text}"
-            ) from e
+            if hasattr(e, "response") and e.response is not None:
+                logger.error(
+                    f"Authentication failed with status code {e.response.status_code}"
+                    f" and message: {e.response.text}"
+                )
+            else:
+                raise e
 
     def get_loginname_from_server(self):
         if self.loginname:
@@ -274,7 +290,57 @@ class Connection:
         self._legacy_session.mount("https://", TimeoutHTTPAdapter(self.connection_timeout))  # type: ignore
         return self._legacy_session
 
+    def _ensure_heartbeat_started(self) -> None:
+        if self._hb_thread and self._hb_thread.is_alive():
+            return
+        self._hb_stop = threading.Event()
+        self._hb_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name=f"tb-heartbeat-{self.server_host}:{self.server_port}",
+            daemon=True,
+        )
+        self._hb_thread.start()
+
+    def _stop_heartbeat(self) -> None:
+        if self._hb_stop:
+            self._hb_stop.set()
+        if self._hb_thread and self._hb_thread.is_alive():
+            self._hb_thread.join(timeout=1.0)
+
+    def _heartbeat_loop(self) -> None:
+        """
+        Periodically ping the server using the **normal** (4.x) session.
+        Optional: also ping legacy session if configured and available.
+        """
+
+        def _sleep_with_jitter():
+            base = self._hb_interval_sec
+            jitter = random.uniform(-0.1, 0.1) * base  # ±10%
+            wait_for = max(5.0, base + jitter)
+            return self._hb_stop.wait(wait_for) if self._hb_stop else True
+
+        while True:
+            if _sleep_with_jitter():
+                return
+            try:
+                self.session.get(
+                    f"{self.server_url}serverLocations/v1",
+                    timeout=(5, 10),
+                )
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code == requests.codes.unauthorized:
+                    self.session_terminated = True
+                    logger.error(
+                        "Heartbeat detected 401 Unauthorized. Session appears to be terminated by the server."
+                    )
+                    if self._hb_stop:
+                        self._hb_stop.set()
+                    return
+            except Exception as e:
+                logger.debug(f"Heartbeat (new session) failed: {e}")
+
     def close(self):
+        self._stop_heartbeat()
         self.session.close()
 
     def export(self) -> Configuration:
@@ -903,6 +969,48 @@ class Connection:
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to retrieve project members: {e}")
             raise e
+
+    # POST /api/jwt/token/v1  (normal session)
+    def request_jwt(  # noqa: PLR0913
+        self,
+        *,
+        projectKey: str | None = None,
+        tovKey: str | None = None,
+        cycleKey: str | None = None,
+        permissions: list[Permission] | None = None,
+        subject: str | None = None,
+        expiresAfterSeconds: int | None = None,
+    ) -> dict:
+        """
+        Generate a JWT for the logged-in user.
+
+        Args mirror the OpenAPI JWTDataOptions; pass None to omit a field.
+        `permissions` may be a list of strings or Permission enums.
+        """
+        payload: dict = {}
+
+        if permissions is not None:
+            payload["permissions"] = []
+            for p in permissions:
+                if isinstance(p, Permission):
+                    payload["permissions"].append(str(p))
+                else:
+                    if p not in Permission.__members__:  # type: ignore
+                        raise ValueError(f"Invalid permission: {p}")
+                    payload["permissions"].append(p)
+        if projectKey is not None:
+            payload["projectKey"] = str(projectKey)
+        if tovKey is not None:
+            payload["tovKey"] = str(tovKey)
+        if cycleKey is not None:
+            payload["cycleKey"] = str(cycleKey)
+        if subject is not None:
+            payload["subject"] = str(subject)
+        if expiresAfterSeconds is not None:
+            payload["expiresAfterSeconds"] = int(expiresAfterSeconds)
+
+        response = self.session.post(f"{self.server_url}jwt/token/v1", json=payload)
+        return dict(response.json())
 
 
 def login(server="", login="", pwd="", session="") -> Connection:  # noqa: C901, PLR0912

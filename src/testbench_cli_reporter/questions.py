@@ -26,6 +26,7 @@ from .config_model import (
     ExecutionCSVField,
     ExecutionJsonResultsImportOptions,
     ExecutionXmlResultsImportOptions,
+    Permission,
     ProjectCSVReportOptions,
     SpecificationCSVField,
     TestCycleJsonReportOptions,
@@ -223,6 +224,22 @@ def ask_for_testbench_password(default="") -> str:
     return password
 
 
+def ask_for_action_after_session_terminated(current_login: str | None, server_url: str) -> str:
+    who = f"for '{current_login}' " if current_login else ""
+    action = selection_prompt(
+        message=f"Session was terminated by the server {who}on {server_url}\nWhat do you want to do?",
+        choices=[
+            Choice("Login again with same credentials.", "relogin_same"),
+            Choice("Login as different user.", "change_user"),
+            Choice("Login to other server.", "change_server"),
+            Choice("Quit.", "quit"),
+        ],
+    )
+    if not isinstance(action, str):
+        raise ValueError("Unexpected selection_prompt result")
+    return action
+
+
 def ask_to_select_project(all_projects: dict, default=None) -> dict:
     choices = [Choice(project["name"], project) for project in all_projects["projects"]]
     project: dict = selection_prompt(
@@ -397,7 +414,7 @@ def ask_to_config_csv_report() -> ProjectCSVReportOptions:
         choices=[
             Choice("UTF-8", "utf-8"),
             Choice("UTF-16", "utf-16"),
-            Choice("Cp1252", "cp1252"),
+            Choice("Windows-1252", "windows-1252"),
         ],
         default="utf-8",
     )
@@ -573,6 +590,7 @@ def ask_for_admin_action() -> AbstractAction:
     choices = [
         Choice("Export Server Logs", actions.ExportServerLogs),
         Choice("Export Project Users", actions.ExportProjectMembers),
+        Choice("Request JWT Token", actions.RequestJWT),
         Choice("◀︎ Back", actions.Back),
     ]
     return selection_prompt(  # type: ignore
@@ -658,3 +676,13 @@ def navigate_in_cycle_stucture(theme_structure):
         if isinstance(selection, str) and selection not in ("BACK", "ROOT"):
             return selection
     return None
+
+
+def ask_to_select_permissions() -> list[Permission]:
+    all_permissions = sorted([p.value for p in Permission], key=str.casefold)
+    selected: list[str] = checkbox_prompt(
+        message="Select permissions for the JWT (optional):",
+        choices=[Choice(p, p) for p in all_permissions],
+        no_valid_option_message="No permissions available.",
+    )
+    return [Permission(p) for p in selected]

@@ -185,6 +185,63 @@ class ExecutionCSVField(str, Enum):
         return self.value
 
 
+class Permission(str, Enum):
+    AccessSecuredData = "AccessSecuredData"
+    DeleteUserAccount = "DeleteUserAccount"
+    DeleteUserSession = "DeleteUserSession"
+    DownloadReportFile = "DownloadReportFile"
+    ImportExecutionResults = "ImportExecutionResults"
+    ModifyGlobalTestLabels = "ModifyGlobalTestLabels"
+    ModifyProjectDetails = "ModifyProjectDetails"
+    ModifyProjectUDFs = "ModifyProjectUDFs"
+    ModifySpecifications = "ModifySpecifications"
+    ModifySpecManagementInfo = "ModifySpecManagementInfo"
+    ModifySpecPriorityAndDueDate = "ModifySpecPriorityAndDueDate"
+    ModifyTestElements = "ModifyTestElements"
+    ModifyTestLabels = "ModifyTestLabels"
+    ModifyUserData = "ModifyUserData"
+    ModifyUserRolesInProject = "ModifyUserRolesInProject"
+    PrivatizeGlobalTestLabels = "PrivatizeGlobalTestLabels"
+    ReadActiveUsersList = "ReadActiveUsersList"
+    ReadCompleteProjectsList = "ReadCompleteProjectsList"
+    ReadCompleteUsersList = "ReadCompleteUsersList"
+    ReadCycleReport = "ReadCycleReport"
+    ReadCycleReportOverRMI = "ReadCycleReportOverRMI"
+    ReadCycleRequirements = "ReadCycleRequirements"
+    ReadDefectsMetricDistribution = "ReadDefectsMetricDistribution"
+    ReadExecutionImportingJobDetails = "ReadExecutionImportingJobDetails"
+    ReadInvisibleProjectContent = "ReadInvisibleProjectContent"
+    ReadOwnProjectsList = "ReadOwnProjectsList"
+    ReadOwnUserDetails = "ReadOwnUserDetails"
+    ReadProjectDefectsAndTheirAssignments = "ReadProjectDefectsAndTheirAssignments"
+    ReadProjectDetails = "ReadProjectDetails"
+    ReadProjectExportOverRMI = "ReadProjectExportOverRMI"
+    ReadProjectHierarchy = "ReadProjectHierarchy"
+    ReadProjectMembers = "ReadProjectMembers"
+    ReadProjectUDFs = "ReadProjectUDFs"
+    ReadReportingJobDetails = "ReadReportingJobDetails"
+    ReadTestCaseDetails = "ReadTestCaseDetails"
+    ReadTestCaseSetDetails = "ReadTestCaseSetDetails"
+    ReadTestElements = "ReadTestElements"
+    ReadTestLabels = "ReadTestLabels"
+    ReadTestThemeDetails = "ReadTestThemeDetails"
+    ReadTestThemeStatusDistribution = "ReadTestThemeStatusDistribution"
+    ReadTestThemeTree = "ReadTestThemeTree"
+    ReadTovReport = "ReadTovReport"
+    ReadTovReportOverRMI = "ReadTovReportOverRMI"
+    ReadTovRequirements = "ReadTovRequirements"
+    ReadUserDetails = "ReadUserDetails"
+    ReadUserMemberships = "ReadUserMemberships"
+    ReadUserSessions = "ReadUserSessions"
+    RestrictProjectUDFs = "RestrictProjectUDFs"
+    SynchronizeUsers = "SynchronizeUsers"
+    UnlockForeignSpecs = "UnlockForeignSpecs"
+    UnlockForeignTestElements = "UnlockForeignTestElements"
+
+    def __str__(self):
+        return self.value
+
+
 @dataclass
 class ProjectCSVReportOptions:
     scopes: list[ProjectCSVReportScope]
@@ -591,6 +648,39 @@ class CliReporterConfig:
         )
 
 
+@dataclass
+class JWTDataOptions:
+    projectKey: str | None = None
+    tovKey: str | None = None
+    cycleKey: str | None = None
+    permissions: list[Permission] = field(default_factory=list)  # Enum!
+    subject: str | None = None
+    expiresAfterSeconds: int | None = None
+
+    @classmethod
+    def from_dict(cls, dictionary: dict):
+        raw_perms = dictionary.get("permissions") or []
+        perms = [Permission(p) if not isinstance(p, Permission) else p for p in raw_perms]
+        return cls(
+            projectKey=dictionary.get("projectKey"),
+            tovKey=dictionary.get("tovKey"),
+            cycleKey=dictionary.get("cycleKey"),
+            permissions=perms,
+            subject=dictionary.get("subject"),
+            expiresAfterSeconds=dictionary.get("expiresAfterSeconds"),
+        )
+
+
+@dataclass
+class RequestJWTAction(BaseAction):
+    parameters: JWTDataOptions
+    type: str = "RequestJWT"
+
+    @classmethod
+    def from_dict(cls, dictionary: dict):
+        return cls(parameters=JWTDataOptions.from_dict(dictionary.get("parameters") or {}))
+
+
 ACTION_TYPES: dict[str, BaseAction] = {
     "ExportXMLReport": ExportXmlAction,  # type: ignore
     "ExportJSONReport": ExportJsonAction,  # type: ignore
@@ -598,4 +688,5 @@ ACTION_TYPES: dict[str, BaseAction] = {
     "ImportXMLExecutionResults": ImportXMLAction,  # type: ignore
     "ImportJSONExecutionResults": ImportJSONAction,  # type: ignore
     "ExportServerLogs": ExportServerLogsAction,  # type: ignore
+    "RequestJWT": RequestJWTAction,  # type: ignore
 }

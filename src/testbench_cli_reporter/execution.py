@@ -11,7 +11,31 @@ from .actions import Action, UnloggedAction
 from .config_model import CliReporterConfig, Configuration, LogLevel
 from .log import logger, setup_logger
 from .testbench import Connection, ConnectionLog, login
-from .util import rotate, spin_spinner
+from .util import close_program, rotate, spin_spinner
+
+
+def _handle_session_terminated(active_connection, connection_log):
+    print("HTTP Error: Session terminated by server. See log for details.")
+    action = questions.ask_for_action_after_session_terminated(
+        getattr(active_connection, "loginname", None),
+        active_connection.server_url,
+    )
+    if action == "relogin_same":
+        return login(
+            active_connection.server_url,
+            getattr(active_connection, "loginname", ""),
+            getattr(active_connection, "password", ""),
+            "",
+        )
+    if action == "change_user":
+        return login(active_connection.server_url)
+    if action == "change_server":
+        connection_log.active_connection.close()
+        new_conn = login()
+        connection_log.add_connection(new_conn)
+        return new_conn
+    close_program()
+    return None
 
 
 def run_manual_mode(configuration: CliReporterConfig | None = None):
@@ -29,6 +53,7 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
         config = cli_config.configuration[0] if len(cli_config.configuration) else Configuration("")
         active_connection = login(config.server_url, config.loginname, config.password, config.sessionToken)
         connection_log.add_connection(active_connection)
+        active_connection = _reconnect_if_logged_out(connection_log, active_connection)
         next_action = questions.ask_for_main_action(
             active_connection.server_version, active_connection.is_admin
         )
@@ -63,10 +88,18 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
                     f"Action: {next_action.__class__.__name__}, Parameters: {next_action.parameters}"
                 )
 
-            active_connection = connection_log.active_connection
+            active_connection = _reconnect_if_logged_out(connection_log, connection_log.active_connection)
             next_action = questions.ask_for_main_action(
                 active_connection.server_version, active_connection.is_admin
             )
+
+
+def _reconnect_if_logged_out(connection_log, active_connection):
+    return (
+        _handle_session_terminated(active_connection, connection_log)
+        if active_connection.session_terminated
+        else active_connection
+    )
 
 
 def run_automatic_mode(

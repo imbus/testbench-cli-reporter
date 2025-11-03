@@ -36,6 +36,7 @@ from .config_model import (
     ExportXmlParameters,
     ImportJsonParameters,
     ImportXmlParameters,
+    JWTDataOptions,
     Key,
     ProjectCSVReportScope,
 )
@@ -602,6 +603,68 @@ class ExportServerLogs(AbstractAction):
             return False
 
 
+class RequestJWT(AbstractAction):
+    """
+    Logged admin action: configure JWT options (permissions optional), call server,
+    and print token + expiry.
+    """
+
+    def __init__(self, parameters: JWTDataOptions | dict[str, object] | None = None):
+        params = (
+            parameters
+            if isinstance(parameters, JWTDataOptions)
+            else JWTDataOptions.from_dict(parameters or {})
+        )
+        super().__init__(params)
+        self.parameters: JWTDataOptions = params
+        self._jwt_response: dict | None = None
+
+    def prepare(self, active_connection: "Connection") -> bool:
+        selected_perms = questions.ask_to_select_permissions()
+        project_key = questions.text_prompt("Project Key (optional):", default="", validation=None)
+        tov_key = questions.text_prompt("TOV Key (optional):", default="", validation=None)
+        cycle_key = questions.text_prompt("Cycle Key (optional):", default="", validation=None)
+        subject = questions.text_prompt(
+            "Subject (optional, default 'Testbench'):", default="", validation=None
+        )
+        exp = questions.text_prompt(
+            "Expires after seconds (optional, default 86400):", default="", validation=None
+        )
+
+        self.parameters.permissions = selected_perms
+        self.parameters.projectKey = project_key or None
+        self.parameters.tovKey = tov_key or None
+        self.parameters.cycleKey = cycle_key or None
+        self.parameters.subject = subject or None
+        self.parameters.expiresAfterSeconds = int(exp) if (exp.strip().isdigit()) else None
+        return True
+
+    def trigger(self, active_connection: "Connection") -> bool:
+        self._jwt_response = active_connection.request_jwt(
+            permissions=self.parameters.permissions,
+            projectKey=self.parameters.projectKey,
+            tovKey=self.parameters.tovKey,
+            cycleKey=self.parameters.cycleKey,
+            subject=self.parameters.subject,
+            expiresAfterSeconds=self.parameters.expiresAfterSeconds,
+        )
+        self.job_id = "jwt"
+        return True
+
+    def finish(self, active_connection: "Connection") -> bool:
+        if not self._jwt_response:
+            return False
+        token = self._jwt_response.get("accessToken", "")
+        expires_at = self._jwt_response.get("expiresAt", "")
+        if token:
+            print("\nJWT token:\n")
+            print(token)
+            if expires_at:
+                print(f"\nExpires At: {expires_at}")
+            return True
+        return False
+
+
 class ExportProjectMembers(UnloggedAction):
     def prepare(self, active_connection: "Connection") -> bool:
         all_projects = active_connection.get_all_projects()
@@ -785,6 +848,7 @@ ACTION_CLASSES: dict[str, type[AbstractAction]] = {
     "ImportXMLExecutionResults": ImportXMLExecutionResults,
     "ImportJSONExecutionResults": ImportJSONExecutionResults,
     "ExportServerLogs": ExportServerLogs,
+    "RequestJWT": RequestJWT,
 }
 
 
