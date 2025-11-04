@@ -12,6 +12,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import base64
+import binascii
 import json
 import os
 import sys
@@ -32,6 +34,7 @@ from .config_model import (
     CliReporterConfig,
     ExecutionJsonResultsImportOptions,
     ExecutionXmlResultsImportOptions,
+    FilteringOptions,
     TestCycleJsonReportOptions,
     TestCycleXMLReportOptions,
 )
@@ -120,7 +123,7 @@ XmlImportConfig = CopyOnAccessDict(
 
 TYPICAL_JSON_IMPORT_CONFIG: ExecutionJsonResultsImportOptions = ExecutionJsonResultsImportOptions(
     fileName="",
-    reportRootUID=None,
+    treeRootUID=None,
     useExistingDefect=True,
     ignoreNonExecutedTestCases=True,
     checkPaths=True,
@@ -195,6 +198,34 @@ JsonExportConfig = CopyOnAccessDict(
 )
 
 _CLI_DEFAULTS: dict[str, str | None] = {}
+
+
+def decode_urlsafe_b64(b64_str: str) -> bytes:
+    raster = 4
+    padding = raster - (len(b64_str) % raster)
+    if padding != raster:
+        b64_str += "=" * padding
+    try:
+        return base64.b64decode(b64_str, validate=True)
+    except binascii.Error:
+        try:
+            return base64.urlsafe_b64decode(b64_str)
+        except binascii.Error as exc:
+            raise ValueError("Filtering options must be valid base64 data.") from exc
+
+
+def load_filtering_options(raw_value: str | None) -> FilteringOptions | None:
+    """Decode base64 encoded FilteringOptions payload."""
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return None
+    decoded = decode_urlsafe_b64(raw_value).decode("utf-8")
+    try:
+        data = json.loads(decoded)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Filtering options payload must be JSON.") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Filtering options JSON must describe an object.")
+    return FilteringOptions.from_dict(data)
 
 
 def set_cli_defaults(defaults: Mapping[str, str | None]) -> None:

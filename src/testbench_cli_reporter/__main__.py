@@ -31,6 +31,7 @@ from .config_model import (
     ExportServerLogsParameters,
     ExportXmlAction,
     ExportXmlParameters,
+    FilteringOptions,
     ImportJSONAction,
     ImportJsonParameters,
     ImportXMLAction,
@@ -51,6 +52,7 @@ from .util import (
     JsonExportConfig,
     close_program,
     get_configuration,
+    load_filtering_options,
     resolve_server_name,
     set_cli_defaults,
 )
@@ -166,6 +168,13 @@ def _run_automatic_action(details: ConnectionDetails, action: BaseAction) -> Non
     )
 
 
+def _parse_filtering_option(value: str | None, param_hint: str) -> FilteringOptions | None:
+    try:
+        return load_filtering_options(value)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint=param_hint) from exc
+
+
 @click.group(context_settings=CONTEXT_SETTINGS, invoke_without_command=True)
 @click.option(
     "-c",
@@ -262,6 +271,7 @@ def cli(  # noqa: PLR0913
 @click.option("--tov-key", default=None, help="Test object version key.")
 @click.option("--cycle-key", default=None, help="Test cycle key.")
 @click.option("-u", "--uid", default=None, help="Report root UID.")
+@click.option("--filtering", default=None, help="FilteringOptions payload as base64 encoded JSON.")
 @click.option(
     "-o",
     "--output",
@@ -285,6 +295,7 @@ def export_xml(  # noqa: PLR0913
     tov_key: str | None,
     cycle_key: str | None,
     uid: str,
+    filtering: str | None,
     output: str,
 ) -> None:
     server, login, password, session, verify = _merge_connection_options(
@@ -298,6 +309,8 @@ def export_xml(  # noqa: PLR0913
         )
     export_config = deepcopy(ITEP_EXPORT_CONFIG)
     export_config.reportRootUID = uid or None
+    if filtering_options := _parse_filtering_option(filtering, "--filtering"):
+        export_config.filters = filtering_options.get_applied_filters()
     parameters = ExportXmlParameters(
         outputPath=output,
         projectPath=project_path or None,
@@ -319,6 +332,7 @@ def export_xml(  # noqa: PLR0913
     help="Path to the XML results zip file.",
 )
 @click.option("-u", "--uid", default="ROOT", show_default=True, help="Report root UID.")
+@click.option("--filtering", default=None, help="FilteringOptions payload as base64 encoded JSON.")
 @click.pass_context
 def import_xml(  # noqa: PLR0913
     ctx: click.Context,
@@ -329,6 +343,7 @@ def import_xml(  # noqa: PLR0913
     verify: bool | None,
     input_path: str,
     uid: str,
+    filtering: str | None,
 ) -> None:
     server, login, password, session, verify = _merge_connection_options(
         ctx, server, login, password, session, verify
@@ -336,6 +351,8 @@ def import_xml(  # noqa: PLR0913
     details = _prepare_connection_details(server, login, password, session, verify)
     import_config = deepcopy(TYPICAL_XML_IMPORT_CONFIG)
     import_config.reportRootUID = uid or None
+    if filtering_options := _parse_filtering_option(filtering, "--filtering"):
+        import_config.filters = filtering_options.get_applied_filters()
     parameters = ImportXmlParameters(
         inputPath=input_path,
         importConfig=import_config,
@@ -352,6 +369,7 @@ def import_xml(  # noqa: PLR0913
 @click.option("--tov-key", default=None, help="Test object version key.")
 @click.option("--cycle-key", default=None, help="Test cycle key.")
 @click.option("-u", "--uid", default=None, help="Tree root UID.")
+@click.option("--filtering", default=None, help="FilteringOptions payload as base64 encoded JSON.")
 @click.option(
     "-o",
     "--output",
@@ -375,6 +393,7 @@ def export_json(  # noqa: PLR0913
     tov_key: str | None,
     cycle_key: str | None,
     uid: str | None,
+    filtering: str | None,
     output: str,
 ) -> None:
     server, login, password, session, verify = _merge_connection_options(
@@ -387,6 +406,8 @@ def export_json(  # noqa: PLR0913
     report_config = JsonExportConfig["iTorx Export (execution)"]
     if uid:
         report_config.treeRootUID = uid
+    if filtering_options := _parse_filtering_option(filtering, "--filtering"):
+        report_config.filters = filtering_options.get_applied_filters()
     parameters = ExportJsonParameters(
         outputPath=output,
         projectPath=project_path or None,
@@ -409,6 +430,7 @@ def export_json(  # noqa: PLR0913
     help="Path to the JSON results zip file.",
 )
 @click.option("-u", "--uid", default=None, help="Report root UID.")
+@click.option("--filtering", default=None, help="FilteringOptions payload as base64 encoded JSON.")
 @click.pass_context
 def import_json(  # noqa: PLR0913
     ctx: click.Context,
@@ -419,6 +441,7 @@ def import_json(  # noqa: PLR0913
     verify: bool | None,
     input_path: str,
     uid: str | None,
+    filtering: str | None,
 ) -> None:
     server, login, password, session, verify = _merge_connection_options(
         ctx, server, login, password, session, verify
@@ -426,6 +449,8 @@ def import_json(  # noqa: PLR0913
     details = _prepare_connection_details(server, login, password, session, verify)
     import_config = deepcopy(TYPICAL_JSON_IMPORT_CONFIG)
     import_config.reportRootUID = uid or None
+    if filtering_options := _parse_filtering_option(filtering, "--filtering"):
+        import_config.filters = filtering_options.get_applied_filters()
     parameters = ImportJsonParameters(
         inputPath=input_path,
         importConfig=import_config,

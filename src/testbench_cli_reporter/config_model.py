@@ -25,17 +25,33 @@ class FilterInfo:
 
 
 @dataclass
-class FilterJsonInfo:
-    name: str
-    filterType: FilterInfoType
-    testThemeUID: str | None = None
+class FilteringOptions:
+    appliedFilters: list[FilterInfo] | None = None
+    excludedTestThemes: list[str] | None = None
+    labelFilter: str | None = None
+
+    def __post_init__(self):
+        if self.appliedFilters is None:
+            self.appliedFilters = []
+        if self.excludedTestThemes is None:
+            self.excludedTestThemes = []
+
+    def get_applied_filters(self) -> list[FilterInfo]:
+        return list(self.appliedFilters or [])
 
     @classmethod
-    def from_dict(cls, dictionary: dict):
+    def from_dict(cls, dictionary: dict | None):
+        if not dictionary:
+            return cls()
+
+        applied_filters = [FilterInfo.from_dict(item) for item in dictionary.get("appliedFilters", [])]
+        excluded = [value for value in dictionary.get("excludedTestThemes", []) if isinstance(value, str)]
+        label_filter = dictionary.get("labelFilter")
+
         return cls(
-            name=dictionary["name"],
-            filterType=FilterInfoType(dictionary["filterType"]),
-            testThemeUID=dictionary.get("testThemeUID"),
+            appliedFilters=applied_filters,
+            excludedTestThemes=excluded,
+            labelFilter=label_filter,
         )
 
 
@@ -242,11 +258,34 @@ class Permission(str, Enum):
         return self.value
 
 
+CSVField = SpecificationCSVField | AutomationCSVField | ExecutionCSVField
+
+
+def parse_csv_field(raw: str) -> CSVField | None:
+    if raw.startswith(("spec.", "ts.")):
+        return SpecificationCSVField(raw)
+    if raw.startswith("aut."):
+        return AutomationCSVField(raw)
+    if raw.startswith("exec."):
+        return ExecutionCSVField(raw)
+    return None
+
+
+def parse_csv_fields(values: list[str] | None) -> list[CSVField]:
+    parsed_fields: list[CSVField] = []
+    for value in values or []:
+        if isinstance(value, str):
+            parsed_field = parse_csv_field(value)
+            if parsed_field is not None:
+                parsed_fields.append(parsed_field)
+    return parsed_fields
+
+
 @dataclass
 class ProjectCSVReportOptions:
     scopes: list[ProjectCSVReportScope]
     showUserFullName: bool | None = None
-    fields: list[SpecificationCSVField | AutomationCSVField | ExecutionCSVField] | None = None
+    fields: list[CSVField] | None = None
     characterEncoding: str | None = None
 
     def __post_init__(self):
@@ -255,20 +294,12 @@ class ProjectCSVReportOptions:
 
     @classmethod
     def from_dict(cls, dictionary: dict):
-        fields: list[SpecificationCSVField | AutomationCSVField | ExecutionCSVField] = []
-        for key in dictionary.get("fields", []):
-            if isinstance(key, str):
-                if key.startswith(("spec.", "ts.")):
-                    fields.append(SpecificationCSVField(key))
-                elif key.startswith("aut."):
-                    fields.append(AutomationCSVField(key))
-                elif key.startswith("exec."):
-                    fields.append(ExecutionCSVField(key))
+        parsed_fields = parse_csv_fields(dictionary.get("fields"))
 
         return cls(
             scopes=[ProjectCSVReportScope.from_dict(s) for s in dictionary.get("scopes", [])],
             showUserFullName=dictionary.get("showUserFullName"),
-            fields=fields,
+            fields=parsed_fields,
             characterEncoding=dictionary.get("characterEncoding"),
         )
 
@@ -280,7 +311,7 @@ class TestCycleJsonReportOptions:
     suppressFilteredData: bool | None
     suppressNotExecutable: bool | None
     suppressEmptyTestThemes: bool | None
-    filters: list[FilterJsonInfo] | None
+    filters: list[FilterInfo] | None
 
     @classmethod
     def from_dict(cls, dictionary: dict):
@@ -290,7 +321,7 @@ class TestCycleJsonReportOptions:
             suppressFilteredData=dictionary.get("suppressFilteredData"),
             suppressNotExecutable=dictionary.get("suppressNotExecutable"),
             suppressEmptyTestThemes=dictionary.get("suppressEmptyTestThemes"),
-            filters=[FilterJsonInfo.from_dict(f) for f in dictionary.get("filters", [])],
+            filters=[FilterInfo.from_dict(f) for f in dictionary.get("filters", [])],
         )
 
 
@@ -448,7 +479,7 @@ class ExecutionXmlResultsImportOptions:
 @dataclass
 class ExecutionJsonResultsImportOptions:
     fileName: str
-    reportRootUID: str | None
+    treeRootUID: str | None
     ignoreNonExecutedTestCases: bool | None
     defaultTester: str | None
     checkPaths: bool | None
@@ -460,7 +491,7 @@ class ExecutionJsonResultsImportOptions:
     def from_dict(cls, dictionary: dict) -> "ExecutionJsonResultsImportOptions":
         return cls(
             fileName=dictionary.get("fileName", "result.zip"),
-            reportRootUID=dictionary.get("reportRootUID"),
+            treeRootUID=dictionary.get("treeRootUID"),
             ignoreNonExecutedTestCases=dictionary.get("ignoreNonExecutedTestCases"),
             defaultTester=dictionary.get("defaultTester"),
             checkPaths=dictionary.get("checkPaths"),
