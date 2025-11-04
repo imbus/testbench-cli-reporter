@@ -354,7 +354,7 @@ def ask_for_next_action():
         choices=[
             Choice("Export XML Report", actions.ExportXMLReport()),
             Choice("Import execution results", actions.ImportExecutionResults()),
-            Choice("Browser Projects", actions.BrowseProjects()),
+            Choice("Browse Projects", actions.BrowseProjects()),
             Choice("Write history to config file", actions.ExportActionLog()),
             Choice("Change connection", actions.ChangeConnection()),
             Choice("Quit", actions.Quit()),
