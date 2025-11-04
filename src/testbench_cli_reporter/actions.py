@@ -46,8 +46,8 @@ from .util import (
     TYPICAL_JSON_IMPORT_CONFIG,
     TYPICAL_XML_IMPORT_CONFIG,
     AbstractAction,
+    get_cli_defaults,
     get_project_keys,
-    parser,
     pretty_print_cycle_selection,
     pretty_print_project_selection,
     pretty_print_project_tree_selection,
@@ -118,7 +118,7 @@ class ExportXMLReport(AbstractAction):
         ):
             all_projects = active_connection.get_all_projects()
             (
-                project_key,
+                _project_key,
                 self.parameters.tovKey,
                 self.parameters.cycleKey,
             ) = get_project_keys(all_projects, *self.parameters.projectPath)
@@ -297,14 +297,15 @@ class ExportJSONReport(AbstractAction):
 
         if (
             not self.parameters.tovKey
+            and not self.parameters.cycleKey
             and self.parameters.projectPath
             and len(self.parameters.projectPath) >= 2  # noqa: PLR2004
         ):
             self.parameters.tovKey = active_connection.get_tov_key_new_play(
                 self.parameters.projectKey, self.parameters.projectPath[1]
             )
-        if not self.parameters.tovKey:
-            raise ValueError("Invalid Config! 'tovKey' missing.")
+        if not self.parameters.tovKey and not self.parameters.cycleKey:
+            raise ValueError("Invalid Config! 'tovKey' and 'cycleKey' missing.")
 
         if (
             not self.parameters.cycleKey
@@ -406,6 +407,14 @@ class ImportXMLExecutionResults(AbstractAction):
         if not self.parameters.cycleKey:
             if len(self.parameters.projectPath or []) != 3:  # noqa: PLR2004
                 self.parameters.projectPath = self.get_project_path_from_report()
+                if (
+                    self.parameters.projectPath[0]
+                    and self.parameters.projectPath[1]
+                    and not self.parameters.projectPath[2]
+                ):
+                    raise ValueError(
+                        "Report is missing cycle information. TOV based reports can not be imported."
+                    )
             self.set_cycle_key_from_path(active_connection)
 
         with Path(self.parameters.inputPath).open("rb") as execution_report:
@@ -430,8 +439,8 @@ class ImportXMLExecutionResults(AbstractAction):
             isinstance(self.parameters.projectPath, list) and len(self.parameters.projectPath) == 3  # noqa: PLR2004
         ):
             (
-                project_key,
-                tov_key,
+                _project_key,
+                _tov_key,
                 self.parameters.cycleKey,
             ) = get_project_keys(all_projects, *self.parameters.projectPath)
         if not self.parameters.cycleKey:
@@ -501,14 +510,25 @@ class ImportJSONExecutionResults(AbstractAction):
                 project_info.get("projectContext", {}).get("cycleName", ""),
             ]
 
-    def trigger(self, active_connection: "Connection") -> bool:
-        if not self.parameters.projectKey:
-            raise ValueError("Invalid Config! 'projectKey' missing.")
+    def get_project_scope_from_report(self) -> dict:
+        with ZipFile(self.parameters.inputPath) as zip_file:
+            manifest_info: dict = json.load(zip_file.open("manifest.json"))
+            report_creation = manifest_info.get("reportCreation", {})
+            scope = report_creation.get("scope", {})
+            return {
+                "project_key": scope.get("projectKey", None),
+                "tov_key": scope.get("tovKey", None),
+                "cycle_key": scope.get("cycleKey", None),
+            }
 
+    def trigger(self, active_connection: "Connection") -> bool:
         if not self.parameters.cycleKey:
             if len(self.parameters.projectPath or []) != 3:  # noqa: PLR2004
-                self.parameters.projectPath = self.get_project_path_from_report()
-            self.set_cycle_key_from_path(active_connection)
+                scope = self.get_project_scope_from_report()
+                self.parameters.projectKey = scope.get("project_key")
+                self.parameters.cycleKey = scope.get("cycle_key")
+        elif not self.parameters.projectKey:
+            raise ValueError("Invalid Config! 'projectKey' missing.")
 
         with Path(self.parameters.inputPath).open("rb") as execution_report:
             serverside_file_name = active_connection.upload_execution_json_results(
@@ -534,7 +554,7 @@ class ImportJSONExecutionResults(AbstractAction):
         ):
             (
                 self.parameters.projectKey,
-                tov_key,
+                _tov_key,
                 self.parameters.cycleKey,
             ) = get_project_keys(all_projects, *self.parameters.projectPath)
         if not self.parameters.cycleKey:
@@ -760,10 +780,10 @@ class ExportProjectMembers(UnloggedAction):
 
 class BrowseProjects(UnloggedAction):
     def prepare(self, active_connection: "Connection") -> bool:
-        arg = parser.parse_args()
-        project = arg.project
-        version = arg.version
-        cycle = arg.cycle
+        defaults = get_cli_defaults()
+        project = defaults.get("project") or ""
+        version = defaults.get("version") or ""
+        cycle = defaults.get("cycle") or ""
         all_projects = active_connection.get_all_projects()
         selected_project = questions.ask_to_select_project(all_projects, default=project)
         selected_tov = questions.ask_to_select_tov(selected_project, default=version)

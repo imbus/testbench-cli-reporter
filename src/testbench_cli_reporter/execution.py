@@ -1,3 +1,4 @@
+import base64
 import traceback
 from contextlib import suppress
 from time import sleep
@@ -51,6 +52,7 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
 
     while True:
         config = cli_config.configuration[0] if len(cli_config.configuration) else Configuration("")
+        _analyse_basic_auth(config)
         active_connection = login(config.server_url, config.loginname, config.password, config.sessionToken)
         connection_log.add_connection(active_connection)
         active_connection = _reconnect_if_logged_out(connection_log, active_connection)
@@ -92,6 +94,12 @@ def run_manual_mode(configuration: CliReporterConfig | None = None):
             next_action = questions.ask_for_main_action(
                 active_connection.server_version, active_connection.is_admin
             )
+
+
+def _analyse_basic_auth(config):
+    if config.basicAuth:
+        credentials = base64.b64decode(config.basicAuth.encode()).decode("utf-8")
+        config.loginname, config.password = credentials.split(":", 1)
 
 
 def _reconnect_if_logged_out(connection_log, active_connection):

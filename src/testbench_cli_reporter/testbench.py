@@ -197,10 +197,16 @@ class Connection:
             traceback.print_exc()
             raise RuntimeError(f"Failed to parse server version from response: {versions}") from e
 
-
     def read_user_roles(self, session: requests.Session) -> list[str]:
         if self.is_testbench_4:
-            response = session.get(f"{self.server_url}login/session/v1")
+            try:
+                response = session.get(f"{self.server_url}login/session/v1")
+            except requests.HTTPError:
+                logger.debug(
+                    "Failed to read user roles from "
+                    f"{self.server_url}login/session/v1, trying {self.server_url}1/checkLogin"
+                )
+                return []
             return response.json().get("globalRoles", [])  # type: ignore
         response = session.get(f"{self.server_url}1/checkLogin")
         user_key = response.json().get("userKey", {}).get("serial")

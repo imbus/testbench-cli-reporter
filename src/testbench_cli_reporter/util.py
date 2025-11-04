@@ -12,7 +12,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-import argparse
 import json
 import os
 import sys
@@ -195,82 +194,28 @@ JsonExportConfig = CopyOnAccessDict(
     }
 )
 
-parser = argparse.ArgumentParser(
-    description="TestBench CLI Reporter Tool",
-    epilog=f"Version: {__import__('testbench_cli_reporter').__version__}",
-)
-parser.add_argument(
-    "-c",
-    "--config",
-    help="Path to a config json file to execute pre-set actions based on the given configuration.",
-    type=str,
-)
-parser.add_argument(
-    "-s",
-    "--server",
-    help="TestBench Server address (hostname:port).",
-    type=str,
-    default="",
-)
-parser.add_argument("--login", help="Users Login.", type=str, default="")
-parser.add_argument("--password", help="Users Password.", type=str, default="")
-parser.add_argument("--session", help="Session Token", type=str, default="")
-parser.add_argument(
-    "-p",
-    "--project",
-    help="Project name to be exported <OPTIONAL if --type is 'i'>.",
-    type=str,
-    default="",
-)
-parser.add_argument(
-    "-v",
-    "--version",
-    help="Test Object Version name to be exported <OPTIONAL if --type is 'i'>.",
-    type=str,
-    default="",
-)
-parser.add_argument(
-    "-y",
-    "--cycle",
-    help="Test Cycle name to be exported <OPTIONAL>",
-    type=str,
-    default="",
-)
-parser.add_argument(
-    "--tovKey",
-    help="Test Object Version key to be exported <OPTIONAL>. If set overrides names.",
-    type=str,
-    default="",
-)
-parser.add_argument(
-    "--cycleKey",
-    help="Test Cycle key to be exported <OPTIONAL>. If set overrides names.",
-    type=str,
-    default="",
-)
-parser.add_argument(
-    "-u",
-    "--uid",
-    help="Root UID to be exported <OPTIONAL, Default = ROOT>",
-    type=str,
-    default="ROOT",
-)
-parser.add_argument(
-    "-t",
-    "--type",
-    help="'e' for Export <default>, 'i' for Import",
-    type=str,
-    choices=["e", "i"],
-    default="e",
-)
-parser.add_argument("--manual", help="Switch to force manual mode.", action="store_true")
-parser.add_argument(
-    "path",
-    nargs="?",
-    help="Input- and Output-Path for xml reports <OPTIONAL, Default = report.zip>.",
-    type=str,
-    default="report.zip",
-)
+_CLI_DEFAULTS: dict[str, str | None] = {}
+
+
+def set_cli_defaults(defaults: Mapping[str, str | None]) -> None:
+    """Store CLI defaults for interactive workflows."""
+
+    _CLI_DEFAULTS.clear()
+    for key, value in defaults.items():
+        if value is not None:
+            _CLI_DEFAULTS[key] = value
+
+
+def get_cli_default(name: str, default: str | None = None) -> str | None:
+    """Return a stored CLI default if available."""
+
+    return _CLI_DEFAULTS.get(name, default)
+
+
+def get_cli_defaults() -> dict[str, str | None]:
+    """Return a shallow copy of stored CLI defaults."""
+
+    return dict(_CLI_DEFAULTS)
 
 
 def close_program():
