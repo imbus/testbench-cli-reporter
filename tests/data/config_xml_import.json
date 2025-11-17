@@ -1,0 +1,46 @@
+{
+  "configuration": [
+    {
+      "server_url": "https://localhost:443/api/",
+      "verify": false,
+      "sessionToken": null,
+      "basicAuth": null,
+      "loginname": null,
+      "password": null,
+      "actions": [
+        {
+          "parameters": {
+            "inputPath": "tests\\data\\xml_execution_results.zip",
+            "cycleKey": "6320",
+            "projectPath": null,
+            "reportRootUID": "iTB-TT-4090",
+            "defaultTester": "tt-admin",
+            "filters": [],
+            "importConfig": {
+              "fileName": "import-fa6ab9a7-fce4-4ad3-9b16-9380dc3c00ba",
+              "reportRootUID": "iTB-TT-4090",
+              "ignoreNonExecutedTestCases": true,
+              "defaultTester": "tt-admin",
+              "checkPaths": true,
+              "filters": [],
+              "discardTesterInformation": true,
+              "useExistingDefect": true
+            }
+          },
+          "type": "ImportXMLExecutionResults"
+        }
+      ]
+    }
+  ],
+  "loggingConfiguration": {
+    "console": {
+      "logLevel": "INFO",
+      "logFormat": "%(message)s"
+    },
+    "file": {
+      "logLevel": "DEBUG",
+      "logFormat": "%(asctime)s - %(filename)s:%(lineno)d - %(levelname)8s - %(message)s",
+      "fileName": "testbench-cli-reporter.log"
+    }
+  }
+}
