@@ -589,17 +589,18 @@ def ask_for_main_action(server_version: list[int] | None = None, is_admin: bool 
         choices=choices,
     )()
     if isinstance(main_action, actions.OpenAdminMenu):
-        return ask_for_admin_action()
+        return ask_for_admin_action(server_version)
     return main_action  # type: ignore
 
 
-def ask_for_admin_action() -> AbstractAction:
+def ask_for_admin_action(server_version: list[int] | None = None) -> AbstractAction:
     choices = [
         Choice("Export Server Logs", actions.ExportServerLogs),
         Choice("Export Project Users", actions.ExportProjectMembers),
-        Choice("Request JWT Token", actions.RequestJWT),
-        Choice("◀︎ Back", actions.Back),
     ]
+    if server_version and server_version > [4]:
+        choices.append(Choice("Request JWT Token", actions.RequestJWT))
+    choices.append(Choice("◀︎ Back", actions.Back))
     return selection_prompt(  # type: ignore
         message="What do you want to do?",
         choices=choices,
