@@ -261,6 +261,17 @@ class Permission(str, Enum):
 CSVField = SpecificationCSVField | AutomationCSVField | ExecutionCSVField
 
 
+# execute, continue, view, simulate
+class ExecutionMode(str, Enum):
+    EXECUTE = "execute"
+    CONTINUE = "continue"
+    VIEW = "view"
+    SIMULATE = "simulate"
+
+    def __str__(self):
+        return self.value
+
+
 def parse_csv_field(raw: str) -> CSVField | None:
     if raw.startswith(("spec.", "ts.")):
         return SpecificationCSVField(raw)
@@ -311,6 +322,7 @@ class TestCycleJsonReportOptions:
     suppressFilteredData: bool | None
     suppressNotExecutable: bool | None
     suppressEmptyTestThemes: bool | None
+    executionMode: ExecutionMode | None
     filters: list[FilterInfo] | None
 
     @classmethod
@@ -321,6 +333,9 @@ class TestCycleJsonReportOptions:
             suppressFilteredData=dictionary.get("suppressFilteredData"),
             suppressNotExecutable=dictionary.get("suppressNotExecutable"),
             suppressEmptyTestThemes=dictionary.get("suppressEmptyTestThemes"),
+            executionMode=ExecutionMode(dictionary.get("executionMode", ExecutionMode.EXECUTE))
+            if dictionary.get("executionMode")
+            else None,
             filters=[FilterInfo.from_dict(f) for f in dictionary.get("filters", [])],
         )
 

@@ -25,6 +25,7 @@ from .config_model import (
     AutomationCSVField,
     ExecutionCSVField,
     ExecutionJsonResultsImportOptions,
+    ExecutionMode,
     ExecutionXmlResultsImportOptions,
     Permission,
     ProjectCSVReportOptions,
@@ -379,6 +380,12 @@ def ask_to_config_json_report() -> TestCycleJsonReportOptions:
             "suppressFilteredData": [Choice("True", True), Choice("False", False)],
             "suppressNotExecutable": [Choice("True", True), Choice("False", False)],
             "suppressEmptyTestThemes": [Choice("True", True), Choice("False", False)],
+            "executionMode": [
+                Choice("Execute", ExecutionMode.EXECUTE),
+                Choice("Continue", ExecutionMode.CONTINUE),
+                Choice("View", ExecutionMode.VIEW),
+                Choice("Simulate", ExecutionMode.SIMULATE),
+            ],
         }
         pprint("  {", style="bold")
         for key, value in custom_choices.items():
