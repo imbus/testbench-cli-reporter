@@ -570,7 +570,7 @@ def ask_for_main_action(server_version: list[int] | None = None, is_admin: bool 
         Choice("▶ Administrator Actions", actions.OpenAdminMenu),
     ]
     unlogged_actions = [
-        Choice("Browser Projects", actions.BrowseProjects),
+        Choice("Browse Projects", actions.BrowseProjects),
         Choice("Write history to config file", actions.ExportActionLog),
         Choice("Change connection", actions.ChangeConnection),
         Choice("Quit", actions.Quit),
