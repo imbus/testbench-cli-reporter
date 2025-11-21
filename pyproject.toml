@@ -105,6 +105,18 @@ select = [
   "RUF",
 ]
 
+[tool.flit.sdist]
+include = [
+  "src/testbench_cli_reporter",
+  "pyproject.toml",
+  "README.md",
+  "LICENSE",
+]
+exclude = [
+  "src/testbench_cli_reporter/**/__pycache__",
+  "pyinstaller",
+]
+
 [tool.robocop.lint]
 select = [
   "LEN04",
