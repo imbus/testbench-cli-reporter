@@ -155,11 +155,11 @@ class Connection:
     def read_server_version(self, session: requests.Session) -> None:
         versions = {}
         try:
-            versions = session.get(f"{self.server_url}serverVersions/v1").json()
+            versions = session.get(f"{self.server_url}2/serverVersions").json()
         except requests.HTTPError:
             logger.debug(
                 "Failed to read server version from "
-                f"{self.server_url}/serverVersions/v1, trying {self.server_url}1/serverVersions"
+                f"{self.server_url}2/serverVersions, trying {self.server_url}1/serverVersions"
             )
             try:
                 versions = session.get(f"{self.server_url}1/serverVersions").json()
@@ -200,11 +200,11 @@ class Connection:
     def read_user_roles(self, session: requests.Session) -> list[str]:
         if self.is_testbench_4:
             try:
-                response = session.get(f"{self.server_url}login/session/v1")
+                response = session.get(f"{self.server_url}2/login/session")
             except requests.HTTPError:
                 logger.debug(
                     "Failed to read user roles from "
-                    f"{self.server_url}login/session/v1, trying {self.server_url}1/checkLogin"
+                    f"{self.server_url}2/login/session, trying {self.server_url}1/checkLogin"
                 )
                 return []
             return response.json().get("globalRoles", [])  # type: ignore
@@ -229,7 +229,7 @@ class Connection:
         try:
             if self.is_testbench_4:
                 response = session.post(
-                    f"{self.server_url}login/session/v1",
+                    f"{self.server_url}2/login/session",
                     json={"login": self.loginname, "password": self.password, "force": True},
                 )
                 resp_dict = response.json()
@@ -254,7 +254,7 @@ class Connection:
     def get_loginname_from_server(self):
         if self.loginname:
             return
-        response = self.session.get(f"{self.server_url}login/session/v1").json()
+        response = self.session.get(f"{self.server_url}2/login/session").json()
         self.loginname = response["login"]
 
     @property
@@ -263,7 +263,7 @@ class Connection:
             return self.server_port
         if self._server_legacy_port:
             return self._server_legacy_port  # type: ignore
-        response = self.session.get(f"{self.server_url}serverLocations/v1").json()
+        response = self.session.get(f"{self.server_url}2/serverLocations").json()
         self._server_legacy_port = response["legacyPlayPort"]
         return self._server_legacy_port
 
@@ -330,7 +330,7 @@ class Connection:
                 return
             try:
                 self.session.get(
-                    f"{self.server_url}serverLocations/v1",
+                    f"{self.server_url}2/serverLocations",
                     timeout=(5, 10),
                 )
             except requests.HTTPError as e:
@@ -376,7 +376,7 @@ class Connection:
     def check_is_working(self) -> bool:
         session = self.session
         response = (
-            session.get(f"{self.server_url}login/session/v1")
+            session.get(f"{self.server_url}2/login/session")
             if self.is_testbench_4
             else session.get(f"{self.server_url}1/checkLogin")
         )
@@ -386,7 +386,7 @@ class Connection:
         return True
 
     def get_project_key_new_play(self, project_name) -> str:
-        all_projects = self.session.get(f"{self.server_url}projects/v1").json()
+        all_projects = self.session.get(f"{self.server_url}2/projects").json()
         for project in all_projects:
             if project["name"] == project_name:
                 return str(project["key"])
@@ -394,7 +394,7 @@ class Connection:
 
     def get_tov_key_new_play(self, project_key: str, tov_name: str) -> str:
         all_tovs = self.session.get(
-            f"{self.server_url}projects/{project_key}/tovs/v1",
+            f"{self.server_url}2/projects/{project_key}/tovs",
         ).json()
         for tov in all_tovs:
             if tov["name"] == tov_name:
@@ -403,7 +403,7 @@ class Connection:
 
     def get_cycle_key_new_play(self, project_key: str, tov_key: str, cycle_name: str) -> str:
         all_cycles = self.session.get(
-            f"{self.server_url}projects/{project_key}/tovs/{tov_key}/cycles/v1",
+            f"{self.server_url}2/projects/{project_key}/tovs/{tov_key}/cycles",
         ).json()
         for cycle in all_cycles:
             if cycle["name"] == cycle_name:
@@ -412,7 +412,7 @@ class Connection:
 
     def get_project_tree_new_play(self, project_key: str) -> dict:
         project_tree: dict = self.session.get(
-            f"{self.server_url}projects/{project_key}/tree/v1",
+            f"{self.server_url}2/projects/{project_key}/tree",
         ).json()
         return project_tree
 
@@ -457,12 +457,12 @@ class Connection:
             )
         if cycle_key and cycle_key != "0" and project_key and project_key != "0":
             response = self.session.post(
-                f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/report/v1",
+                f"{self.server_url}2/projects/{project_key}/cycles/{cycle_key}/report",
                 json=asdict(report_config),
             ).json()
         elif tov_key and tov_key != "0" and project_key and project_key != "0":
             response = self.session.post(
-                f"{self.server_url}projects/{project_key}/tovs/{tov_key}/report/v1",
+                f"{self.server_url}2/projects/{project_key}/tovs/{tov_key}/report",
                 json=asdict(report_config),
             ).json()
         else:
@@ -492,7 +492,7 @@ class Connection:
 
     def get_exp_json_job_result(self, project_key: str, job_id: str) -> JobProgress:
         report_generation_status: dict = self.session.get(
-            f"{self.server_url}projects/{project_key}/report/job/{job_id}/v1",
+            f"{self.server_url}2/projects/{project_key}/report/job/{job_id}",
         ).json()
         progress = report_generation_status.get("progress")
         completion = report_generation_status.get("completion")
@@ -517,7 +517,7 @@ class Connection:
             )
         raise AssertionError(result.get("ReportingFailure", result.get("Failure")).get("error"))
 
-    # GET /api/projects/{projectKey}/import/job/{jobId}/v1
+    # GET /api/2/projects/{projectKey}/import/job/{jobId}
     def wait_for_execution_json_results_import_to_finish(self, project_key: str, job_id: str) -> bool:
         try:
             while True:
@@ -539,10 +539,10 @@ class Connection:
             self.render_import_error(e)
             raise e
 
-    # GET /api/projects/{projectKey}/import/job/{jobId}/v1
+    # GET /api/2/projects/{projectKey}/import/job/{jobId}
     def get_imp_json_job_result(self, project_key: str, job_id: str) -> JobProgress:
         report_import_status: dict = self.session.get(
-            f"{self.server_url}projects/{project_key}/import/job/{job_id}/v1",
+            f"{self.server_url}2/projects/{project_key}/import/job/{job_id}",
         ).json()
         progress = report_import_status.get("progress")
         completion = report_import_status.get("completion")
@@ -673,7 +673,7 @@ class Connection:
 
     def get_json_report_data(self, project_key: str, report_tmp_name: str) -> bytes:
         report = self.session.get(
-            f"{self.server_url}projects/{project_key}/report/{report_tmp_name}/v1",
+            f"{self.server_url}2/projects/{project_key}/report/{report_tmp_name}",
         )
         content: bytes = report.content
         return content
@@ -691,10 +691,10 @@ class Connection:
         ).json()
         return all_project_members
 
-    # /api/projects/{projectKey}/cycles/{cycleKey}/structure/v1
+    # /api/2/projects/{projectKey}/cycles/{cycleKey}/structure
     def post_project_cycle_structure(self, project_key, cycle_key, root_uid=None):
         return self.session.post(
-            f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/structure/v1",
+            f"{self.server_url}2/projects/{project_key}/cycles/{cycle_key}/structure",
             json={
                 "treeRootUID": root_uid,
                 "basedOnExecution": True,
@@ -704,26 +704,26 @@ class Connection:
             },
         ).json()
 
-    # /api/projects/{projectKey}/testThemes/{testThemeKey}/v1
+    # /api/2/projects/{projectKey}/testThemes/{testThemeKey}
     def get_project_test_theme(self, project_key, test_theme_key, specification_key=None, execution_key=None):
         return self.session.get(
-            f"{self.server_url}projects/{project_key}/testThemes/{test_theme_key}/v1",
+            f"{self.server_url}2/projects/{project_key}/testThemes/{test_theme_key}",
             params={
                 "specificationKey": specification_key,
                 "executionKey": execution_key,
             },
         ).json()
 
-    # /api/projects/{projectKey}/udfs/v1
+    # /api/2/projects/{projectKey}/udfs
     def get_project_udfs(self, project_key):
         return self.session.get(
-            f"{self.server_url}projects/{project_key}/udfs/v1",
+            f"{self.server_url}2/projects/{project_key}/udfs",
         ).json()
 
-    # /api/projects/{projectKey}/cycles/{cycleKey}/requirements/v1
+    # /api/2/projects/{projectKey}/cycles/{cycleKey}/requirements
     def post_project_cycle_requirements(self, project_key, cycle_key, root_uid=None):
         return self.session.post(
-            f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/requirements/v1",
+            f"{self.server_url}2/projects/{project_key}/cycles/{cycle_key}/requirements",
             json={
                 "treeRootUID": root_uid,
                 "suppressNotExecutable": True,
@@ -731,36 +731,36 @@ class Connection:
             },
         ).json()
 
-    # /api/projects/{projectKey}/cycles/{cycleKey}/defects/v1
+    # /api/2/projects/{projectKey}/cycles/{cycleKey}/defects
     def post_project_cycle_defects(self, project_key, cycle_key, root_uid=None):
         return self.session.post(
-            f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/defects/v1",
+            f"{self.server_url}2/projects/{project_key}/cycles/{cycle_key}/defects",
             json={"treeRootUID": root_uid},
         ).json()
 
-    # /api/projects/{projectKey}/v1
+    # /api/2/projects/{projectKey}
     def get_project(self, project_key):
         return self.session.get(
-            f"{self.server_url}projects/{project_key}/v1",
+            f"{self.server_url}2/projects/{project_key}",
         ).json()
 
-    # /api/projects/{projectKey}/testCaseSets/{testCaseSetKey}/v1:
+    # /api/2/projects/{projectKey}/testCaseSets/{testCaseSetKey}:
     def get_project_test_case_set(
         self, project_key, test_case_set_key, specification_key=None, execution_key=None
     ):
         return self.session.get(
-            f"{self.server_url}projects/{project_key}/testCaseSets/{test_case_set_key}/v1",
+            f"{self.server_url}2/projects/{project_key}/testCaseSets/{test_case_set_key}",
             params={
                 "executionKey": execution_key,
             },
         ).json()
 
-    # /api/projects/{projectKey}/testCaseSets/{testCaseSetKey}/testCases/{testCaseSpecificationKey}/v1:
+    # /api/2/projects/{projectKey}/testCaseSets/{testCaseSetKey}/testCases/{testCaseSpecificationKey}:
     def get_project_test_case(
         self, project_key, test_case_set_key, test_case_specification_key, execution_key=None
     ):
         return self.session.get(
-            f"{self.server_url}projects/{project_key}/testCaseSets/{test_case_set_key}/testCases/{test_case_specification_key}/v1",
+            f"{self.server_url}2/projects/{project_key}/testCaseSets/{test_case_set_key}/testCases/{test_case_specification_key}",
             params={
                 "executionKey": execution_key,
             },
@@ -781,7 +781,7 @@ class Connection:
             self.render_import_error(e)
             raise e
 
-    # POST /api/projects/{projectKey}/executionResults/v1
+    # POST /api/2/projects/{projectKey}/executionResults
     def upload_execution_json_results(
         self,
         project_key: str,
@@ -789,7 +789,7 @@ class Connection:
     ) -> str:
         try:
             serverside_file_name = self.session.post(
-                f"{self.server_url}projects/{project_key}/executionResults/v1",
+                f"{self.server_url}2/projects/{project_key}/executionResults",
                 data=results_file,
             ).json()
             return str(serverside_file_name["fileName"])
@@ -819,7 +819,7 @@ class Connection:
             self.render_import_error(e)
             raise e
 
-    # POST /api/projects/{projectKey}/cycles/{cycleKey}/import/v1
+    # POST /api/2/projects/{projectKey}/cycles/{cycleKey}/import
     def trigger_execution_json_results_import(
         self,
         project_key: str,
@@ -832,7 +832,7 @@ class Connection:
 
         try:
             response = self.session.post(
-                f"{self.server_url}projects/{project_key}/cycles/{cycle_key}/import/v1",
+                f"{self.server_url}2/projects/{project_key}/cycles/{cycle_key}/import",
                 json=asdict(used_import_config),
             ).json()
             return str(response["jobID"])
@@ -976,7 +976,7 @@ class Connection:
             logger.error(f"Failed to retrieve project members: {e}")
             raise e
 
-    # POST /api/jwt/token/v1  (normal session)
+    # POST /api/2/jwt/token  (normal session)
     def request_jwt(  # noqa: PLR0913
         self,
         *,
@@ -1015,7 +1015,7 @@ class Connection:
         if expiresAfterSeconds is not None:
             payload["expiresAfterSeconds"] = int(expiresAfterSeconds)
 
-        response = self.session.post(f"{self.server_url}jwt/token/v1", json=payload)
+        response = self.session.post(f"{self.server_url}2/jwt/token", json=payload)
         return dict(response.json())
 
 
