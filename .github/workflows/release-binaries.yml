@@ -73,7 +73,7 @@ jobs:
 
       - name: Build executable
         run: |
-          ICON_PATH="${{ github.workspace }}/pyinstaller/imbusTB.ico"
+          ICON_PATH=$(python -c "from pathlib import Path; print(Path('pyinstaller/imbusTB.ico').resolve())")
           pyinstaller pyinstaller/run.py \
             -i "$ICON_PATH" \
             --onefile \
