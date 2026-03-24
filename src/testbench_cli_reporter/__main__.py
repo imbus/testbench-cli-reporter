@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 import click
 
+from . import __version__
 from .config_model import (
     BaseAction,
     CliReporterConfig,
@@ -175,7 +176,11 @@ def _parse_filtering_option(value: str | None, param_hint: str) -> FilteringOpti
         raise click.BadParameter(str(exc), param_hint=param_hint) from exc
 
 
-@click.group(context_settings=CONTEXT_SETTINGS, invoke_without_command=True)
+@click.group(
+    context_settings=CONTEXT_SETTINGS,
+    invoke_without_command=True,
+    epilog=f"TestBench Cli Reporter | Version: {__version__}",
+)
 @click.option(
     "-c",
     "--config",

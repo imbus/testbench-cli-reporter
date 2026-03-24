@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m testbench_cli_reporter --version)",
+      "Bash(python -m testbench_cli_reporter -V)",
+      "Bash(python -m testbench_cli_reporter --cli-version)",
+      "Bash(python -m testbench_cli_reporter --help)"
+    ]
+  }
+}

@@ -30,7 +30,7 @@ Starting manual mode
 ```
 
 In here enter the testbench server you want to interact with.
-If you don't enter a port, the default TestBench port 9443 is used.
+If you don't enter a port, the default TestBench 3.x port 9443 is used.
 
 If you don't know the server adress of your testbench instance you can find it inside your iTBClient intallation folder: bin/application.conf
 
@@ -158,7 +158,7 @@ If you didn't export nor import anything in the current session yet, at least th
 {
   "configuration": [
     {
-      "server_url": "https://localhost:9445/api/",
+      "server_url": "https://localhost:443/api/",
       "verify": false,
       "basicAuth": "XXXXXXXXXXXX=",
       "actions": []
@@ -193,7 +193,7 @@ The attribute `projectPath` is not mandatory though. Only using projectKey, tovK
 {
   "configuration": [
     {
-      "server_url": "https://localhost:9445/api/",
+      "server_url": "https://localhost:443/api/",
       "verify": false,
       "basicAuth": "XXXXXXXXXXXXX=",
       "actions": [

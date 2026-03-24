@@ -1,0 +1,49 @@
+name: Trigger Documentation Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  trigger-docs:
+    name: Trigger ecosystem docs versioning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Derive tool metadata
+        id: meta
+        run: |
+          # Tool ID = repository name (must match tools.config.json in ecosystem-docs)
+          TOOL_ID="${{ github.event.repository.name }}"
+
+          # Version = release tag, strip leading 'v' if present
+          RAW_TAG="${{ github.event.release.tag_name }}"
+          VERSION="${RAW_TAG#v}"
+
+          echo "tool_id=${TOOL_ID}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${RAW_TAG}" >> $GITHUB_OUTPUT
+
+          echo "Tool: ${TOOL_ID}"
+          echo "Version: ${VERSION}"
+          echo "Tag: ${RAW_TAG}"
+
+      - name: Trigger ecosystem documentation workflow
+        run: |
+          jq -n \
+            --arg tool_id "${{ steps.meta.outputs.tool_id }}" \
+            --arg version "${{ steps.meta.outputs.version }}" \
+            --arg tag "${{ steps.meta.outputs.tag }}" \
+            --arg source_repo "${{ github.repository }}" \
+            '{
+              event_type: "tool-docs-release",
+              client_payload: {
+                tool_id: $tool_id,
+                version: $version,
+                tag: $tag,
+                source_repo: $source_repo
+              }
+            }' | gh api repos/${{ github.repository_owner }}/testbench-ecosystem-documentation/dispatches \
+              --method POST \
+              --input -
+        env:
+          GH_TOKEN: ${{ secrets.ECOSYSTEM_DOCS_TOKEN }}

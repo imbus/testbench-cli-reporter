@@ -636,7 +636,7 @@ def resolve_server_name(server: str) -> str:
     if fullmatch(r"([\w\-.]+):(\d{1,5})", server):
         resolved_server = f"https://{server}/api/"
     elif fullmatch(r"([\w\-.]+)", server):
-        resolved_server = f"https://{server}:9445/api/"
+        resolved_server = f"https://{server}:443/api/"
     elif fullmatch(r"https?://([\w\-.]+):(\d{1,5})/api/", server):
         resolved_server = server
     else:
