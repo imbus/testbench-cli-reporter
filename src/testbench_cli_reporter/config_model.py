@@ -40,7 +40,7 @@ class FilteringOptions:
         return list(self.appliedFilters or [])
 
     @classmethod
-    def from_dict(cls, dictionary: dict | None):
+    def from_dict(cls, dictionary: dict | None) -> "FilteringOptions":
         if not dictionary:
             return cls()
 

@@ -304,9 +304,8 @@ class ExportJSONReport(AbstractAction):
             self.parameters.tovKey = active_connection.get_tov_key_new_play(
                 self.parameters.projectKey, self.parameters.projectPath[1]
             )
-        if not self.parameters.tovKey and not self.parameters.cycleKey:
-            raise ValueError("Invalid Config! 'tovKey' and 'cycleKey' missing.")
-
+        if not self.parameters.tovKey:
+            raise ValueError("Invalid Config! 'tovKey' missing.")
         if (
             not self.parameters.cycleKey
             and self.parameters.projectPath
@@ -496,7 +495,7 @@ class ImportJSONExecutionResults(AbstractAction):
         all_filters = active_connection.get_all_filters()
         filters = questions.ask_to_select_filters(all_filters)
         self.parameters.importConfig = questions.ask_to_config_json_import()
-        self.parameters.importConfig.reportRootUID = report_root_uid
+        self.parameters.importConfig.treeRootUID = report_root_uid
         self.parameters.importConfig.filters = filters
         self.parameters.importConfig.defaultTester = default_tester
         return True
@@ -522,12 +521,12 @@ class ImportJSONExecutionResults(AbstractAction):
             }
 
     def trigger(self, active_connection: "Connection") -> bool:
-        if not self.parameters.cycleKey:
-            if len(self.parameters.projectPath or []) != 3:  # noqa: PLR2004
-                scope = self.get_project_scope_from_report()
-                self.parameters.projectKey = scope.get("project_key")
-                self.parameters.cycleKey = scope.get("cycle_key")
-        elif not self.parameters.projectKey:
+        if not self.parameters.cycleKey and len(self.parameters.projectPath or []) != 3:  # noqa: PLR2004
+            scope = self.get_project_scope_from_report()
+            self.parameters.projectKey = scope.get("project_key")
+            self.parameters.cycleKey = scope.get("cycle_key")
+
+        if not self.parameters.projectKey:
             raise ValueError("Invalid Config! 'projectKey' missing.")
 
         with Path(self.parameters.inputPath).open("rb") as execution_report:

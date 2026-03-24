@@ -116,7 +116,7 @@ def run_automatic_mode(
     password: str | None = None,
     sessionToken: str | None = None,
     raise_exceptions: bool = False,
-):
+) -> None:
     config = (
         configuration
         if isinstance(configuration, CliReporterConfig)

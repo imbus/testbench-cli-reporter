@@ -245,7 +245,7 @@ def load_filtering_options(raw_value: str | None) -> FilteringOptions | None:
         raise ValueError("Filtering options payload must be JSON.") from exc
     if not isinstance(data, dict):
         raise ValueError("Filtering options JSON must describe an object.")
-    return FilteringOptions.from_dict(data)
+    return FilteringOptions.from_dict(data)  # type: ignore
 
 
 def set_cli_defaults(defaults: Mapping[str, str | None]) -> None:

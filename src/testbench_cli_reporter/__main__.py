@@ -448,7 +448,7 @@ def import_json(  # noqa: PLR0913
     )
     details = _prepare_connection_details(server, login, password, session, verify)
     import_config = deepcopy(TYPICAL_JSON_IMPORT_CONFIG)
-    import_config.reportRootUID = uid or None
+    import_config.treeRootUID = uid or None
     if filtering_options := _parse_filtering_option(filtering, "--filtering"):
         import_config.filters = filtering_options.get_applied_filters()
     parameters = ImportJsonParameters(
