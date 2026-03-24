@@ -370,7 +370,7 @@ class ExportXmlParameters:
     @classmethod
     def from_dict(cls, dictionary: dict):
         return cls(
-            outputPath=dictionary["outputPath"],
+            outputPath=dictionary.get("outputPath", "report.zip"),
             projectPath=dictionary.get("projectPath", []),
             tovKey=dictionary.get("tovKey"),
             cycleKey=dictionary.get("cycleKey"),
@@ -394,7 +394,7 @@ class ExportJsonParameters:
     @classmethod
     def from_dict(cls, dictionary: dict):
         return cls(
-            outputPath=dictionary["outputPath"],
+            outputPath=dictionary.get("outputPath", "report.zip"),
             projectPath=dictionary.get("projectPath", []),
             projectKey=dictionary.get("projectKey"),
             tovKey=dictionary.get("tovKey"),
@@ -533,7 +533,7 @@ class ImportXmlParameters:
         )
 
         return cls(
-            inputPath=dictionary["inputPath"],
+            inputPath=dictionary.get("inputPath", "result.zip"),
             importConfig=import_config,
         )
 
@@ -556,7 +556,7 @@ class ImportJsonParameters:
         )
 
         return cls(
-            inputPath=dictionary["inputPath"],
+            inputPath=dictionary.get("inputPath", "result.zip"),
             importConfig=import_config,
         )
 
