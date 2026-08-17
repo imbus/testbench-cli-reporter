@@ -12,10 +12,12 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import base64
+import os
 import re
 from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
+from pathlib import Path
 
 import click
 
@@ -142,6 +144,16 @@ def _build_cli_config(details: ConnectionDetails, actions: Iterable[BaseAction])
     )
 
 
+def _resolve_session_token(session: str | None, session_file: str | None) -> str | None:
+    """Resolve the session token, keeping it off argv when possible: explicit --session,
+    else the contents of --session-file, else the TB_SESSION environment variable."""
+    if session:
+        return session
+    if session_file:
+        return Path(session_file).read_text(encoding="utf-8").strip() or None
+    return os.environ.get("TB_SESSION") or None
+
+
 def _parse_permission_inputs(values: tuple[str, ...]) -> list[Permission]:
     normalized: set[str] = {
         chunk.strip() for value in values for chunk in _PERMISSION_SPLITTER.split(value) if chunk.strip()
@@ -159,13 +171,15 @@ def _parse_permission_inputs(values: tuple[str, ...]) -> list[Permission]:
     return permissions
 
 
-def _run_automatic_action(details: ConnectionDetails, action: BaseAction) -> None:
+def _run_automatic_action(ctx: click.Context, details: ConnectionDetails, action: BaseAction) -> None:
+    strict = bool((ctx.find_object(dict) or {}).get("strict"))
     cli_config = _build_cli_config(details, [action])
     run_automatic_mode(
         cli_config,
         loginname=details.login,
         password=details.password,
         sessionToken=details.session_token,
+        raise_exceptions=strict,
     )
 
 
@@ -190,6 +204,12 @@ def _parse_filtering_option(value: str | None, param_hint: str) -> FilteringOpti
 )
 @click.option("-s", "--server", default="", help="TestBench server address (hostname[:port]).")
 @click.option("--session", default="", help="Existing session token.")
+@click.option(
+    "--session-file",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Read the session token from a file (keeps it off argv). Also honors $TB_SESSION.",
+)
 @click.option("--login", default="", help="Login name for authentication.")
 @click.option("--password", default="", help="Password for authentication.")
 @click.option("--project", default="", help="Default project.")
@@ -197,6 +217,11 @@ def _parse_filtering_option(value: str | None, param_hint: str) -> FilteringOpti
 @click.option("--cycle", default="", help="Default test cycle.")
 @click.option("--manual", is_flag=True, help="Force manual mode.")
 @click.option("--verify", is_flag=True, help="Verify TLS certificates.")
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Exit non-zero if any action fails (default: errors are logged and the run exits 0).",
+)
 @click.pass_context
 def cli(  # noqa: PLR0913
     ctx: click.Context,
@@ -205,20 +230,24 @@ def cli(  # noqa: PLR0913
     login: str,
     password: str,
     session: str,
+    session_file: str | None,
     verify: bool,
+    strict: bool,
     manual: bool,
     project: str,
     version: str,
     cycle: str,
 ) -> None:
     ctx.ensure_object(dict)
+    session_token = _resolve_session_token(session or None, session_file)
     ctx.obj.update(
         {
             "server": server,
             "login": login or None,
             "password": password or None,
-            "session": session or None,
+            "session": session_token,
             "verify": verify,
+            "strict": strict,
         }
     )
     set_cli_defaults({"project": project or None, "version": version or None, "cycle": cycle or None})
@@ -237,7 +266,8 @@ def cli(  # noqa: PLR0913
                     cli_config,
                     loginname=login or None,
                     password=password or None,
-                    sessionToken=session or None,
+                    sessionToken=session_token,
+                    raise_exceptions=strict,
                 )
             run_manual_mode(cli_config)
             return None
@@ -256,7 +286,7 @@ def cli(  # noqa: PLR0913
                     verify=verify,
                     loginname=login or "",
                     password=password or "",
-                    sessionToken=session or "",
+                    sessionToken=session_token or "",
                     actions=[],
                 )
             ],
@@ -323,7 +353,7 @@ def export_xml(  # noqa: PLR0913
         cycleKey=cycle_key or None,
         report_config=export_config,
     )
-    _run_automatic_action(details, ExportXmlAction(parameters=parameters))
+    _run_automatic_action(ctx, details, ExportXmlAction(parameters=parameters))
 
 
 @cli.command("import-xml")
@@ -362,7 +392,7 @@ def import_xml(  # noqa: PLR0913
         inputPath=input_path,
         importConfig=import_config,
     )
-    _run_automatic_action(details, ImportXMLAction(parameters=parameters))
+    _run_automatic_action(ctx, details, ImportXMLAction(parameters=parameters))
 
 
 @cli.command("export-json")
@@ -421,7 +451,7 @@ def export_json(  # noqa: PLR0913
         cycleKey=cycle_key or None,
         report_config=report_config,
     )
-    _run_automatic_action(details, ExportJsonAction(parameters=parameters))
+    _run_automatic_action(ctx, details, ExportJsonAction(parameters=parameters))
 
 
 @cli.command("import-json")
@@ -460,7 +490,7 @@ def import_json(  # noqa: PLR0913
         inputPath=input_path,
         importConfig=import_config,
     )
-    _run_automatic_action(details, ImportJSONAction(parameters=parameters))
+    _run_automatic_action(ctx, details, ImportJSONAction(parameters=parameters))
 
 
 @cli.command("export-csv")
@@ -506,7 +536,7 @@ def export_csv(  # noqa: PLR0913
         projectKey=project_key,
         report_config=report_config,
     )
-    _run_automatic_action(details, ExportCsvAction(parameters=parameters))
+    _run_automatic_action(ctx, details, ExportCsvAction(parameters=parameters))
 
 
 @cli.command("export-logs")
@@ -534,7 +564,7 @@ def export_logs(  # noqa: PLR0913
     )
     details = _prepare_connection_details(server, login, password, session, verify)
     parameters = ExportServerLogsParameters(outputPath=output)
-    _run_automatic_action(details, ExportServerLogsAction(parameters=parameters))
+    _run_automatic_action(ctx, details, ExportServerLogsAction(parameters=parameters))
 
 
 @cli.command(
@@ -581,7 +611,7 @@ def gen_jwt(  # noqa: PLR0913
         subject=subject or None,
         expiresAfterSeconds=expires,
     )
-    _run_automatic_action(details, RequestJWTAction(parameters=parameters))
+    _run_automatic_action(ctx, details, RequestJWTAction(parameters=parameters))
 
 
 def main() -> None:

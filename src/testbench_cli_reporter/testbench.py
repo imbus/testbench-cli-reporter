@@ -63,6 +63,32 @@ class JobProgress:
     report_name: str | None = None
 
 
+def summarize_execution_import(success: dict[str, Any]) -> list[str]:
+    """Log a per-test-case import summary and return the UIDs of NOT-imported cases.
+
+    The server reports each test case's importResult (Imported/PartiallyImported/
+    NotImported); the caller decides whether NotImported cases fail the run.
+    """
+    counts: dict[str, int] = {}
+    not_imported: list[str] = []
+    partially: list[str] = []
+    for test_case_set in success.get("testCaseSets", []):
+        for test_case in test_case_set.get("testCases", []):
+            outcome = test_case.get("importResult", "")
+            counts[outcome] = counts.get(outcome, 0) + 1
+            if outcome == "NotImported":
+                not_imported.append(test_case.get("uid", "<unknown>"))
+            elif outcome == "PartiallyImported":
+                partially.append(test_case.get("uid", "<unknown>"))
+    summary = ", ".join(f"{count} {name}" for name, count in sorted(counts.items()))
+    logger.info(f"Import result: {summary or 'no test cases'}.")
+    if partially:
+        logger.warning(f"Partially imported: {', '.join(partially)}")
+    if not_imported:
+        logger.warning(f"Not imported: {', '.join(not_imported)}")
+    return not_imported
+
+
 class Connection:
     def __init__(  # noqa: PLR0913
         self,
@@ -235,7 +261,7 @@ class Connection:
                 resp_dict = response.json()
                 self.session_token = resp_dict["sessionToken"]
                 session.headers.update({"Authorization": self.session_token})
-                logger.info(f"Authenticated with session token: {self.session_token}")
+                logger.info("Authenticated with session token.")
             else:
                 self.session_token = self.password
                 session.auth = (self.loginname, self.password)
@@ -559,7 +585,13 @@ class Connection:
                 handled_items=handled_items,
             )
         result = report_import_status.get("completion", {}).get("result", {})
-        if result.get("ExecutionImportingSuccess"):
+        success = result.get("ExecutionImportingSuccess")
+        if success:
+            not_imported = summarize_execution_import(success)
+            if not_imported:
+                raise AssertionError(
+                    f"{len(not_imported)} test case(s) not imported: {', '.join(not_imported)}"
+                )
             return JobProgress(completion=True)
         raise AssertionError(result.get("ExecutionImportingFailure"))
 
