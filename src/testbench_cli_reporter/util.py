@@ -277,7 +277,7 @@ def close_program():
 def get_configuration(config_file_path: str):
     logger.info("Trying to read config file")
     try:
-        with Path(config_file_path).open() as config_file:
+        with Path(config_file_path).open(encoding="utf-8") as config_file:
             return CliReporterConfig.from_dict(json.load(config_file))
     except OSError:
         logger.error("Could not open file")
