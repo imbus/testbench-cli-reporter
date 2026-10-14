@@ -70,6 +70,12 @@ Should Use Credentials From Config File
     Should Not Contain    ${result.stdout}    Wrong login or password
     Should Contain    ${result.stdout}    Job ExportXMLReport
 
+Should Exit With Code 1 If Configured Export Fails
+    VAR    ${config_path}=    ${CURDIR}/../data/config_invalid_credentials.json
+    ${result}=    Run CLI Reporter With Valid Credentials    config=${config_path}
+    Should Be Equal As Integers    ${result.rc}    1
+    Should Contain    ${result.stdout}    1 job(s) failed: ExportXMLReport
+
 Should Display Error While Running Configured XML Export If Invalid Credentials
     ${result}=    Run CLI Reporter    config=${CONFIG_XML_EXPORT_PATH}    login=INVALID    password=INVALID
     Should Contain    ${result.stdout}    Action trigger failed

@@ -617,7 +617,9 @@ class ExportServerLogs(AbstractAction):
             raise
         with Path(self.parameters.outputPath).open("wb") as output_file:
             output_file.write(server_logs)
-        pretty_print_success_message("Server Logs", Path(self.parameters.outputPath).resolve(), "were generated")
+        pretty_print_success_message(
+            "Server Logs", Path(self.parameters.outputPath).resolve(), "were generated"
+        )
         logger.info(f"    Time elapsed: {monotonic() - self.start_time:.2f} seconds")
         return True
 

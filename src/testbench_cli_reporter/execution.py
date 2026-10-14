@@ -116,7 +116,8 @@ def run_automatic_mode(
     password: str | None = None,
     sessionToken: str | None = None,
     raise_exceptions: bool = False,
-) -> None:
+) -> int:
+    """Run all configured actions; return the number of actions that failed."""
     config = (
         configuration
         if isinstance(configuration, CliReporterConfig)
@@ -126,12 +127,17 @@ def run_automatic_mode(
     logger.info("Run Automatic Mode")
     connection_queue = ConnectionLog()
     try:
-        fill_connection_queue(config, connection_queue, loginname, password, sessionToken)
+        connections = fill_connection_queue(config, connection_queue, loginname, password, sessionToken)
         while connection_queue.len:
             trigger_possible_actions(connection_queue, raise_exceptions)
             spin_spinner("Wait for Jobs to be finished.")
             poll_and_finish_actions(connection_queue, raise_exceptions)
-        logger.info("All jobs finished.")
+        failed = [action for connection in connections for action in connection.failed_actions]
+        if failed:
+            logger.error(f"{len(failed)} job(s) failed: {', '.join(failed)}")
+        else:
+            logger.info("All jobs finished.")
+        return len(failed)
     except requests.HTTPError as e:
         logger.debug(traceback.format_exc())
         with suppress(Exception):
@@ -145,7 +151,8 @@ def fill_connection_queue(
     loginname: str | None,
     password: str | None,
     sessionToken: str | None,
-):
+) -> list[Connection]:
+    connections = []
     for connection_data in configuration.configuration:
         connection = Connection(
             server_url=connection_data.server_url or "https://localhost:443",
@@ -158,6 +165,8 @@ def fill_connection_queue(
             thread_limit=connection_data.thread_limit,
         )
         connection_queue.add_connection(connection)
+        connections.append(connection)
+    return connections
 
 
 def trigger_possible_actions(connection_queue: ConnectionLog, raise_exceptions: bool = False):
@@ -180,6 +189,7 @@ def trigger_possible_actions(connection_queue: ConnectionLog, raise_exceptions: 
 
 def trigger_next_action(active_connection: Connection, raise_exceptions: bool):
     action_to_trigger = active_connection.actions_to_trigger[0]
+    action_type = str(action_to_trigger.type)  # type: ignore[attr-defined]
     try:
         action = Action(action_to_trigger.type, action_to_trigger.parameters)  # type:ignore
         logger.debug(f"Triggering action: {action.__class__.__name__}\nParameters: {action.parameters}")
@@ -190,11 +200,13 @@ def trigger_next_action(active_connection: Connection, raise_exceptions: bool):
         if raise_exceptions:
             raise e
         logger.exception("Action trigger failed")
-        logger.error(e.response.json())
+        _log_error_response(e)
+        active_connection.failed_actions.append(action_type)
     except TypeError as e:
         if raise_exceptions:
             raise e
         logger.error(e)
+        active_connection.failed_actions.append(action_type)
     finally:
         active_connection.actions_to_trigger.remove(action_to_trigger)
 
@@ -224,8 +236,8 @@ def poll_actions_to_wait_for(active_connection: Connection, raise_exceptions: bo
             if raise_exceptions:
                 raise e
             logger.exception(f"Polling job {action_to_wait_for.job_id} failed.")
-            if hasattr(e, "response") and e.response is not None:
-                logger.error(e.response.json())
+            _log_error_response(e)
+            active_connection.failed_actions.append(type(action_to_wait_for).__name__)
 
 
 def execute_actions_to_finish(active_connection: Connection, raise_exceptions: bool):
@@ -242,9 +254,20 @@ def execute_actions_to_finish(active_connection: Connection, raise_exceptions: b
             if raise_exceptions:
                 raise e
             logger.exception(f"Finishing job {action_to_finish.job_id} failed, skipping action.")
-            if hasattr(e, "response") and e.response is not None:
-                logger.error(e.response.json())
+            _log_error_response(e)
             logger.error(f"Error: {e!s}")
+            active_connection.failed_actions.append(type(action_to_finish).__name__)
+
+
+def _log_error_response(e: Exception) -> None:
+    """Log the server's error body; it is not always JSON (e.g. an empty 406)."""
+    response = getattr(e, "response", None)
+    if response is None:
+        return
+    try:
+        logger.error(response.json())
+    except ValueError:
+        logger.error(f"HTTP {response.status_code}: {response.text[:500] or '<empty body>'}")
 
 
 def active_connection_finished(active_connection):
