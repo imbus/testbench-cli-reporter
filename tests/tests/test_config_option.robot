@@ -63,6 +63,13 @@ Should Display Error While Running Config File If Invalid Credentials
     Should Contain    ${result.stdout}    Action trigger failed
     Should Contain    ${result.stdout}    Missing or invalid authorization token
 
+Should Use Credentials From Config File
+    VAR    ${config_path}=    ${CURDIR}/../data/config_xml_export_credentials.json
+    ${result}=    Run CLI Reporter    config=${config_path}
+    Should Contain    ${result.stdout}    Authenticated with session token
+    Should Not Contain    ${result.stdout}    Wrong login or password
+    Should Contain    ${result.stdout}    Job ExportXMLReport
+
 Should Display Error While Running Configured XML Export If Invalid Credentials
     ${result}=    Run CLI Reporter    config=${CONFIG_XML_EXPORT_PATH}    login=INVALID    password=INVALID
     Should Contain    ${result.stdout}    Action trigger failed

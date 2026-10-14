@@ -153,8 +153,8 @@ def fill_connection_queue(
             sessionToken=sessionToken or connection_data.sessionToken,
             basicAuth=connection_data.basicAuth,
             actions=connection_data.actions,
-            loginname=loginname,
-            password=password,
+            loginname=loginname or connection_data.loginname,
+            password=password or connection_data.password,
             thread_limit=connection_data.thread_limit,
         )
         connection_queue.add_connection(connection)
