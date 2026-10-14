@@ -607,19 +607,19 @@ class ExportServerLogs(AbstractAction):
         return True
 
     def finish(self, active_connection: "Connection") -> bool:
-        self.start_time: float = 0
+        # Errors are raised, not returned as False: in automatic mode a False result means
+        # "not finished yet" and the action is retried forever (e.g. on 401 after a forced re-login).
+        self.start_time: float = monotonic()
         try:
             server_logs = active_connection.get_server_logs()
-            with Path(self.parameters.outputPath).open("wb") as output_file:
-                output_file.write(server_logs)
-            pretty_print_success_message(
-                "Server Logs", Path(self.parameters.outputPath).resolve(), "were generated"
-            )
-            logger.info(f"    Time elapsed: {monotonic() - self.start_time:.2f} seconds")
-            return True
         except Exception as e:
             logger.error(f"An error occurred while exporting server logs: {e!s}")
-            return False
+            raise
+        with Path(self.parameters.outputPath).open("wb") as output_file:
+            output_file.write(server_logs)
+        pretty_print_success_message("Server Logs", Path(self.parameters.outputPath).resolve(), "were generated")
+        logger.info(f"    Time elapsed: {monotonic() - self.start_time:.2f} seconds")
+        return True
 
 
 class RequestJWT(AbstractAction):
