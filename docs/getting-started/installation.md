@@ -2,10 +2,9 @@
 sidebar_position: 1
 title: Installation
 ---
-
 ## Requirements
 
-- Python >= 3.10
+- Python >= 3.11
 - Network access to a TestBench server
 
 ## Install from PyPI
