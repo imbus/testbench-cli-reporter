@@ -102,6 +102,7 @@ class Connection:
             self.password = password or ""
         self.job_timeout_sec = job_timeout_sec
         self.action_log: list[AbstractAction] = []
+        self.failed_actions: list[str] = []
         self.actions_to_trigger: list[dict] = actions or []
         self.actions_to_wait_for: list[AbstractAction] = []
         if thread_limit is not None:

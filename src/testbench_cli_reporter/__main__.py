@@ -161,12 +161,14 @@ def _parse_permission_inputs(values: tuple[str, ...]) -> list[Permission]:
 
 def _run_automatic_action(details: ConnectionDetails, action: BaseAction) -> None:
     cli_config = _build_cli_config(details, [action])
-    run_automatic_mode(
+    failed = run_automatic_mode(
         cli_config,
         loginname=details.login,
         password=details.password,
         sessionToken=details.session_token,
     )
+    if failed:
+        raise click.exceptions.Exit(1)
 
 
 def _parse_filtering_option(value: str | None, param_hint: str) -> FilteringOptions | None:
@@ -226,21 +228,24 @@ def cli(  # noqa: PLR0913
     if ctx.invoked_subcommand is not None:
         if manual:
             raise click.UsageError("--manual cannot be combined with commands.")
-        return None
+        return
 
     try:
         if config:
             click.echo("Config file found")
             cli_config = get_configuration(config)
             if not manual:
-                return run_automatic_mode(
+                failed = run_automatic_mode(
                     cli_config,
                     loginname=login or None,
                     password=password or None,
                     sessionToken=session or None,
                 )
+                if failed:
+                    raise click.exceptions.Exit(1)
+                return
             run_manual_mode(cli_config)
-            return None
+            return
 
         click.echo("No config file given")
         server_url = ""
